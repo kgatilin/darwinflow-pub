@@ -1,0 +1,23 @@
+# DarwinFlow Workflow - Assistant v1
+# Initial simple workflow: just delegate to Claude Code
+
+id: assistant
+version: 1
+description: "Basic assistant workflow - delegates all requests to Claude Code"
+
+nodes:
+  - id: call_claude
+    type: CLAUDE_CODE
+    description: "Pass request to Claude Code and return result"
+    config:
+      interactive: true # Launch Claude Code in interactive mode
+      pass_full_request: true # Just an example, could be other config options
+    # logging_config: TBD - will support configurable logging per node
+
+edges:
+  - from: START
+    to: call_claude
+  - from: call_claude
+    to: END
+# This workflow is intentionally simple - it will evolve based on usage patterns
+# New versions (v2, v3, etc.) will be created by the reflection/learning process
