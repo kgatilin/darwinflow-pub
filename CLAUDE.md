@@ -10,10 +10,17 @@
   - `dw claude init` - Initialize logging infrastructure
   - `dw claude log` - Log events (called by hooks)
   - `dw logs` - View and query logged events
+  - `dw analyze` - AI-powered session analysis with agent-focused prompts
+    - `--last` - Analyze most recent session
+    - `--session-id <id>` - Analyze specific session
+    - `--all` - Analyze all unanalyzed sessions
+    - `--refresh` - Re-analyze already analyzed sessions
+    - `--limit N` - Limit refresh to latest N sessions
 - **Event Logging**: Captures tool invocations and user prompts via Claude Code hooks
 - **SQLite Storage**: Fast, file-based event storage with full-text search capability
 - **Hook Management**: Automatically configures and merges Claude Code hooks
 - **Log Viewer**: Query interface with SQL support for exploring captured events
+- **AI Analysis**: Uses Claude CLI to analyze sessions and suggest workflow optimizations
 
 ### Architecture Documentation
 
@@ -26,10 +33,21 @@ For detailed architecture and API information, see:
 - `PreToolUse`: Logs all tool invocations (Read, Write, Bash, etc.)
 - `UserPromptSubmit`: Logs user message submissions
 
-**Event Types**: Defined in `internal/events/event.go`
+**Event Types**: Defined in `internal/domain/event.go`
 - `tool.invoked`, `tool.result`
 - `chat.message.user`, `chat.message.assistant`
 - `chat.started`, `file.read`, `file.written`, etc.
+
+**Analysis Features**:
+- **Agent-Focused Analysis**: Uses a first-person prompt where Claude Code analyzes its own work
+  - Identifies tools the agent needs (not human-facing suggestions)
+  - Categories: Specialized Agents, CLI Tools, Claude Code Features, Workflow Automations
+  - Configured via `.darwinflow.yaml` (`prompts.analysis`)
+- Session analysis using Claude CLI (`claude -p`)
+- **Refresh capability**: Re-analyze sessions with updated prompts using `--refresh --limit N`
+- Pattern detection and tool gap identification
+- Support for analyzing individual sessions, batch analysis, or all sessions
+- Persistent storage of analysis results in `session_analyses` table
 
 ### Development Workflow
 
@@ -68,12 +86,15 @@ cmd → pkg → internal
 Keep documentation synchronized with code changes:
 
 ```bash
-# Generate dependency graph with method-level details
-go-arch-lint -detailed -format=markdown . > docs/arch-generated.md 2>&1
-
-# Generate public API documentation
-go-arch-lint -format=api . > docs/public-api-generated.md 2>&1
+# Generate comprehensive architecture documentation
+go-arch-lint docs
 ```
+
+This generates `docs/arch-generated.md` with:
+- Project structure and architectural rules
+- Complete dependency graph with method-level details
+- Public API documentation
+- Statistics and validation status
 
 **When to regenerate**:
 - After adding/removing packages or files

@@ -7,6 +7,7 @@ DarwinFlow is a lightweight logging system that automatically captures all Claud
 ## Features
 
 - **Automatic Logging**: Captures all Claude Code events via hooks (tool invocations, user prompts, etc.)
+- **AI-Powered Analysis**: Analyze sessions using Claude to identify patterns and suggest optimizations
 - **Log Viewer**: Query and explore captured events with `dw logs` command
 - **Event Sourcing**: Immutable event log enabling replay and analysis
 - **SQLite Storage**: Fast, file-based storage with full-text search
@@ -84,6 +85,14 @@ dw logs --help                             # Show database schema and help
 
 # Execute arbitrary SQL queries
 dw logs --query "SELECT event_type, COUNT(*) FROM events GROUP BY event_type"
+
+# Analyze sessions using AI
+dw analyze --last                          # Analyze the most recent session
+dw analyze --session-id <id>               # Analyze a specific session
+dw analyze --view --session-id <id>        # View existing analysis
+dw analyze --all                           # Analyze all unanalyzed sessions
+dw analyze --refresh                       # Re-analyze all sessions (even already analyzed)
+dw analyze --refresh --limit 5             # Re-analyze only latest 5 sessions
 ```
 
 #### Log Viewing Examples
@@ -104,6 +113,41 @@ dw logs --query "SELECT * FROM events WHERE content LIKE '%sqlite%' LIMIT 10"
 # View database schema
 dw logs --help
 ```
+
+#### Session Analysis Examples
+
+```bash
+# Analyze your last session to identify patterns
+dw analyze --last
+
+# Analyze a specific session
+dw logs --session-id 8518c46d-51fd-49ec-99ac-b41a613f33ac  # First, view the session
+dw analyze --session-id 8518c46d-51fd-49ec-99ac-b41a613f33ac
+
+# View a previously saved analysis
+dw analyze --view --session-id 8518c46d-51fd-49ec-99ac-b41a613f33ac
+
+# Batch analyze all unanalyzed sessions
+dw analyze --all
+
+# Re-analyze all sessions with updated prompts
+dw analyze --refresh
+
+# Re-analyze only the latest 10 sessions
+dw analyze --refresh --limit 10
+```
+
+The analysis uses an **agent-focused prompt** where Claude Code analyzes its own work from a first-person perspective, identifying:
+- **Tool gaps**: Where the agent lacked the right tools
+- **Repetitive operations**: Where multiple primitive operations could be a single tool
+- **Missing specialized agents**: Task types that would benefit from dedicated subagents
+- **Workflow inefficiencies**: Multi-step sequences that should be automated
+
+The output includes specific tool suggestions categorized as:
+- Specialized Agents (e.g., test generation, refactoring)
+- CLI Tools (command-line utilities to augment capabilities)
+- Claude Code Features (new built-in capabilities)
+- Workflow Automations (multi-step operations as single tools)
 
 ### Event Types
 
@@ -147,37 +191,43 @@ Before committing, ensure:
 Architecture and API documentation is generated automatically:
 
 ```bash
-# Generate dependency graph
-go-arch-lint -detailed -format=markdown . > docs/arch-generated.md
-
-# Generate public API reference
-go-arch-lint -format=api . > docs/public-api-generated.md
+# Generate comprehensive architecture documentation
+go-arch-lint docs
 ```
+
+This generates `docs/arch-generated.md` with the complete dependency graph, public APIs, and architectural validation.
 
 ## Project Structure
 
 ```
 darwinflow-pub/
-├── cmd/dw/              # CLI entry points
-│   ├── main.go          # Main command router
-│   ├── claude.go        # Claude subcommand handlers
-│   ├── logs.go          # Logs command handlers
-│   └── logs_test.go     # Logs command tests
-├── pkg/claude/          # Orchestration & adapters
-│   ├── logger.go        # Event logging
-│   ├── settings.go      # Settings file management
-│   ├── sqlite.go        # SQLite storage adapter
-│   ├── transcript.go    # Transcript parsing
-│   └── cli.go           # CLI helper functions
-├── internal/            # Domain primitives
-│   ├── events/          # Event definitions
-│   ├── hooks/           # Hook configuration
-│   └── storage/         # Storage interfaces
-├── docs/                # Generated documentation
+├── cmd/dw/                    # CLI entry points
+│   ├── main.go                # Main command router
+│   ├── claude.go              # Claude subcommand handlers
+│   ├── logs.go                # Logs command handlers
+│   ├── analyze.go             # Analysis command handlers
+│   └── logs_test.go           # Logs command tests
+├── internal/                  # Domain primitives
+│   ├── domain/                # Core domain types
+│   │   ├── event.go           # Event definitions
+│   │   ├── analysis.go        # Analysis domain types
+│   │   └── repository.go      # Repository interfaces
+│   ├── app/                   # Application services
+│   │   ├── logger.go          # Event logging service
+│   │   ├── logs.go            # Logs query service
+│   │   ├── analysis.go        # Analysis service
+│   │   ├── analysis_prompt.go # Analysis prompt template
+│   │   └── setup.go           # Initialization service
+│   └── infra/                 # Infrastructure implementations
+│       ├── sqlite_repository.go       # SQLite event & analysis storage
+│       ├── hook_config.go             # Hook configuration management
+│       ├── transcript.go              # Transcript parsing
+│       └── context.go                 # Context detection
+├── docs/                      # Generated documentation
 │   ├── arch-generated.md      # Dependency graph
 │   └── public-api-generated.md # Public API reference
-├── CLAUDE.md            # AI agent instructions
-└── README.md            # This file
+├── CLAUDE.md                  # AI agent instructions
+└── README.md                  # This file
 ```
 
 ## Roadmap
@@ -187,16 +237,22 @@ darwinflow-pub/
 - ✅ SQLite storage with full-text search
 - ✅ Hook management and merging
 - ✅ Log viewer with SQL query support (`dw logs`)
+- ✅ AI-powered session analysis (`dw analyze`)
+- ✅ Agent-focused analysis prompt (Claude Code identifies what tools IT needs)
+- ✅ Refresh functionality to re-analyze sessions with updated prompts
+- ✅ Pattern detection and tool suggestions
 
 ### V2 (Planned)
 - Vector embeddings for semantic search
-- Pattern detection across sessions
+- Cross-session pattern analysis
 - Enhanced context extraction
+- Automated tool generation from patterns
 
 ### V3 (Future)
 - Workflow optimization suggestions
 - Self-modifying commands based on patterns
 - Advanced analytics and insights
+- Real-time pattern detection during sessions
 
 ## Contributing
 

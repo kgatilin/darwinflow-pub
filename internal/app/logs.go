@@ -285,8 +285,9 @@ func FormatLogsAsMarkdown(w io.Writer, records []*LogRecord) error {
 			}
 			fmt.Fprintln(w)
 
-			// Content
-			if record.Content != "" {
+			// Content Summary - skip for chat messages to avoid duplication with message field
+			isChatMessage := record.EventType == "chat.message.user" || record.EventType == "chat.message.assistant"
+			if record.Content != "" && !isChatMessage {
 				fmt.Fprintln(w, "**Content Summary**:")
 				fmt.Fprintln(w)
 				fmt.Fprintf(w, "```\n%s\n```\n", record.Content)
@@ -357,10 +358,10 @@ func groupRecordsBySession(records []*LogRecord) []*SessionGroup {
 	return sessions
 }
 
-// sortSessionsByTime sorts sessions by their start time
+// sortSessionsByTime sorts sessions by their start time (most recent first)
 func sortSessionsByTime(sessions []*SessionGroup) {
 	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].StartTime.Before(sessions[j].StartTime)
+		return sessions[i].StartTime.After(sessions[j].StartTime)
 	})
 }
 
@@ -393,6 +394,9 @@ func formatMarkdownPayload(w io.Writer, data interface{}, depth int) error {
 			case string:
 				if val == "" {
 					fmt.Fprintf(w, "%s- **%s**: *(empty)*\n", indent, key)
+				} else if key == "message" {
+					// Never truncate message field - show full content
+					fmt.Fprintf(w, "%s- **%s**: `%s`\n", indent, key, val)
 				} else if len(val) > 200 {
 					fmt.Fprintf(w, "%s- **%s**: `%s...`\n", indent, key, val[:200])
 				} else {

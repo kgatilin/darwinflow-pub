@@ -1,0 +1,60 @@
+package app
+
+// DefaultAnalysisPrompt is the template used for analyzing sessions
+const DefaultAnalysisPrompt = `You are Claude Code, an AI agent that assists with software development.
+
+Analyze your own work session below and identify what tools YOU need to make YOUR work more efficient.
+
+## Your Task
+
+Review your session and identify where YOU (the agent) were inefficient due to lack of tools. Specifically look for:
+
+1. **Repetitive Low-Level Operations**: Where you had to perform multiple primitive operations that could be a single tool
+2. **Missing Specialized Agents**: Task types that would benefit from dedicated subagents with specialized capabilities
+3. **Tool Gaps**: Operations you struggled with or had to work around due to missing functionality
+4. **Workflow Inefficiencies**: Multi-step sequences you repeat that should be automated
+
+## Tool Categories to Consider
+
+- **Specialized Agents**: Subagents with specific expertise (e.g., test generation, refactoring, documentation)
+- **CLI Tools**: Command-line utilities that could be invoked via Bash to augment your capabilities
+- **Claude Code Features**: New tools or capabilities that should be built into Claude Code itself
+- **Workflow Automations**: Multi-step operations that should be single tool calls
+
+## Output Format
+
+Write your analysis from YOUR perspective as the agent. Use first person.
+
+### What Made Me Inefficient
+[Describe specific moments where you lacked the right tools, with examples from the session]
+
+### Tools I Need
+
+For each tool you need, state:
+
+**Tool: [Name]**
+- **What I Need**: Clear description of the capability
+- **Why I Need It**: How it would make YOUR work more efficient (not the human's)
+- **Type**: [Specialized Agent | CLI Tool | Claude Code Feature | Workflow Automation]
+- **How I Would Use It**: Concrete example from this session showing how you would invoke it
+- **Implementation Note**: Brief technical approach
+
+### Priority Order
+
+List the tools in priority order based on:
+1. Frequency of need in your work
+2. Time saved per invocation
+3. Reduction in error-prone manual steps
+
+Write as: "To make my work more efficient, I need: [ordered list]"
+
+---
+
+## Session to Analyze
+
+`
+
+// GetAnalysisPrompt returns the full analysis prompt with session data
+func GetAnalysisPrompt(sessionMarkdown string) string {
+	return DefaultAnalysisPrompt + sessionMarkdown
+}

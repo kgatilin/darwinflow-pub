@@ -56,6 +56,19 @@ func (r *SQLiteEventRepository) Initialize(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_events_timestamp_type ON events(timestamp, event_type);
 		CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);
 		CREATE INDEX IF NOT EXISTS idx_events_timestamp_session ON events(timestamp, session_id);
+
+		CREATE TABLE IF NOT EXISTS session_analyses (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			analyzed_at INTEGER NOT NULL,
+			analysis_result TEXT NOT NULL,
+			model_used TEXT,
+			prompt_used TEXT,
+			patterns_summary TEXT
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_analyses_session_id ON session_analyses(session_id);
+		CREATE INDEX IF NOT EXISTS idx_analyses_analyzed_at ON session_analyses(analyzed_at);
 	`
 
 	_, err := r.db.ExecContext(ctx, baseSchema)
@@ -291,6 +304,190 @@ func (r *SQLiteEventRepository) ExecuteRawQuery(ctx context.Context, query strin
 		Columns: columns,
 		Rows:    resultRows,
 	}, nil
+}
+
+// SaveAnalysis persists a session analysis
+func (r *SQLiteEventRepository) SaveAnalysis(ctx context.Context, analysis *domain.SessionAnalysis) error {
+	query := `
+		INSERT INTO session_analyses (id, session_id, analyzed_at, analysis_result, model_used, prompt_used, patterns_summary)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := r.db.ExecContext(ctx, query,
+		analysis.ID,
+		analysis.SessionID,
+		analysis.AnalyzedAt.UnixMilli(),
+		analysis.AnalysisResult,
+		analysis.ModelUsed,
+		analysis.PromptUsed,
+		analysis.PatternsSummary,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to store analysis: %w", err)
+	}
+
+	return nil
+}
+
+// GetAnalysisBySessionID retrieves the most recent analysis for a session
+func (r *SQLiteEventRepository) GetAnalysisBySessionID(ctx context.Context, sessionID string) (*domain.SessionAnalysis, error) {
+	query := `
+		SELECT id, session_id, analyzed_at, analysis_result, model_used, prompt_used, patterns_summary
+		FROM session_analyses
+		WHERE session_id = ?
+		ORDER BY analyzed_at DESC
+		LIMIT 1
+	`
+
+	var analysis domain.SessionAnalysis
+	var analyzedAtMs int64
+	var modelUsed, promptUsed, patternsSummary sql.NullString
+
+	err := r.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&analysis.ID,
+		&analysis.SessionID,
+		&analyzedAtMs,
+		&analysis.AnalysisResult,
+		&modelUsed,
+		&promptUsed,
+		&patternsSummary,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get analysis: %w", err)
+	}
+
+	analysis.AnalyzedAt = millisecondsToTime(analyzedAtMs)
+	analysis.ModelUsed = modelUsed.String
+	analysis.PromptUsed = promptUsed.String
+	analysis.PatternsSummary = patternsSummary.String
+
+	return &analysis, nil
+}
+
+// GetUnanalyzedSessionIDs retrieves session IDs that have not been analyzed
+func (r *SQLiteEventRepository) GetUnanalyzedSessionIDs(ctx context.Context) ([]string, error) {
+	query := `
+		SELECT DISTINCT session_id
+		FROM events
+		WHERE session_id IS NOT NULL
+		  AND session_id != ''
+		  AND session_id NOT IN (SELECT DISTINCT session_id FROM session_analyses)
+		ORDER BY session_id
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unanalyzed sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessionIDs []string
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			return nil, fmt.Errorf("failed to scan session ID: %w", err)
+		}
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return sessionIDs, nil
+}
+
+// GetAllAnalyses retrieves all analyses, ordered by analyzed_at DESC
+func (r *SQLiteEventRepository) GetAllAnalyses(ctx context.Context, limit int) ([]*domain.SessionAnalysis, error) {
+	query := `
+		SELECT id, session_id, analyzed_at, analysis_result, model_used, prompt_used, patterns_summary
+		FROM session_analyses
+		ORDER BY analyzed_at DESC
+	`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get analyses: %w", err)
+	}
+	defer rows.Close()
+
+	var analyses []*domain.SessionAnalysis
+	for rows.Next() {
+		var analysis domain.SessionAnalysis
+		var analyzedAtMs int64
+		var modelUsed, promptUsed, patternsSummary sql.NullString
+
+		err := rows.Scan(
+			&analysis.ID,
+			&analysis.SessionID,
+			&analyzedAtMs,
+			&analysis.AnalysisResult,
+			&modelUsed,
+			&promptUsed,
+			&patternsSummary,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan analysis: %w", err)
+		}
+
+		analysis.AnalyzedAt = millisecondsToTime(analyzedAtMs)
+		analysis.ModelUsed = modelUsed.String
+		analysis.PromptUsed = promptUsed.String
+		analysis.PatternsSummary = patternsSummary.String
+
+		analyses = append(analyses, &analysis)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return analyses, nil
+}
+
+// GetAllSessionIDs retrieves all session IDs, ordered by most recent first
+func (r *SQLiteEventRepository) GetAllSessionIDs(ctx context.Context, limit int) ([]string, error) {
+	query := `
+		SELECT session_id
+		FROM events
+		WHERE session_id IS NOT NULL AND session_id != ''
+		GROUP BY session_id
+		ORDER BY MAX(timestamp) DESC
+	`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session IDs: %w", err)
+	}
+	defer rows.Close()
+
+	var sessionIDs []string
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			return nil, fmt.Errorf("failed to scan session ID: %w", err)
+		}
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return sessionIDs, nil
 }
 
 // Helper function to convert milliseconds to time.Time
