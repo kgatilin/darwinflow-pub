@@ -152,6 +152,8 @@ func logFromStdin(eventTypeStr string, maxParamLength int) error {
 		ToolInput:      hookInput.ToolInput,
 		ToolOutput:     hookInput.ToolOutput,
 		Error:          hookInput.Error,
+		UserMessage:    hookInput.UserMessage,
+		Prompt:         hookInput.Prompt,
 	}
 
 	// Log event

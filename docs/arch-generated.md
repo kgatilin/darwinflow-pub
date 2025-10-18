@@ -15,24 +15,6 @@
 
 Required directories as defined in `.goarchlint`:
 
-### internal/infra
-**Purpose**: Infrastructure implementations (DB, external APIs, messaging)
-
-**Allowed dependencies**: internal/domain
-
-**Status**: ✓ Exists
-
----
-
-### cmd
-**Purpose**: Application entry points
-
-**Allowed dependencies**: internal/app, internal/infra
-
-**Status**: ✓ Exists
-
----
-
 ### internal/app
 **Purpose**: Application services, use cases, orchestration
 
@@ -51,6 +33,24 @@ Required directories as defined in `.goarchlint`:
 
 ---
 
+### internal/infra
+**Purpose**: Infrastructure implementations (DB, external APIs, messaging)
+
+**Allowed dependencies**: internal/domain
+
+**Status**: ✓ Exists
+
+---
+
+### cmd
+**Purpose**: Application entry points
+
+**Allowed dependencies**: internal/app, internal/infra
+
+**Status**: ✓ Exists
+
+---
+
 ---
 
 ## Architectural Rules
@@ -60,18 +60,18 @@ From `.goarchlint`:
 ```yaml
 structure:
   required_directories:
-    cmd: "Application entry points"
-    internal/app: "Application services, use cases, orchestration"
     internal/domain: "Core business logic, entities, value objects, domain services"
     internal/infra: "Infrastructure implementations (DB, external APIs, messaging)"
+    cmd: "Application entry points"
+    internal/app: "Application services, use cases, orchestration"
   allow_other_directories: true
 
 rules:
   directories_import:
-    cmd: [internal/app, internal/infra]
     internal/app: [internal/domain]
     internal/domain: []
     internal/infra: [internal/domain]
+    cmd: [internal/app, internal/infra]
   detect_unused: true
 ```
 
@@ -119,6 +119,7 @@ Detailed method-level dependencies between files:
   - Getenv
   - Stderr
   - Stdin
+  - WriteFile
 
 ---
 
@@ -129,6 +130,8 @@ Detailed method-level dependencies between files:
 - internal/app
   - DefaultDBPath
   - FormatLogRecord
+  - FormatLogsAsCSV
+  - FormatLogsAsMarkdown
   - FormatQueryValue
   - LogsService
   - NewLogsService
@@ -152,6 +155,26 @@ Detailed method-level dependencies between files:
   - IsNotExist
   - Stat
   - Stderr
+  - Stdout
+
+---
+
+### cmd/dw/logs_test.go
+**Package**: main
+
+**Local Dependencies**:
+- internal/app
+  - NewLogsService
+- internal/infra
+  - NewSQLiteEventRepository
+
+**External Dependencies**:
+- context
+  - Background
+- path/filepath
+  - Join
+- testing
+  - T
 
 ---
 
@@ -217,6 +240,8 @@ Detailed method-level dependencies between files:
 **External Dependencies**:
 - context
   - Context
+- encoding/csv
+  - NewWriter
 - encoding/json
   - Marshal
   - MarshalIndent
@@ -224,8 +249,16 @@ Detailed method-level dependencies between files:
   - Unmarshal
 - fmt
   - Errorf
+  - Fprintf
+  - Fprintln
   - Sprintf
+- io
+  - Writer
+- sort
+  - Slice
 - time
+  - Millisecond
+  - RFC3339
   - Time
   - UnixMilli
 
@@ -294,6 +327,11 @@ Detailed method-level dependencies between files:
 **Local Dependencies**: None
 
 **External Dependencies**:
+- encoding/json
+  - Marshal
+  - Unmarshal
+- fmt
+  - Sprintf
 - os
   - Getenv
   - Getwd
@@ -303,6 +341,7 @@ Detailed method-level dependencies between files:
   - Dir
   - Join
 - strings
+  - Join
   - TrimSpace
 
 ---
@@ -359,6 +398,7 @@ Detailed method-level dependencies between files:
   - Context
 - database/sql
   - DB
+  - NullString
   - Open
 - encoding/json
   - RawMessage
@@ -372,6 +412,29 @@ Detailed method-level dependencies between files:
   - Millisecond
   - Time
   - Unix
+- github.com/mattn/go-sqlite3
+
+---
+
+### internal/infra/sqlite_repository_test.go
+**Package**: infra
+
+**Local Dependencies**: None
+
+**External Dependencies**:
+- context
+  - Background
+- database/sql
+  - Open
+- path/filepath
+  - Join
+- testing
+  - T
+- time
+  - Date
+  - Now
+  - UTC
+  - UnixMilli
 - github.com/mattn/go-sqlite3
 
 ---
@@ -399,79 +462,6 @@ Detailed method-level dependencies between files:
 ## Public API
 
 Exported interfaces and types available for consumption:
-
-### main
-
----
-
-### app
-
-#### Types
-
-**EventMapper** `EventMapper`
-
-**MapEventType** `(*EventMapper) MapEventType(string) domain.EventType`
-
-**TranscriptParser** `TranscriptParser`
-
-**ContextDetector** `ContextDetector`
-
-**ContentNormalizer** `ContentNormalizer`
-
-**HookInputData** `HookInputData`
-- Properties:
-  - SessionID string
-  - TranscriptPath string
-  - CWD string
-  - HookEventName string
-
-**LoggerService** `LoggerService`
-
-**NewLoggerService** `NewLoggerService(domain.EventRepository, TranscriptParser, ContextDetector, ContentNormalizer) *LoggerService`
-
-**LogEvent** `(*LoggerService) LogEvent(context.Context, domain.EventType, interface{}) error`
-
-**LogFromHookInput** `(*LoggerService) LogFromHookInput(context.Context, HookInputData, domain.EventType, int) error`
-
-**Close** `(*LoggerService) Close() error`
-
-#### Types
-
-**LogRecord** `LogRecord`
-- Properties:
-  - ID string
-  - Timestamp time.Time
-  - EventType string
-  - Payload json.RawMessage
-  - Content string
-
-**LogsService** `LogsService`
-
-**NewLogsService** `NewLogsService(domain.EventRepository, domain.RawQueryExecutor) *LogsService`
-
-**ListRecentLogs** `(*LogsService) ListRecentLogs(context.Context, int) ([]*LogRecord, error)`
-
-**ExecuteRawQuery** `(*LogsService) ExecuteRawQuery(context.Context, string) (*domain.QueryResult, error)`
-
-**FormatLogRecord** `FormatLogRecord(int, *LogRecord) string`
-
-**FormatQueryValue** `FormatQueryValue(interface{}) string`
-
-#### Types
-
-**DefaultDBPath** `DefaultDBPath`
-
-**HookConfigManager** `HookConfigManager`
-
-**SetupService** `SetupService`
-
-**NewSetupService** `NewSetupService(domain.EventRepository, HookConfigManager) *SetupService`
-
-**Initialize** `(*SetupService) Initialize(context.Context, string) error`
-
-**GetSettingsPath** `(*SetupService) GetSettingsPath() string`
-
----
 
 ### domain
 
@@ -502,10 +492,11 @@ Exported interfaces and types available for consumption:
   - ID string
   - Timestamp time.Time
   - Type EventType
+  - SessionID string
   - Payload interface{}
   - Content string
 
-**NewEvent** `NewEvent(EventType, interface{}, string) *Event`
+**NewEvent** `NewEvent(EventType, string, interface{}, string) *Event`
 
 **MarshalPayload** `(*Event) MarshalPayload() ([]byte, error)`
 
@@ -517,8 +508,8 @@ Exported interfaces and types available for consumption:
 **ToolPayload** `ToolPayload`
 - Properties:
   - Tool string
-  - Parameters string
-  - Result string
+  - Parameters interface{}
+  - Result interface{}
   - DurationMs int64
   - Context string
 
@@ -549,8 +540,10 @@ Exported interfaces and types available for consumption:
   - StartTime *time.Time
   - EndTime *time.Time
   - EventTypes []EventType
+  - SessionID string
   - Context string
   - SearchText string
+  - OrderByTime bool
   - Limit int
   - Offset int
 
@@ -642,7 +635,14 @@ Exported interfaces and types available for consumption:
   - SessionID string
   - TranscriptPath string
   - CWD string
+  - PermissionMode string
   - HookEventName string
+  - ToolName string
+  - ToolInput map[string]interface{}
+  - ToolOutput interface{}
+  - Error interface{}
+  - UserMessage string
+  - Prompt string
 
 **ParseHookInput** `ParseHookInput(io.Reader) (*HookInput, error)`
 
@@ -661,6 +661,20 @@ Exported interfaces and types available for consumption:
 **Close** `(*SQLiteEventRepository) Close() error`
 
 **ExecuteRawQuery** `(*SQLiteEventRepository) ExecuteRawQuery(context.Context, string) (*domain.QueryResult, error)`
+
+#### Types
+
+**TestSQLiteEventRepository_EmptyDatabase** `TestSQLiteEventRepository_EmptyDatabase(*testing.T)`
+
+**TestSQLiteEventRepository_WithData** `TestSQLiteEventRepository_WithData(*testing.T)`
+
+**TestSQLiteEventRepository_ExecuteRawQuery_SelectQuery** `TestSQLiteEventRepository_ExecuteRawQuery_SelectQuery(*testing.T)`
+
+**TestSQLiteEventRepository_ExecuteRawQuery_InvalidQuery** `TestSQLiteEventRepository_ExecuteRawQuery_InvalidQuery(*testing.T)`
+
+**TestSQLiteEventRepository_TimestampFormatting** `TestSQLiteEventRepository_TimestampFormatting(*testing.T)`
+
+**TestSQLiteEventRepository_DatabaseSchema** `TestSQLiteEventRepository_DatabaseSchema(*testing.T)`
 
 #### Types
 
@@ -687,13 +701,117 @@ Exported interfaces and types available for consumption:
 
 ---
 
+### main
+
+#### Types
+
+**TestRepeatString** `TestRepeatString(*testing.T)`
+
+**TestParseLogsFlags** `TestParseLogsFlags(*testing.T)`
+
+**TestListLogs_EmptyDB** `TestListLogs_EmptyDB(*testing.T)`
+
+**TestExecuteRawQuery_Success** `TestExecuteRawQuery_Success(*testing.T)`
+
+**TestExecuteRawQuery_InvalidSQL** `TestExecuteRawQuery_InvalidSQL(*testing.T)`
+
+---
+
+### app
+
+#### Types
+
+**EventMapper** `EventMapper`
+
+**MapEventType** `(*EventMapper) MapEventType(string) domain.EventType`
+
+**TranscriptParser** `TranscriptParser`
+
+**ContextDetector** `ContextDetector`
+
+**ContentNormalizer** `ContentNormalizer`
+
+**HookInputData** `HookInputData`
+- Properties:
+  - SessionID string
+  - TranscriptPath string
+  - CWD string
+  - PermissionMode string
+  - HookEventName string
+  - ToolName string
+  - ToolInput map[string]interface{}
+  - ToolOutput interface{}
+  - Error interface{}
+  - UserMessage string
+  - Prompt string
+
+**LoggerService** `LoggerService`
+
+**NewLoggerService** `NewLoggerService(domain.EventRepository, TranscriptParser, ContextDetector, ContentNormalizer) *LoggerService`
+
+**LogEvent** `(*LoggerService) LogEvent(context.Context, domain.EventType, interface{}) error`
+
+**LogFromHookInput** `(*LoggerService) LogFromHookInput(context.Context, HookInputData, domain.EventType, int) error`
+
+**Close** `(*LoggerService) Close() error`
+
+#### Types
+
+**LogRecord** `LogRecord`
+- Properties:
+  - ID string
+  - Timestamp time.Time
+  - EventType string
+  - SessionID string
+  - Payload json.RawMessage
+  - Content string
+
+**LogsService** `LogsService`
+
+**NewLogsService** `NewLogsService(domain.EventRepository, domain.RawQueryExecutor) *LogsService`
+
+**ListRecentLogs** `(*LogsService) ListRecentLogs(context.Context, int, string, bool) ([]*LogRecord, error)`
+
+**ExecuteRawQuery** `(*LogsService) ExecuteRawQuery(context.Context, string) (*domain.QueryResult, error)`
+
+**FormatLogRecord** `FormatLogRecord(int, *LogRecord) string`
+
+**FormatQueryValue** `FormatQueryValue(interface{}) string`
+
+**FormatLogsAsCSV** `FormatLogsAsCSV(io.Writer, []*LogRecord) error`
+
+**FormatLogsAsMarkdown** `FormatLogsAsMarkdown(io.Writer, []*LogRecord) error`
+
+**SessionGroup** `SessionGroup`
+- Properties:
+  - SessionID string
+  - Records []*LogRecord
+  - StartTime time.Time
+  - EndTime time.Time
+
+#### Types
+
+**DefaultDBPath** `DefaultDBPath`
+
+**HookConfigManager** `HookConfigManager`
+
+**SetupService** `SetupService`
+
+**NewSetupService** `NewSetupService(domain.EventRepository, HookConfigManager) *SetupService`
+
+**Initialize** `(*SetupService) Initialize(context.Context, string) error`
+
+**GetSettingsPath** `(*SetupService) GetSettingsPath() string`
+
+---
+
 ## Statistics
 
-- **Total Files**: 14
+- **Total Files**: 16
 - **Total Packages**: 4
 - **Required Directories**: 4/4 present
 - **Violations**: 0
-- **External Dependencies**: 14
+- **External Dependencies**: 17
 
 ---
 

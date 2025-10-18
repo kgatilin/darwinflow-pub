@@ -70,6 +70,8 @@ type HookInputData struct {
 	ToolInput      map[string]interface{}
 	ToolOutput     interface{}
 	Error          interface{}
+	UserMessage    string
+	Prompt         string
 }
 
 // LoggerService orchestrates event logging for Claude Code interactions
@@ -141,9 +143,13 @@ func (s *LoggerService) LogFromHookInput(
 		}
 
 	case domain.ChatMessageUser:
-		// Extract user message from transcript
+		// Try to get message from hook input first, then fall back to transcript
 		message := ""
-		if hookInput.TranscriptPath != "" {
+		if hookInput.UserMessage != "" {
+			message = hookInput.UserMessage
+		} else if hookInput.Prompt != "" {
+			message = hookInput.Prompt
+		} else if hookInput.TranscriptPath != "" {
 			if msg, err := s.transcriptParser.ExtractLastUserMessage(hookInput.TranscriptPath); err == nil {
 				message = msg
 			}

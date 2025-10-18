@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
@@ -213,45 +214,84 @@ func FormatLogsAsCSV(w io.Writer, records []*LogRecord) error {
 }
 
 // FormatLogsAsMarkdown writes log records as Markdown to the provided writer
-// Expands JSON payloads hierarchically for LLM-friendly reading
+// Groups events by session and orders chronologically for LLM-friendly reading
 func FormatLogsAsMarkdown(w io.Writer, records []*LogRecord) error {
+	if len(records) == 0 {
+		fmt.Fprintln(w, "# Event Logs")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "No events found.")
+		return nil
+	}
+
+	// Group records by session
+	sessions := groupRecordsBySession(records)
+
+	// Sort sessions by first event timestamp
+	sortSessionsByTime(sessions)
+
+	// Write output
 	fmt.Fprintln(w, "# Event Logs")
 	fmt.Fprintln(w)
+	fmt.Fprintf(w, "This document contains %d event(s) across %d session(s).\n", len(records), len(sessions))
+	fmt.Fprintln(w)
 
-	for i, record := range records {
-		// Event header
-		fmt.Fprintf(w, "## Event %d: %s\n\n", i+1, record.EventType)
-
-		// Metadata
-		fmt.Fprintf(w, "- **ID**: `%s`\n", record.ID)
-		fmt.Fprintf(w, "- **Timestamp**: %s\n", record.Timestamp.Format("2006-01-02 15:04:05.000 MST"))
-		if record.SessionID != "" {
-			fmt.Fprintf(w, "- **Session ID**: `%s`\n", record.SessionID)
-		}
-		fmt.Fprintln(w)
-
-		// Payload - expanded and formatted
-		fmt.Fprintln(w, "### Payload")
-		fmt.Fprintln(w)
-
-		var payload interface{}
-		if err := json.Unmarshal(record.Payload, &payload); err == nil {
-			// Expand nested JSON strings
-			expandedPayload := expandNestedJSON(payload)
-			if err := formatMarkdownPayload(w, expandedPayload, 0); err != nil {
-				return fmt.Errorf("failed to format payload: %w", err)
-			}
+	for sessionIdx, session := range sessions {
+		// Session header
+		if session.SessionID != "" {
+			fmt.Fprintf(w, "## Session %d: `%s`\n\n", sessionIdx+1, session.SessionID)
 		} else {
-			fmt.Fprintf(w, "```\n%s\n```\n", string(record.Payload))
+			fmt.Fprintf(w, "## Session %d: (No Session ID)\n\n", sessionIdx+1)
 		}
+
+		// Session metadata
+		fmt.Fprintf(w, "**Session started**: %s\n\n", session.StartTime.Format("2006-01-02 15:04:05 MST"))
+		fmt.Fprintf(w, "**Session duration**: %s\n\n", session.EndTime.Sub(session.StartTime).Round(time.Millisecond))
+		fmt.Fprintf(w, "**Total events**: %d\n\n", len(session.Records))
+
+		// Events in chronological order
+		fmt.Fprintln(w, "### Event Timeline")
 		fmt.Fprintln(w)
 
-		// Content
-		if record.Content != "" {
-			fmt.Fprintln(w, "### Content")
+		for eventIdx, record := range session.Records {
+			// Use narrative language
+			var prefix string
+			if eventIdx == 0 {
+				prefix = "**Session started** - "
+			} else {
+				prefix = fmt.Sprintf("**Step %d** - ", eventIdx+1)
+			}
+
+			// Event type and timestamp
+			duration := record.Timestamp.Sub(session.StartTime)
+			fmt.Fprintf(w, "%s`%s` *(+%s)*\n\n", prefix, record.EventType, duration.Round(time.Millisecond))
+
+			// Event ID
+			fmt.Fprintf(w, "- **Event ID**: `%s`\n", record.ID)
 			fmt.Fprintln(w)
-			fmt.Fprintf(w, "```\n%s\n```\n", record.Content)
+
+			// Payload - expanded and formatted
+			fmt.Fprintln(w, "**Details**:")
 			fmt.Fprintln(w)
+
+			var payload interface{}
+			if err := json.Unmarshal(record.Payload, &payload); err == nil {
+				// Expand nested JSON strings
+				expandedPayload := expandNestedJSON(payload)
+				if err := formatMarkdownPayload(w, expandedPayload, 0); err != nil {
+					return fmt.Errorf("failed to format payload: %w", err)
+				}
+			} else {
+				fmt.Fprintf(w, "```\n%s\n```\n", string(record.Payload))
+			}
+			fmt.Fprintln(w)
+
+			// Content
+			if record.Content != "" {
+				fmt.Fprintln(w, "**Content Summary**:")
+				fmt.Fprintln(w)
+				fmt.Fprintf(w, "```\n%s\n```\n", record.Content)
+				fmt.Fprintln(w)
+			}
 		}
 
 		fmt.Fprintln(w, "---")
@@ -259,6 +299,69 @@ func FormatLogsAsMarkdown(w io.Writer, records []*LogRecord) error {
 	}
 
 	return nil
+}
+
+// SessionGroup represents events grouped by session
+type SessionGroup struct {
+	SessionID string
+	Records   []*LogRecord
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+// groupRecordsBySession groups log records by session ID and sorts chronologically
+func groupRecordsBySession(records []*LogRecord) []*SessionGroup {
+	sessionMap := make(map[string]*SessionGroup)
+
+	for _, record := range records {
+		sessionID := record.SessionID
+		if sessionID == "" {
+			sessionID = "(no-session)"
+		}
+
+		session, exists := sessionMap[sessionID]
+		if !exists {
+			session = &SessionGroup{
+				SessionID: record.SessionID,
+				Records:   []*LogRecord{},
+				StartTime: record.Timestamp,
+				EndTime:   record.Timestamp,
+			}
+			sessionMap[sessionID] = session
+		}
+
+		session.Records = append(session.Records, record)
+
+		// Update start/end times
+		if record.Timestamp.Before(session.StartTime) {
+			session.StartTime = record.Timestamp
+		}
+		if record.Timestamp.After(session.EndTime) {
+			session.EndTime = record.Timestamp
+		}
+	}
+
+	// Sort records within each session chronologically
+	for _, session := range sessionMap {
+		sort.Slice(session.Records, func(i, j int) bool {
+			return session.Records[i].Timestamp.Before(session.Records[j].Timestamp)
+		})
+	}
+
+	// Convert map to slice
+	sessions := make([]*SessionGroup, 0, len(sessionMap))
+	for _, session := range sessionMap {
+		sessions = append(sessions, session)
+	}
+
+	return sessions
+}
+
+// sortSessionsByTime sorts sessions by their start time
+func sortSessionsByTime(sessions []*SessionGroup) {
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].StartTime.Before(sessions[j].StartTime)
+	})
 }
 
 // formatMarkdownPayload recursively formats a payload structure as Markdown
@@ -271,6 +374,11 @@ func formatMarkdownPayload(w io.Writer, data interface{}, depth int) error {
 	switch v := data.(type) {
 	case map[string]interface{}:
 		for key, value := range v {
+			// Skip the context field as it's not very useful in markdown
+			if key == "context" {
+				continue
+			}
+
 			switch val := value.(type) {
 			case map[string]interface{}:
 				fmt.Fprintf(w, "%s- **%s**:\n", indent, key)

@@ -16,6 +16,8 @@ type HookInput struct {
 	ToolInput      map[string]interface{} `json:"tool_input,omitempty"`       // For PreToolUse/PostToolUse hooks
 	ToolOutput     interface{}            `json:"tool_output,omitempty"`      // For PostToolUse hooks
 	Error          interface{}            `json:"error,omitempty"`            // For error-related hooks
+	UserMessage    string                 `json:"user_message,omitempty"`     // For UserPromptSubmit hook
+	Prompt         string                 `json:"prompt,omitempty"`           // Alternative field for user message
 }
 
 // ParseHookInput reads and parses hook input from a reader (typically stdin)
