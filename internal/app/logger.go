@@ -79,6 +79,7 @@ type LoggerService struct {
 	contextDetector   ContextDetector
 	contentNormalizer ContentNormalizer
 	context           string
+	sessionID         string
 }
 
 // NewLoggerService creates a new logger service
@@ -108,7 +109,7 @@ func (s *LoggerService) LogEvent(ctx context.Context, eventType domain.EventType
 	content := s.contentNormalizer(string(eventType), string(payloadJSON))
 
 	// Create domain event
-	event := domain.NewEvent(eventType, payload, content)
+	event := domain.NewEvent(eventType, s.sessionID, payload, content)
 
 	// Save to repository
 	if err := s.repository.Save(ctx, event); err != nil {
@@ -125,6 +126,9 @@ func (s *LoggerService) LogFromHookInput(
 	eventType domain.EventType,
 	maxParamLength int,
 ) error {
+	// Set session ID from hook input
+	s.sessionID = hookInput.SessionID
+
 	// Create appropriate payload based on event type
 	var payload interface{}
 

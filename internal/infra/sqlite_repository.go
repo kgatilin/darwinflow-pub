@@ -46,6 +46,7 @@ func (r *SQLiteEventRepository) Initialize(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			timestamp INTEGER NOT NULL,
 			event_type TEXT NOT NULL,
+			session_id TEXT,
 			payload TEXT NOT NULL,
 			content TEXT NOT NULL
 		);
@@ -53,6 +54,8 @@ func (r *SQLiteEventRepository) Initialize(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 		CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 		CREATE INDEX IF NOT EXISTS idx_events_timestamp_type ON events(timestamp, event_type);
+		CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);
+		CREATE INDEX IF NOT EXISTS idx_events_timestamp_session ON events(timestamp, session_id);
 	`
 
 	_, err := r.db.ExecContext(ctx, baseSchema)
@@ -96,14 +99,15 @@ func (r *SQLiteEventRepository) Save(ctx context.Context, event *domain.Event) e
 	}
 
 	query := `
-		INSERT INTO events (id, timestamp, event_type, payload, content)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO events (id, timestamp, event_type, session_id, payload, content)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	_, err = r.db.ExecContext(ctx, query,
 		event.ID,
 		event.Timestamp.UnixMilli(),
 		string(event.Type),
+		event.SessionID,
 		string(payloadJSON),
 		event.Content,
 	)
@@ -140,13 +144,18 @@ func (r *SQLiteEventRepository) FindByQuery(ctx context.Context, query domain.Ev
 		conditions = append(conditions, fmt.Sprintf("event_type IN (%s)", strings.Join(placeholders, ",")))
 	}
 
+	if query.SessionID != "" {
+		conditions = append(conditions, "session_id = ?")
+		args = append(args, query.SessionID)
+	}
+
 	// Build SQL query
-	sqlQuery := "SELECT id, timestamp, event_type, payload, content FROM events"
+	sqlQuery := "SELECT id, timestamp, event_type, session_id, payload, content FROM events"
 
 	if query.SearchText != "" {
 		// Try FTS search first, fall back to LIKE if FTS not available
 		ftsQuery := `
-			SELECT e.id, e.timestamp, e.event_type, e.payload, e.content
+			SELECT e.id, e.timestamp, e.event_type, e.session_id, e.payload, e.content
 			FROM events e
 			JOIN events_fts fts ON fts.rowid = e.rowid
 			WHERE fts.content MATCH ?
@@ -175,7 +184,12 @@ func (r *SQLiteEventRepository) FindByQuery(ctx context.Context, query domain.Ev
 		sqlQuery += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	sqlQuery += " ORDER BY timestamp DESC"
+	// Add ORDER BY clause
+	if query.OrderByTime {
+		sqlQuery += " ORDER BY timestamp ASC, session_id"
+	} else {
+		sqlQuery += " ORDER BY timestamp DESC"
+	}
 
 	if query.Limit > 0 {
 		sqlQuery += " LIMIT ?"
@@ -196,9 +210,10 @@ func (r *SQLiteEventRepository) FindByQuery(ctx context.Context, query domain.Ev
 	var events []*domain.Event
 	for rows.Next() {
 		var id, eventType, payloadStr, content string
+		var sessionID sql.NullString
 		var timestampMs int64
 
-		if err := rows.Scan(&id, &timestampMs, &eventType, &payloadStr, &content); err != nil {
+		if err := rows.Scan(&id, &timestampMs, &eventType, &sessionID, &payloadStr, &content); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
@@ -213,6 +228,7 @@ func (r *SQLiteEventRepository) FindByQuery(ctx context.Context, query domain.Ev
 			ID:        id,
 			Timestamp: millisecondsToTime(timestampMs),
 			Type:      domain.EventType(eventType),
+			SessionID: sessionID.String,
 			Payload:   payload,
 			Content:   content,
 		}

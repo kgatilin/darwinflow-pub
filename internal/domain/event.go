@@ -36,16 +36,18 @@ type Event struct {
 	ID        string
 	Timestamp time.Time
 	Type      EventType
+	SessionID string      // Claude Code session identifier
 	Payload   interface{}
 	Content   string // Normalized text for full-text search
 }
 
 // NewEvent creates a new event with generated ID and current timestamp (domain service)
-func NewEvent(eventType EventType, payload interface{}, content string) *Event {
+func NewEvent(eventType EventType, sessionID string, payload interface{}, content string) *Event {
 	return &Event{
 		ID:        uuid.New().String(),
 		Timestamp: time.Now(),
 		Type:      eventType,
+		SessionID: sessionID,
 		Payload:   payload,
 		Content:   content,
 	}

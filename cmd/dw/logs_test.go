@@ -62,27 +62,42 @@ func TestParseLogsFlags(t *testing.T) {
 		{
 			name: "default flags",
 			args: []string{},
-			want: logsOptions{limit: 20, query: "", help: false},
+			want: logsOptions{limit: 20, query: "", sessionID: "", ordered: false, help: false},
 		},
 		{
 			name: "custom limit",
 			args: []string{"--limit", "50"},
-			want: logsOptions{limit: 50, query: "", help: false},
+			want: logsOptions{limit: 50, query: "", sessionID: "", ordered: false, help: false},
 		},
 		{
 			name: "with query",
 			args: []string{"--query", "SELECT * FROM events"},
-			want: logsOptions{limit: 20, query: "SELECT * FROM events", help: false},
+			want: logsOptions{limit: 20, query: "SELECT * FROM events", sessionID: "", ordered: false, help: false},
+		},
+		{
+			name: "with session-id",
+			args: []string{"--session-id", "abc123"},
+			want: logsOptions{limit: 20, query: "", sessionID: "abc123", ordered: false, help: false},
+		},
+		{
+			name: "with ordered",
+			args: []string{"--ordered"},
+			want: logsOptions{limit: 20, query: "", sessionID: "", ordered: true, help: false},
 		},
 		{
 			name: "help flag",
 			args: []string{"--help"},
-			want: logsOptions{limit: 20, query: "", help: true},
+			want: logsOptions{limit: 20, query: "", sessionID: "", ordered: false, help: true},
 		},
 		{
 			name: "multiple flags",
 			args: []string{"--limit", "100", "--query", "SELECT COUNT(*) FROM events"},
-			want: logsOptions{limit: 100, query: "SELECT COUNT(*) FROM events", help: false},
+			want: logsOptions{limit: 100, query: "SELECT COUNT(*) FROM events", sessionID: "", ordered: false, help: false},
+		},
+		{
+			name: "session-id with ordered",
+			args: []string{"--session-id", "xyz789", "--ordered"},
+			want: logsOptions{limit: 20, query: "", sessionID: "xyz789", ordered: true, help: false},
 		},
 	}
 
@@ -99,6 +114,12 @@ func TestParseLogsFlags(t *testing.T) {
 				}
 				if got.query != tt.want.query {
 					t.Errorf("query = %q, want %q", got.query, tt.want.query)
+				}
+				if got.sessionID != tt.want.sessionID {
+					t.Errorf("sessionID = %q, want %q", got.sessionID, tt.want.sessionID)
+				}
+				if got.ordered != tt.want.ordered {
+					t.Errorf("ordered = %v, want %v", got.ordered, tt.want.ordered)
 				}
 				if got.help != tt.want.help {
 					t.Errorf("help = %v, want %v", got.help, tt.want.help)
@@ -129,7 +150,8 @@ func TestListLogs_EmptyDB(t *testing.T) {
 
 	// Test listLogs with empty database - should not error
 	service := app.NewLogsService(store, store)
-	err = listLogs(ctx, service, 10)
+	opts := &logsOptions{limit: 10}
+	err = listLogs(ctx, service, opts)
 	if err != nil {
 		t.Errorf("listLogs with empty DB failed: %v", err)
 	}

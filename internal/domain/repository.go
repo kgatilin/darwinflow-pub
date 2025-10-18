@@ -29,11 +29,17 @@ type EventQuery struct {
 	// Event type filtering
 	EventTypes []EventType
 
+	// Session filtering
+	SessionID string
+
 	// Context filtering
 	Context string
 
 	// Full-text search
 	SearchText string
+
+	// Ordering
+	OrderByTime bool // If true, order by timestamp ASC, session_id
 
 	// Pagination
 	Limit  int
