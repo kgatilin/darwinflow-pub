@@ -10,12 +10,16 @@
   - `dw claude init` - Initialize logging infrastructure
   - `dw claude log` - Log events (called by hooks)
   - `dw logs` - View and query logged events
-  - `dw analyze` - AI-powered session analysis with agent-focused prompts
+  - `dw analyze` - AI-powered session analysis with configurable prompts
     - `--last` - Analyze most recent session
     - `--session-id <id>` - Analyze specific session
     - `--all` - Analyze all unanalyzed sessions
     - `--refresh` - Re-analyze already analyzed sessions
-    - `--limit N` - Limit refresh to latest N sessions
+    - `--limit N` - Limit refresh/analyze to latest N sessions
+    - `--prompt <name>` - Use specific prompt from config (e.g., tool_analysis, session_summary)
+    - `--model <model>` - Override model from config
+    - `--token-limit <num>` - Override token limit from config
+    - `--view` - View existing analysis without re-analyzing
 - **Event Logging**: Captures tool invocations and user prompts via Claude Code hooks
 - **SQLite Storage**: Fast, file-based event storage with full-text search capability
 - **Hook Management**: Automatically configures and merges Claude Code hooks
@@ -39,15 +43,21 @@ For detailed architecture and API information, see:
 - `chat.started`, `file.read`, `file.written`, etc.
 
 **Analysis Features**:
-- **Agent-Focused Analysis**: Uses a first-person prompt where Claude Code analyzes its own work
-  - Identifies tools the agent needs (not human-facing suggestions)
-  - Categories: Specialized Agents, CLI Tools, Claude Code Features, Workflow Automations
-  - Configured via `.darwinflow.yaml` (`prompts.analysis`)
-- Session analysis using Claude CLI (`claude -p`)
-- **Refresh capability**: Re-analyze sessions with updated prompts using `--refresh --limit N`
-- Pattern detection and tool gap identification
-- Support for analyzing individual sessions, batch analysis, or all sessions
-- Persistent storage of analysis results in `session_analyses` table
+- **Multi-Prompt Analysis System**: Support for multiple analysis types with different prompts
+  - **Session Summary** (`session_summary`): Auto-triggered summaries capturing user intent, outcomes, and session quality
+  - **Tool Analysis** (`tool_analysis`): Agent-focused analysis identifying needed tools and workflow improvements
+  - Custom prompts can be added to `.darwinflow.yaml` config
+- **Configuration-Based Execution**: Analysis settings in `.darwinflow.yaml`
+  - `analysis.token_limit`: Max tokens for analysis context (default: 100000)
+  - `analysis.model`: Claude model to use (default: claude-sonnet-4-5-20250929)
+  - `analysis.parallel_limit`: Max parallel analysis executions (default: 3)
+  - `analysis.claude_options.allowed_tools`: Tools available during analysis (default: empty = no tools)
+  - `analysis.claude_options.system_prompt_mode`: "replace" or "append" (default: replace)
+- **CLI Flag Overrides**: All config settings can be overridden via flags
+- **Clean Execution**: Uses `claude --system-prompt` for pure analysis without tool invocations
+- **Refresh Capability**: Re-analyze sessions with updated prompts using `--refresh --limit N`
+- **Multiple Analyses Per Session**: Each session can have multiple analyses (one per prompt type)
+- Persistent storage in `session_analyses` table with `analysis_type` and `prompt_name` fields
 
 ### Development Workflow
 

@@ -1,5 +1,52 @@
+analysis:
+  token_limit: 100000
+  model: "claude-sonnet-4-5-20250929"
+  parallel_limit: 3
+  claude_options:
+    allowed_tools: []
+    system_prompt_mode: "replace"
+
 prompts:
-    analysis: |+
+  session_summary: |+
+    Analyze this Claude Code session and provide a concise summary.
+
+    ## Your Task
+
+    Summarize what happened in this session, focusing on:
+
+    1. **User Intent**: What did the user want to accomplish?
+    2. **Goal Achievement**: Was the goal achieved? Fully, partially, or not at all?
+    3. **Approach Taken**: What approach/steps were taken?
+    4. **Outcomes**: What was actually accomplished?
+    5. **Issues Encountered**: Any errors, blockers, or challenges?
+    6. **Session Quality**: Was this session efficient and successful?
+
+    ## Output Format
+
+    ### User Intent
+    [What the user wanted to accomplish]
+
+    ### Goal Achievement
+    [Achieved | Partially Achieved | Not Achieved]
+
+    ### Approach Summary
+    [Brief summary of the approach taken]
+
+    ### Outcomes
+    [What was accomplished - be specific and factual]
+
+    ### Issues Encountered
+    [Any problems, errors, or challenges - or "None" if smooth]
+
+    ### Session Assessment
+    [Brief assessment of efficiency and success]
+
+    ---
+
+    ## Session to Analyze
+
+
+  tool_analysis: |+
         You are Claude Code, an AI agent that assists with software development.
 
         Analyze your own work session below and identify what tools YOU need to make YOUR work FASTER and more efficient.
