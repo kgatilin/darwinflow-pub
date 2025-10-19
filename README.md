@@ -7,13 +7,17 @@ DarwinFlow is a lightweight logging system that automatically captures all Claud
 ## Features
 
 - **Automatic Logging**: Captures all Claude Code events via hooks (tool invocations, user prompts, etc.)
-- **AI-Powered Analysis**: Analyze sessions using Claude to identify patterns and suggest optimizations
+- **AI-Powered Analysis**: Analyze sessions using Claude with configurable prompts
+  - **Multi-Prompt Support**: Session summaries, tool analysis, and custom prompts
+  - **Auto-Triggered Summaries**: Optional automatic analysis on session end (configurable)
+  - **Parallel Execution**: Concurrent analysis with semaphore-based concurrency control
+  - **Token-Aware Selection**: Smart session selection based on token limits
 - **Log Viewer**: Query and explore captured events with `dw logs` command
 - **Event Sourcing**: Immutable event log enabling replay and analysis
 - **SQLite Storage**: Fast, file-based storage with full-text search
 - **Zero Performance Impact**: Non-blocking, concurrent-safe logging
 - **Context-Aware**: Automatically detects project context from environment
-- **Clean Architecture**: Strict 3-layer design (`cmd → pkg → internal`)
+- **Clean Architecture**: Strict 3-layer design (`cmd → internal`)
 
 ## Quick Start
 
@@ -93,6 +97,14 @@ dw analyze --view --session-id <id>        # View existing analysis
 dw analyze --all                           # Analyze all unanalyzed sessions
 dw analyze --refresh                       # Re-analyze all sessions (even already analyzed)
 dw analyze --refresh --limit 5             # Re-analyze only latest 5 sessions
+
+# Use different analysis prompts
+dw analyze --last --prompt session_summary    # Factual session summary
+dw analyze --last --prompt tool_analysis      # Agent-focused tool suggestions (default)
+
+# Override config settings
+dw analyze --last --model sonnet              # Use different model
+dw analyze --last --token-limit 50000         # Use custom token limit
 ```
 
 #### Log Viewing Examples
@@ -148,6 +160,34 @@ The output includes specific tool suggestions categorized as:
 - CLI Tools (command-line utilities to augment capabilities)
 - Claude Code Features (new built-in capabilities)
 - Workflow Automations (multi-step operations as single tools)
+
+### Configuration
+
+DarwinFlow uses `.darwinflow.yaml` for configuration. Create this file in your project root or home directory:
+
+```yaml
+analysis:
+  token_limit: 100000                      # Max tokens for analysis context
+  model: "claude-sonnet-4-5-20250929"      # Claude model to use
+  parallel_limit: 3                        # Max parallel analysis executions
+  auto_summary_enabled: false              # Enable auto session summaries
+  auto_summary_prompt: "session_summary"   # Prompt for auto summaries
+  claude_options:
+    allowed_tools: []                      # Tools available during analysis (empty = none)
+    system_prompt_mode: "replace"          # "replace" or "append"
+
+prompts:
+  session_summary: |
+    # Your custom session summary prompt here
+  tool_analysis: |
+    # Your custom tool analysis prompt here
+```
+
+**Key Configuration Options**:
+- `auto_summary_enabled`: Set to `true` to automatically analyze sessions when they end
+- `token_limit`: Controls how many sessions can be batch-analyzed together
+- `parallel_limit`: Controls concurrency for parallel analysis
+- CLI flags can override any config setting
 
 ### Event Types
 

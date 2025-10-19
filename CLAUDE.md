@@ -47,12 +47,27 @@ For detailed architecture and API information, see:
   - **Session Summary** (`session_summary`): Auto-triggered summaries capturing user intent, outcomes, and session quality
   - **Tool Analysis** (`tool_analysis`): Agent-focused analysis identifying needed tools and workflow improvements
   - Custom prompts can be added to `.darwinflow.yaml` config
+- **Auto-Triggered Session Summaries**: Optional automatic analysis on session end
+  - Controlled via `analysis.auto_summary_enabled` (default: false)
+  - Runs in background, doesn't block session end
+  - Uses configurable prompt via `analysis.auto_summary_prompt`
+  - Requires `dw claude init` to install SessionEnd hook
 - **Configuration-Based Execution**: Analysis settings in `.darwinflow.yaml`
   - `analysis.token_limit`: Max tokens for analysis context (default: 100000)
   - `analysis.model`: Claude model to use (default: claude-sonnet-4-5-20250929)
   - `analysis.parallel_limit`: Max parallel analysis executions (default: 3)
+  - `analysis.auto_summary_enabled`: Enable auto session summaries (default: false)
+  - `analysis.auto_summary_prompt`: Prompt for auto summaries (default: session_summary)
   - `analysis.claude_options.allowed_tools`: Tools available during analysis (default: empty = no tools)
   - `analysis.claude_options.system_prompt_mode`: "replace" or "append" (default: replace)
+- **Smart Session Selection**: Token-aware batch analysis
+  - `EstimateTokenCount`: Uses chars/4 heuristic to estimate session size
+  - `SelectSessionsWithinTokenLimit`: Automatically selects sessions that fit within token budget
+  - Reserves 20% of tokens for prompt overhead and response
+- **Parallel Execution**: Concurrent analysis with semaphore-based concurrency control
+  - `AnalyzeMultipleSessionsParallel`: Analyze multiple sessions in parallel
+  - `AnalyzeSessionWithMultiplePrompts`: Run multiple prompts on one session in parallel
+  - Respects `analysis.parallel_limit` from config
 - **CLI Flag Overrides**: All config settings can be overridden via flags
 - **Clean Execution**: Uses `claude --system-prompt` for pure analysis without tool invocations
 - **Refresh Capability**: Re-analyze sessions with updated prompts using `--refresh --limit N`
