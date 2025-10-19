@@ -26,6 +26,8 @@ func main() {
 		configCmd(os.Args[2:])
 	case "refresh":
 		handleRefresh(os.Args[2:])
+	case "project":
+		projectCommand(os.Args[2:])
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -46,12 +48,14 @@ func printUsage() {
 	fmt.Println("  dw ui                Interactive UI for browsing and analyzing sessions")
 	fmt.Println("  dw config            Manage DarwinFlow configuration")
 	fmt.Println("  dw refresh           Update database schema and hooks to latest version")
+	fmt.Println("  dw project           Run project-specific tools provided by plugins")
 	fmt.Println("  dw help              Show this help message")
 	fmt.Println()
 	fmt.Println("For command-specific help:")
 	fmt.Println("  dw logs --help       Show logs command help and database schema")
 	fmt.Println("  dw analyze --help    Show analyze command options")
 	fmt.Println("  dw config --help     Show config command options")
+	fmt.Println("  dw project --help    Show available project tools")
 	fmt.Println()
 	fmt.Println("Environment Variables:")
 	fmt.Println("  DW_CONTEXT           Set the current context (e.g., project/myapp)")

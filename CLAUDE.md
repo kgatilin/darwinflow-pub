@@ -26,6 +26,9 @@
     - `--model <model>` - Override model from config
     - `--token-limit <num>` - Override token limit from config
     - `--view` - View existing analysis without re-analyzing
+  - `dw project` - Run project-specific tools provided by plugins
+    - `dw project list` - List all available plugin tools
+    - `dw project <toolname> [args]` - Execute a plugin tool
 - **Event Logging**: Captures tool invocations and user prompts via Claude Code hooks
 - **SQLite Storage**: Fast, file-based event storage with full-text search capability
 - **Database Migration**: Safe schema migrations with automatic duplicate cleanup and version upgrades
@@ -74,10 +77,26 @@
 - Cross-project workflow optimization (analyze patterns across all entity types)
 - Extensible for different workflow domains (coding, project management, research, etc.)
 
+**Tool System**:
+Plugins can provide custom CLI tools via the `IToolProvider` capability:
+- **Tool Interface** (`internal/domain/plugin.go`): Defines tool name, description, usage, and execution
+- **ToolRegistry** (`internal/app/tool_registry.go`): Discovers and executes tools from registered plugins
+- **ProjectContext**: Tools receive access to event repo, analysis repo, config, and working directory
+- **Built-in Tools**:
+  - `session-summary`: Display summary of Claude Code sessions (from claude-code plugin)
+- **Usage**: `dw project <toolname> [args]` - Clear namespace separation from built-in commands
+
+**How Tools Work**:
+1. Plugin implements `IToolProvider` interface with `GetTools()` method
+2. ToolRegistry discovers tools from all registered plugins
+3. `dw project <toolname>` routes to appropriate tool
+4. Tool executes with full access to project context (repos, config, etc.)
+
 **Current State**:
 - ✅ Core plugin infrastructure implemented
 - ✅ Claude-code plugin providing sessions
 - ✅ TUI using plugin system
+- ✅ Tool system with plugin-provided CLI commands
 - 🔄 External plugin discovery (planned)
 - 🔄 Subprocess communication protocol (planned)
 

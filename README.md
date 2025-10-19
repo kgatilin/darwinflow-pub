@@ -100,12 +100,15 @@ cmd → internal/app + internal/infra → internal/domain
 
 **Core Concepts:**
 - **Capabilities**: Interfaces defining entity behaviors (IExtensible, ITrackable, IHasContext, etc.)
-- **Plugins**: Providers of entities (`internal/app/plugins/claude_code/`)
+- **Plugins**: Providers of entities and tools (`internal/app/plugins/claude_code/`)
 - **Plugin Registry**: Routes queries to appropriate plugins based on entity type
+- **Tool Registry**: Discovers and executes CLI tools provided by plugins
 - **Entity Types**: Concrete implementations (sessions, tasks, roadmaps, etc.)
 
 **Current Plugins:**
 - **claude-code** (core): Provides Claude Code sessions with tracking and context
+  - Entity: `session` (IExtensible + IHasContext + ITrackable)
+  - Tool: `session-summary` - Display session information and analyses
 
 **Architecture Documentation:**
 - See `docs/arch-generated.md` for complete dependency graph
@@ -153,6 +156,11 @@ dw analyze --last --prompt tool_analysis      # Agent-focused tool suggestions (
 # Override config settings
 dw analyze --last --model sonnet              # Use different model
 dw analyze --last --token-limit 50000         # Use custom token limit
+
+# Run plugin-provided tools
+dw project list                               # List all available plugin tools
+dw project session-summary --last             # Display summary of last session
+dw project session-summary --session-id <id>  # Display summary of specific session
 ```
 
 #### Log Viewing Examples
