@@ -20,6 +20,12 @@ type AnalysisConfig struct {
 	// ParallelLimit is the max parallel analysis executions (default: 3)
 	ParallelLimit int `yaml:"parallel_limit" json:"parallel_limit"`
 
+	// AutoSummaryEnabled enables auto-triggered session summaries on session end (default: false)
+	AutoSummaryEnabled bool `yaml:"auto_summary_enabled" json:"auto_summary_enabled"`
+
+	// AutoSummaryPrompt is the prompt name to use for auto summaries (default: "session_summary")
+	AutoSummaryPrompt string `yaml:"auto_summary_prompt" json:"auto_summary_prompt"`
+
 	// ClaudeOptions contains options for Claude CLI execution
 	ClaudeOptions ClaudeOptions `yaml:"claude_options" json:"claude_options"`
 }
@@ -37,9 +43,11 @@ type ClaudeOptions struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Analysis: AnalysisConfig{
-			TokenLimit:    100000,
-			Model:         "claude-sonnet-4-5-20250929",
-			ParallelLimit: 3,
+			TokenLimit:         100000,
+			Model:              "claude-sonnet-4-5-20250929",
+			ParallelLimit:      3,
+			AutoSummaryEnabled: false,           // Disabled by default - user must opt in
+			AutoSummaryPrompt:  "session_summary", // Use session_summary prompt for auto-analysis
 			ClaudeOptions: ClaudeOptions{
 				AllowedTools:     []string{}, // No tools for pure analysis
 				SystemPromptMode: "replace",  // Use --system-prompt

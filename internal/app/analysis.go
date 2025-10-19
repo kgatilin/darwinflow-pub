@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
@@ -152,6 +153,203 @@ func (s *AnalysisService) AnalyzeMultipleSessions(ctx context.Context, sessionID
 	}
 
 	return results, errors
+}
+
+// AnalysisResult represents the result of a parallel analysis
+type AnalysisResult struct {
+	SessionID  string
+	PromptName string
+	Analysis   *domain.SessionAnalysis
+	Error      error
+}
+
+// AnalyzeMultipleSessionsParallel analyzes multiple sessions in parallel
+// Uses a semaphore to limit concurrent executions based on config.Analysis.ParallelLimit
+func (s *AnalysisService) AnalyzeMultipleSessionsParallel(ctx context.Context, sessionIDs []string, promptName string) (map[string]*domain.SessionAnalysis, []error) {
+	if len(sessionIDs) == 0 {
+		return make(map[string]*domain.SessionAnalysis), nil
+	}
+
+	parallelLimit := s.config.Analysis.ParallelLimit
+	if parallelLimit <= 0 {
+		parallelLimit = 1
+	}
+
+	s.logger.Info("Starting parallel analysis of %d sessions (max parallel: %d)", len(sessionIDs), parallelLimit)
+
+	// Semaphore to limit concurrent executions
+	sem := make(chan struct{}, parallelLimit)
+	resultsChan := make(chan AnalysisResult, len(sessionIDs))
+	var wg sync.WaitGroup
+
+	// Launch goroutines
+	for _, sessionID := range sessionIDs {
+		wg.Add(1)
+		go func(sid string) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			s.logger.Debug("Analyzing session %s in parallel", sid)
+			analysis, err := s.AnalyzeSessionWithPrompt(ctx, sid, promptName)
+
+			resultsChan <- AnalysisResult{
+				SessionID:  sid,
+				PromptName: promptName,
+				Analysis:   analysis,
+				Error:      err,
+			}
+		}(sessionID)
+	}
+
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results
+	results := make(map[string]*domain.SessionAnalysis)
+	var errors []error
+
+	for result := range resultsChan {
+		if result.Error != nil {
+			errors = append(errors, fmt.Errorf("session %s: %w", result.SessionID, result.Error))
+			s.logger.Warn("Parallel analysis failed for session %s: %v", result.SessionID, result.Error)
+		} else {
+			results[result.SessionID] = result.Analysis
+			s.logger.Debug("Parallel analysis completed for session %s", result.SessionID)
+		}
+	}
+
+	s.logger.Info("Parallel analysis complete: %d/%d successful", len(results), len(sessionIDs))
+	return results, errors
+}
+
+// AnalyzeSessionWithMultiplePrompts analyzes a single session with multiple prompts in parallel
+func (s *AnalysisService) AnalyzeSessionWithMultiplePrompts(ctx context.Context, sessionID string, promptNames []string) (map[string]*domain.SessionAnalysis, []error) {
+	if len(promptNames) == 0 {
+		return make(map[string]*domain.SessionAnalysis), nil
+	}
+
+	parallelLimit := s.config.Analysis.ParallelLimit
+	if parallelLimit <= 0 {
+		parallelLimit = 1
+	}
+
+	s.logger.Info("Analyzing session %s with %d prompts in parallel", sessionID, len(promptNames))
+
+	// Semaphore to limit concurrent executions
+	sem := make(chan struct{}, parallelLimit)
+	resultsChan := make(chan AnalysisResult, len(promptNames))
+	var wg sync.WaitGroup
+
+	// Launch goroutines
+	for _, promptName := range promptNames {
+		wg.Add(1)
+		go func(pname string) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			s.logger.Debug("Analyzing session %s with prompt %s", sessionID, pname)
+			analysis, err := s.AnalyzeSessionWithPrompt(ctx, sessionID, pname)
+
+			resultsChan <- AnalysisResult{
+				SessionID:  sessionID,
+				PromptName: pname,
+				Analysis:   analysis,
+				Error:      err,
+			}
+		}(promptName)
+	}
+
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results
+	results := make(map[string]*domain.SessionAnalysis)
+	var errors []error
+
+	for result := range resultsChan {
+		if result.Error != nil {
+			errors = append(errors, fmt.Errorf("prompt %s: %w", result.PromptName, result.Error))
+			s.logger.Warn("Analysis failed for prompt %s: %v", result.PromptName, result.Error)
+		} else {
+			results[result.PromptName] = result.Analysis
+			s.logger.Debug("Analysis completed for prompt %s", result.PromptName)
+		}
+	}
+
+	s.logger.Info("Multi-prompt analysis complete: %d/%d successful", len(results), len(promptNames))
+	return results, errors
+}
+
+// EstimateTokenCount estimates the token count for a session's logs
+// Uses a simple chars/4 heuristic (common approximation for Claude models)
+func (s *AnalysisService) EstimateTokenCount(ctx context.Context, sessionID string) (int, error) {
+	logs, err := s.logsService.ListRecentLogs(ctx, 0, 0, sessionID, true)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get session logs: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := FormatLogsAsMarkdown(&buf, logs); err != nil {
+		return 0, fmt.Errorf("failed to format logs: %w", err)
+	}
+
+	// Estimate tokens: ~4 characters per token (conservative estimate)
+	charCount := buf.Len()
+	tokenEstimate := charCount / 4
+
+	s.logger.Debug("Session %s: %d chars ≈ %d tokens", sessionID, charCount, tokenEstimate)
+	return tokenEstimate, nil
+}
+
+// SelectSessionsWithinTokenLimit selects sessions that fit within the token limit
+// Returns selected session IDs and total estimated tokens
+func (s *AnalysisService) SelectSessionsWithinTokenLimit(ctx context.Context, sessionIDs []string, tokenLimit int) ([]string, int, error) {
+	if tokenLimit <= 0 {
+		tokenLimit = s.config.Analysis.TokenLimit
+	}
+
+	var selected []string
+	totalTokens := 0
+
+	// Reserve 20% of tokens for prompt overhead and response
+	availableTokens := int(float64(tokenLimit) * 0.8)
+
+	s.logger.Debug("Selecting sessions within %d tokens (%.0f%% of %d limit)", availableTokens, 80.0, tokenLimit)
+
+	for _, sessionID := range sessionIDs {
+		tokenCount, err := s.EstimateTokenCount(ctx, sessionID)
+		if err != nil {
+			s.logger.Warn("Failed to estimate tokens for session %s: %v", sessionID, err)
+			continue
+		}
+
+		if totalTokens+tokenCount <= availableTokens {
+			selected = append(selected, sessionID)
+			totalTokens += tokenCount
+			s.logger.Debug("Selected session %s (%d tokens, total: %d/%d)", sessionID, tokenCount, totalTokens, availableTokens)
+		} else {
+			s.logger.Debug("Skipping session %s (%d tokens would exceed limit: %d + %d > %d)",
+				sessionID, tokenCount, totalTokens, tokenCount, availableTokens)
+			break
+		}
+	}
+
+	s.logger.Info("Selected %d/%d sessions (%d tokens, %.1f%% of limit)",
+		len(selected), len(sessionIDs), totalTokens, float64(totalTokens)/float64(tokenLimit)*100)
+
+	return selected, totalTokens, nil
 }
 
 // GetLastSession returns the ID of the most recent session

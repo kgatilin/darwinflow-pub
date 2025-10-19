@@ -2,6 +2,8 @@ analysis:
   token_limit: 100000
   model: "claude-sonnet-4-5-20250929"
   parallel_limit: 3
+  auto_summary_enabled: false  # Set to true to enable auto-triggered session summaries
+  auto_summary_prompt: "session_summary"  # Prompt to use for auto-summaries
   claude_options:
     allowed_tools: []
     system_prompt_mode: "replace"

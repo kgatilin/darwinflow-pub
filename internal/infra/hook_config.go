@@ -52,6 +52,17 @@ func DefaultDarwinFlowConfig() HookConfig {
 					},
 				},
 			},
+			"SessionEnd": {
+				{
+					Hooks: []HookAction{
+						{
+							Type:    "command",
+							Command: "dw claude auto-summary",
+							Timeout: 60, // Longer timeout for analysis
+						},
+					},
+				},
+			},
 		},
 	}
 }
