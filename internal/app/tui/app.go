@@ -41,10 +41,14 @@ type AppModel struct {
 	sessionList     SessionListModel
 	sessionDetail   SessionDetailModel
 	analysisViewer  AnalysisViewerModel
+	logViewer       LogViewerModel
 	spinner         spinner.Model
 
 	// Selected session for operations
 	selectedSession *SessionInfo
+
+	// Flag to track if we should show detail view after refresh
+	showDetailAfterRefresh bool
 
 	width  int
 	height int
@@ -108,6 +112,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.analysisViewer = model.(AnalysisViewerModel)
 			return m, cmd
 		}
+		if !m.loading && m.currentView == ViewLogViewer {
+			var model tea.Model
+			var cmd tea.Cmd
+			model, cmd = m.logViewer.Update(msg)
+			m.logViewer = model.(LogViewerModel)
+			return m, cmd
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -123,6 +134,27 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.sessions = msg.Sessions
 		m.sessionList = NewSessionListModel(msg.Sessions)
+
+		// If we should show detail view after refresh (e.g., after analysis)
+		if m.showDetailAfterRefresh && m.selectedSession != nil {
+			m.showDetailAfterRefresh = false
+			// Find the updated session info
+			for _, session := range msg.Sessions {
+				if session.SessionID == m.selectedSession.SessionID {
+					m.selectedSession = session
+					m.sessionDetail = NewSessionDetailModel(session)
+					m.currentView = ViewSessionDetail
+					// Send initial window size to the detail view
+					if m.width > 0 && m.height > 0 {
+						return m, func() tea.Msg {
+							return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+						}
+					}
+					return m, nil
+				}
+			}
+		}
+
 		m.currentView = ViewSessionList
 		// Send initial window size to the newly created list
 		if m.width > 0 && m.height > 0 {
@@ -188,6 +220,23 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case ViewLogMsg:
+		// Get the logs for this session
+		logs, err := m.logsService.ListRecentLogs(m.ctx, 0, 0, msg.SessionID, true)
+		if err != nil || len(logs) == 0 {
+			m.err = fmt.Errorf("no logs found for session")
+			return m, nil
+		}
+		m.logViewer = NewLogViewerModel(msg.SessionID, logs)
+		m.currentView = ViewLogViewer
+		// Send initial window size to the viewer
+		if m.width > 0 && m.height > 0 {
+			return m, func() tea.Msg {
+				return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+			}
+		}
+		return m, nil
+
 	case BackToDetailMsg:
 		m.currentView = ViewSessionDetail
 		// Send window size when returning to detail view
@@ -203,6 +252,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Error != nil {
 			m.err = msg.Error
 		} else {
+			// Set flag to show detail view after refresh
+			m.showDetailAfterRefresh = true
 			// Refresh session data
 			return m, m.loadSessions
 		}
@@ -251,6 +302,11 @@ func (m *AppModel) updateCurrentView(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var model tea.Model
 		model, cmd = m.analysisViewer.Update(msg)
 		m.analysisViewer = model.(AnalysisViewerModel)
+
+	case ViewLogViewer:
+		var model tea.Model
+		model, cmd = m.logViewer.Update(msg)
+		m.logViewer = model.(LogViewerModel)
 	}
 
 	return m, cmd
@@ -280,6 +336,8 @@ func (m *AppModel) View() string {
 		return m.sessionDetail.View()
 	case ViewAnalysisViewer:
 		return m.analysisViewer.View()
+	case ViewLogViewer:
+		return m.logViewer.View()
 	default:
 		return "Unknown view"
 	}
@@ -309,6 +367,12 @@ func (m *AppModel) loadSessions() tea.Msg {
 			analyses = []*domain.SessionAnalysis{}
 		}
 
+		// Estimate token count for the session
+		tokenCount, err := m.analysisService.EstimateTokenCount(m.ctx, sessionID)
+		if err != nil {
+			tokenCount = 0 // Default to 0 if estimation fails
+		}
+
 		// Build session info
 		sessionInfo := &SessionInfo{
 			SessionID:     sessionID,
@@ -320,6 +384,7 @@ func (m *AppModel) loadSessions() tea.Msg {
 			Analyses:      analyses,
 			HasAnalysis:   len(analyses) > 0,
 			AnalysisTypes: make([]string, 0, len(analyses)),
+			TokenCount:    tokenCount,
 		}
 
 		for _, a := range analyses {

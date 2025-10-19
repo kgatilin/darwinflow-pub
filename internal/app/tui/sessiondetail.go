@@ -120,6 +120,12 @@ func (m SessionDetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				return ViewAnalysisMsg{SessionID: m.session.SessionID}
 			}
+
+		case "l":
+			// View session log
+			return m, func() tea.Msg {
+				return ViewLogMsg{SessionID: m.session.SessionID}
+			}
 		}
 	}
 
@@ -153,12 +159,14 @@ func (m SessionDetailModel) footerView() string {
 		"[r] Re-analyze",
 		"[s] Save",
 		"[v] View",
+		"[l] Log",
 		"[Esc] Back",
 	}
 
 	if !m.session.HasAnalysis {
 		actions = []string{
 			"[a] Analyze",
+			"[l] Log",
 			"[Esc] Back",
 		}
 	}
@@ -182,6 +190,12 @@ func (m SessionDetailModel) renderContent() string {
 		m.session.FirstEvent.Format("2006-01-02 15:04:05"),
 		m.session.LastEvent.Format("15:04:05")))
 	b.WriteString(fmt.Sprintf("  Event Count: %d\n", m.session.EventCount))
+
+	// Display token count with formatting
+	if m.session.TokenCount > 0 {
+		tokenCountStr := formatTokenCount(m.session.TokenCount)
+		b.WriteString(fmt.Sprintf("  Log Size: %s\n", tokenCountStr))
+	}
 	b.WriteString("\n")
 
 	// Analysis information
@@ -217,9 +231,29 @@ func max(a, b int) int {
 	return b
 }
 
+// formatTokenCount formats a token count with thousands separator and unit
+func formatTokenCount(count int) string {
+	// Format with thousands separator
+	countStr := fmt.Sprintf("%d", count)
+	if count >= 1000 {
+		// Add comma separator for thousands
+		var result []rune
+		for i, c := range countStr {
+			if i > 0 && (len(countStr)-i)%3 == 0 {
+				result = append(result, ',')
+			}
+			result = append(result, c)
+		}
+		countStr = string(result)
+	}
+
+	return fmt.Sprintf("~%s tokens", countStr)
+}
+
 // Message types
 type BackToListMsg struct{}
 type AnalyzeSessionMsg struct{ SessionID string }
 type ReanalyzeSessionMsg struct{ SessionID string }
 type SaveToMarkdownMsg struct{ SessionID string }
 type ViewAnalysisMsg struct{ SessionID string }
+type ViewLogMsg struct{ SessionID string }

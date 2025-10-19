@@ -15,24 +15,6 @@
 
 Required directories as defined in `.goarchlint`:
 
-### cmd
-**Purpose**: Application entry points
-
-**Allowed dependencies**: internal/app, internal/infra
-
-**Status**: ✓ Exists
-
----
-
-### internal/app
-**Purpose**: Application services, use cases, orchestration
-
-**Allowed dependencies**: internal/domain
-
-**Status**: ✓ Exists
-
----
-
 ### internal/domain
 **Purpose**: Core business logic, entities, value objects, domain services
 
@@ -51,6 +33,24 @@ Required directories as defined in `.goarchlint`:
 
 ---
 
+### cmd
+**Purpose**: Application entry points
+
+**Allowed dependencies**: internal/app, internal/infra
+
+**Status**: ✓ Exists
+
+---
+
+### internal/app
+**Purpose**: Application services, use cases, orchestration
+
+**Allowed dependencies**: internal/domain
+
+**Status**: ✓ Exists
+
+---
+
 ---
 
 ## Architectural Rules
@@ -60,10 +60,10 @@ From `.goarchlint`:
 ```yaml
 structure:
   required_directories:
-    cmd: "Application entry points"
     internal/app: "Application services, use cases, orchestration"
     internal/domain: "Core business logic, entities, value objects, domain services"
     internal/infra: "Infrastructure implementations (DB, external APIs, messaging)"
+    cmd: "Application entry points"
   allow_other_directories: true
 
 rules:
@@ -91,7 +91,7 @@ Detailed method-level dependencies between files:
   - AnalysisService
   - DefaultDBPath
   - NewAnalysisService
-  - NewClaudeCLIExecutor
+  - NewClaudeCLIExecutorWithConfig
   - NewLogsService
 - internal/infra
   - Logger
@@ -99,6 +99,7 @@ Detailed method-level dependencies between files:
   - NewDebugLogger
   - NewDefaultLogger
   - NewSQLiteEventRepository
+  - ValidateModelAlias
 
 **External Dependencies**:
 - context
@@ -126,10 +127,15 @@ Detailed method-level dependencies between files:
   - DefaultDBPath
   - EventMapper
   - HookInputData
+  - NewAnalysisService
+  - NewClaudeCLIExecutorWithConfig
   - NewLoggerService
+  - NewLogsService
   - NewSetupService
 - internal/infra
+  - NewConfigLoader
   - NewContextDetector
+  - NewDefaultLogger
   - NewHookConfigManager
   - NewSQLiteEventRepository
   - NewTranscriptParser
@@ -150,10 +156,13 @@ Detailed method-level dependencies between files:
   - NopCloser
   - ReadAll
 - os
+  - Executable
   - Exit
   - Getenv
   - Stderr
   - Stdin
+- os/exec
+  - Command
 
 ---
 
@@ -256,6 +265,64 @@ Detailed method-level dependencies between files:
 
 ---
 
+### cmd/dw/refresh.go
+**Package**: main
+
+**Local Dependencies**:
+- internal/app
+  - DefaultDBPath
+- internal/infra
+  - DefaultConfigFileName
+  - NewConfigLoader
+  - NewDefaultLogger
+  - NewHookConfigManager
+  - NewSQLiteEventRepository
+
+**External Dependencies**:
+- context
+  - Background
+- fmt
+  - Fprintf
+  - Println
+- os
+  - Exit
+  - Stderr
+
+---
+
+### cmd/dw/ui.go
+**Package**: main
+
+**Local Dependencies**:
+- internal/app
+  - DefaultDBPath
+  - NewAnalysisService
+  - NewClaudeCLIExecutorWithConfig
+  - NewLogsService
+- internal/app/tui
+  - Run
+- internal/infra
+  - Logger
+  - NewConfigLoader
+  - NewDebugLogger
+  - NewDefaultLogger
+  - NewSQLiteEventRepository
+
+**External Dependencies**:
+- context
+  - Background
+- flag
+  - ContinueOnError
+  - ErrHelp
+  - NewFlagSet
+- fmt
+  - Fprintf
+- os
+  - Exit
+  - Stderr
+
+---
+
 ### internal/app/analysis.go
 **Package**: app
 
@@ -263,10 +330,10 @@ Detailed method-level dependencies between files:
 - internal/domain
   - AnalysisRepository
   - Config
-  - DefaultAnalysisPrompt
   - DefaultConfig
+  - DefaultToolAnalysisPrompt
   - EventRepository
-  - NewSessionAnalysis
+  - NewSessionAnalysisWithType
   - SessionAnalysis
 
 **External Dependencies**:
@@ -276,14 +343,28 @@ Detailed method-level dependencies between files:
   - Context
 - fmt
   - Errorf
+  - Sprintf
 - io
   - MultiWriter
 - os
+  - MkdirAll
   - Stderr
+  - WriteFile
 - os/exec
   - CommandContext
+- path/filepath
+  - Ext
+  - Join
 - strings
+  - Join
   - TrimSpace
+- sync
+  - WaitGroup
+- text/template
+  - New
+- time
+  - Now
+  - RFC3339
 
 ---
 
@@ -349,6 +430,7 @@ Detailed method-level dependencies between files:
 
 **Local Dependencies**:
 - internal/domain
+  - Event
   - EventQuery
   - EventRepository
   - QueryResult
@@ -397,6 +479,205 @@ Detailed method-level dependencies between files:
   - MkdirAll
 - path/filepath
   - Dir
+
+---
+
+### internal/app/tui/analysisviewer.go
+**Package**: tui
+
+**Local Dependencies**:
+- internal/domain
+  - SessionAnalysis
+
+**External Dependencies**:
+- fmt
+  - Sprintf
+- strings
+  - Builder
+  - Repeat
+- github.com/charmbracelet/bubbles/viewport
+  - Model
+  - New
+- github.com/charmbracelet/glamour
+  - NewTermRenderer
+  - WithStandardStyle
+  - WithWordWrap
+- github.com/charmbracelet/bubbletea
+  - Batch
+  - Cmd
+  - KeyMsg
+  - Model
+  - Msg
+  - WindowSizeMsg
+- github.com/charmbracelet/lipgloss
+  - Color
+  - Height
+  - Left
+  - NewStyle
+  - NormalBorder
+  - Width
+
+---
+
+### internal/app/tui/app.go
+**Package**: tui
+
+**Local Dependencies**:
+- internal/app
+  - AnalysisService
+  - LogsService
+- internal/domain
+  - Config
+  - SessionAnalysis
+
+**External Dependencies**:
+- context
+  - Context
+- fmt
+  - Errorf
+  - Sprintf
+- github.com/charmbracelet/bubbles/spinner
+  - Dot
+  - Model
+  - New
+  - TickMsg
+- github.com/charmbracelet/bubbletea
+  - Batch
+  - Cmd
+  - KeyMsg
+  - Model
+  - Msg
+  - NewProgram
+  - Quit
+  - WindowSizeMsg
+  - WithAltScreen
+- github.com/charmbracelet/lipgloss
+  - Color
+  - NewStyle
+  - RoundedBorder
+
+---
+
+### internal/app/tui/logviewer.go
+**Package**: tui
+
+**Local Dependencies**:
+- internal/app
+  - FormatLogsAsMarkdown
+  - LogRecord
+
+**External Dependencies**:
+- bytes
+  - Buffer
+- fmt
+  - Sprintf
+- strings
+  - Repeat
+- github.com/charmbracelet/bubbles/viewport
+  - Model
+  - New
+- github.com/charmbracelet/glamour
+  - NewTermRenderer
+  - WithStandardStyle
+  - WithWordWrap
+- github.com/charmbracelet/bubbletea
+  - Batch
+  - Cmd
+  - KeyMsg
+  - Model
+  - Msg
+  - WindowSizeMsg
+- github.com/charmbracelet/lipgloss
+  - Color
+  - Height
+  - NewStyle
+  - Width
+
+---
+
+### internal/app/tui/sessiondetail.go
+**Package**: tui
+
+**Local Dependencies**: None
+
+**External Dependencies**:
+- fmt
+  - Sprintf
+- strings
+  - Builder
+  - Join
+  - Repeat
+- github.com/charmbracelet/bubbles/viewport
+  - Model
+  - New
+- github.com/charmbracelet/bubbletea
+  - Batch
+  - Cmd
+  - KeyMsg
+  - Model
+  - Msg
+  - WindowSizeMsg
+- github.com/charmbracelet/lipgloss
+  - Color
+  - Height
+  - Left
+  - NewStyle
+  - NormalBorder
+  - RoundedBorder
+  - Width
+
+---
+
+### internal/app/tui/sessiondetail_test.go
+**Package**: tui
+
+**Local Dependencies**: None
+
+**External Dependencies**:
+- testing
+  - T
+
+---
+
+### internal/app/tui/sessionlist.go
+**Package**: tui
+
+**Local Dependencies**: None
+
+**External Dependencies**:
+- fmt
+  - Sprintf
+- strings
+  - Join
+- github.com/charmbracelet/bubbles/list
+  - DefaultStyles
+  - Item
+  - Model
+  - New
+  - NewDefaultDelegate
+- github.com/charmbracelet/bubbletea
+  - Cmd
+  - KeyMsg
+  - Model
+  - Msg
+  - Quit
+  - WindowSizeMsg
+- github.com/charmbracelet/lipgloss
+  - Color
+  - NewStyle
+
+---
+
+### internal/app/tui/types.go
+**Package**: tui
+
+**Local Dependencies**:
+- internal/domain
+  - SessionAnalysis
+
+**External Dependencies**:
+- time
+  - Time
 
 ---
 
@@ -493,6 +774,7 @@ Detailed method-level dependencies between files:
 - internal/domain
   - Config
   - DefaultConfig
+  - ValidateModel
 
 **External Dependencies**:
 - fmt
@@ -713,19 +995,53 @@ Exported interfaces and types available for consumption:
 
 **AnalyzeSession** `(*AnalysisService) AnalyzeSession(context.Context, string) (*domain.SessionAnalysis, error)`
 
+**AnalyzeSessionWithPrompt** `(*AnalysisService) AnalyzeSessionWithPrompt(context.Context, string) (*domain.SessionAnalysis, error)`
+
+**AnalyzeMultipleSessions** `(*AnalysisService) AnalyzeMultipleSessions(context.Context, []string, string) (map[string]*domain.SessionAnalysis, []error)`
+
+**AnalysisResult** `AnalysisResult`
+- Properties:
+  - SessionID string
+  - PromptName string
+  - Analysis *domain.SessionAnalysis
+  - Error error
+
+**AnalyzeMultipleSessionsParallel** `(*AnalysisService) AnalyzeMultipleSessionsParallel(context.Context, []string, string) (map[string]*domain.SessionAnalysis, []error)`
+
+**AnalyzeSessionWithMultiplePrompts** `(*AnalysisService) AnalyzeSessionWithMultiplePrompts(context.Context, string, []string) (map[string]*domain.SessionAnalysis, []error)`
+
+**EstimateTokenCount** `(*AnalysisService) EstimateTokenCount(context.Context, string) (int, error)`
+
+**SelectSessionsWithinTokenLimit** `(*AnalysisService) SelectSessionsWithinTokenLimit(context.Context, []string, int) ([]string, int, error)`
+
 **GetLastSession** `(*AnalysisService) GetLastSession(context.Context) (string, error)`
 
 **GetUnanalyzedSessions** `(*AnalysisService) GetUnanalyzedSessions(context.Context) ([]string, error)`
 
 **GetAnalysis** `(*AnalysisService) GetAnalysis(context.Context, string) (*domain.SessionAnalysis, error)`
 
+**GetAnalysesBySessionID** `(*AnalysisService) GetAnalysesBySessionID(context.Context, string) ([]*domain.SessionAnalysis, error)`
+
 **GetAllSessionIDs** `(*AnalysisService) GetAllSessionIDs(context.Context, int) ([]string, error)`
+
+**FilenameTmplData** `FilenameTmplData`
+- Properties:
+  - SessionID string
+  - PromptName string
+  - Date string
+  - Time string
+
+**SaveToMarkdown** `(*AnalysisService) SaveToMarkdown(context.Context, *domain.SessionAnalysis, string) (string, error)`
 
 **ClaudeCLIExecutor** `ClaudeCLIExecutor`
 
 **NewClaudeCLIExecutor** `NewClaudeCLIExecutor(Logger) *ClaudeCLIExecutor`
 
+**NewClaudeCLIExecutorWithConfig** `NewClaudeCLIExecutorWithConfig(Logger, *domain.Config) *ClaudeCLIExecutor`
+
 **Execute** `(*ClaudeCLIExecutor) Execute(context.Context, string) (string, error)`
+
+**ExecuteWithOptions** `(*ClaudeCLIExecutor) ExecuteWithOptions(context.Context, string, map[string]interface{}) (string, error)`
 
 #### Types
 
@@ -818,7 +1134,7 @@ Exported interfaces and types available for consumption:
 
 **NewLogsService** `NewLogsService(domain.EventRepository, domain.RawQueryExecutor) *LogsService`
 
-**ListRecentLogs** `(*LogsService) ListRecentLogs(context.Context, int, string, bool) ([]*LogRecord, error)`
+**ListRecentLogs** `(*LogsService) ListRecentLogs(context.Context, int, int, string, bool) ([]*LogRecord, error)`
 
 **ExecuteRawQuery** `(*LogsService) ExecuteRawQuery(context.Context, string) (*domain.QueryResult, error)`
 
@@ -853,6 +1169,170 @@ Exported interfaces and types available for consumption:
 
 ---
 
+### tui
+
+#### Types
+
+**AnalysisViewerModel** `AnalysisViewerModel`
+
+**NewAnalysisViewerModel** `NewAnalysisViewerModel(*domain.SessionAnalysis) AnalysisViewerModel`
+
+**Init** `(AnalysisViewerModel) Init() tea.Cmd`
+
+**Update** `(AnalysisViewerModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(AnalysisViewerModel) View() string`
+
+**BackToDetailMsg** `BackToDetailMsg`
+
+#### Types
+
+**AppModel** `AppModel`
+
+**NewAppModel** `NewAppModel(context.Context, *app.AnalysisService, *app.LogsService, *domain.Config) *AppModel`
+
+**Init** `(*AppModel) Init() tea.Cmd`
+
+**Update** `(*AppModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(*AppModel) View() string`
+
+**Run** `Run(context.Context, *app.AnalysisService, *app.LogsService, *domain.Config) error`
+
+#### Types
+
+**LogViewerModel** `LogViewerModel`
+
+**NewLogViewerModel** `NewLogViewerModel(string, []*app.LogRecord) LogViewerModel`
+
+**Init** `(LogViewerModel) Init() tea.Cmd`
+
+**Update** `(LogViewerModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(LogViewerModel) View() string`
+
+#### Types
+
+**SessionDetailModel** `SessionDetailModel`
+
+**NewSessionDetailModel** `NewSessionDetailModel(*SessionInfo) SessionDetailModel`
+
+**Init** `(SessionDetailModel) Init() tea.Cmd`
+
+**Update** `(SessionDetailModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(SessionDetailModel) View() string`
+
+**BackToListMsg** `BackToListMsg`
+
+**AnalyzeSessionMsg** `AnalyzeSessionMsg`
+- Properties:
+  - SessionID string
+
+**ReanalyzeSessionMsg** `ReanalyzeSessionMsg`
+- Properties:
+  - SessionID string
+
+**SaveToMarkdownMsg** `SaveToMarkdownMsg`
+- Properties:
+  - SessionID string
+
+**ViewAnalysisMsg** `ViewAnalysisMsg`
+- Properties:
+  - SessionID string
+
+**ViewLogMsg** `ViewLogMsg`
+- Properties:
+  - SessionID string
+
+#### Types
+
+**TestFormatTokenCount** `TestFormatTokenCount(*testing.T)`
+
+#### Types
+
+**SessionItem** `SessionItem`
+
+**FilterValue** `(SessionItem) FilterValue() string`
+
+**Title** `(SessionItem) Title() string`
+
+**Description** `(SessionItem) Description() string`
+
+**SessionListModel** `SessionListModel`
+
+**NewSessionListModel** `NewSessionListModel([]*SessionInfo) SessionListModel`
+
+**Init** `(SessionListModel) Init() tea.Cmd`
+
+**Update** `(SessionListModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(SessionListModel) View() string`
+
+**GetSelectedSession** `(SessionListModel) GetSelectedSession() *SessionInfo`
+
+**UpdateSessions** `(*SessionListModel) UpdateSessions([]*SessionInfo)`
+
+**SelectedSessionMsg** `SelectedSessionMsg`
+- Properties:
+  - Session *SessionInfo
+
+**RefreshRequestMsg** `RefreshRequestMsg`
+
+#### Types
+
+**ViewState** `ViewState`
+
+**ViewSessionList** `ViewSessionList`
+
+**ViewSessionDetail** `ViewSessionDetail`
+
+**ViewAnalysisViewer** `ViewAnalysisViewer`
+
+**ViewLogViewer** `ViewLogViewer`
+
+**ViewAnalysisAction** `ViewAnalysisAction`
+
+**ViewSaveDialog** `ViewSaveDialog`
+
+**ViewProgress** `ViewProgress`
+
+**SessionInfo** `SessionInfo`
+- Properties:
+  - SessionID string
+  - ShortID string
+  - FirstEvent time.Time
+  - LastEvent time.Time
+  - EventCount int
+  - AnalysisCount int
+  - Analyses []*domain.SessionAnalysis
+  - HasAnalysis bool
+  - LatestAnalysis *domain.SessionAnalysis
+  - AnalysisTypes []string
+  - TokenCount int
+
+**SessionsLoadedMsg** `SessionsLoadedMsg`
+- Properties:
+  - Sessions []*SessionInfo
+  - Error error
+
+**AnalysisCompleteMsg** `AnalysisCompleteMsg`
+- Properties:
+  - SessionID string
+  - Analysis *domain.SessionAnalysis
+  - Error error
+
+**SaveCompleteMsg** `SaveCompleteMsg`
+- Properties:
+  - FilePath string
+  - Error error
+
+**ErrorMsg** `ErrorMsg`
+- Properties:
+  - Error error
+
+---
+
 ### domain
 
 #### Types
@@ -866,8 +1346,12 @@ Exported interfaces and types available for consumption:
   - ModelUsed string
   - PromptUsed string
   - PatternsSummary string
+  - AnalysisType string
+  - PromptName string
 
 **NewSessionAnalysis** `NewSessionAnalysis(string) *SessionAnalysis`
+
+**NewSessionAnalysisWithType** `NewSessionAnalysisWithType(string) *SessionAnalysis`
 
 **ToolSuggestion** `ToolSuggestion`
 - Properties:
@@ -880,9 +1364,40 @@ Exported interfaces and types available for consumption:
 
 **Config** `Config`
 - Properties:
+  - Analysis AnalysisConfig
+  - UI UIConfig
   - Prompts map[string]string
 
+**AnalysisConfig** `AnalysisConfig`
+- Properties:
+  - TokenLimit int
+  - Model string
+  - ParallelLimit int
+  - EnabledPrompts []string
+  - AutoSummaryEnabled bool
+  - AutoSummaryPrompt string
+  - ClaudeOptions ClaudeOptions
+
+**ClaudeOptions** `ClaudeOptions`
+- Properties:
+  - AllowedTools []string
+  - SystemPromptMode string
+
+**UIConfig** `UIConfig`
+- Properties:
+  - DefaultOutputDir string
+  - FilenameTemplate string
+  - AutoRefreshInterval string
+
+**AllowedModels** `AllowedModels`
+
+**ValidateModel** `ValidateModel(string) bool`
+
 **DefaultConfig** `DefaultConfig() *Config`
+
+**DefaultSessionSummaryPrompt** `DefaultSessionSummaryPrompt`
+
+**DefaultToolAnalysisPrompt** `DefaultToolAnalysisPrompt`
 
 **DefaultAnalysisPrompt** `DefaultAnalysisPrompt`
 
@@ -1023,6 +1538,8 @@ Exported interfaces and types available for consumption:
 
 **LoadConfig** `(*ConfigLoader) LoadConfig(string) (*domain.Config, error)`
 
+**ValidateModelAlias** `ValidateModelAlias(string) bool`
+
 **SaveConfig** `(*ConfigLoader) SaveConfig(*domain.Config, string) error`
 
 **GetPrompt** `(*ConfigLoader) GetPrompt(*domain.Config, string) (string, bool)`
@@ -1147,6 +1664,8 @@ Exported interfaces and types available for consumption:
 
 **GetAnalysisBySessionID** `(*SQLiteEventRepository) GetAnalysisBySessionID(context.Context, string) (*domain.SessionAnalysis, error)`
 
+**GetAnalysesBySessionID** `(*SQLiteEventRepository) GetAnalysesBySessionID(context.Context, string) ([]*domain.SessionAnalysis, error)`
+
 **GetUnanalyzedSessionIDs** `(*SQLiteEventRepository) GetUnanalyzedSessionIDs(context.Context) ([]string, error)`
 
 **GetAllAnalyses** `(*SQLiteEventRepository) GetAllAnalyses(context.Context, int) ([]*domain.SessionAnalysis, error)`
@@ -1194,11 +1713,11 @@ Exported interfaces and types available for consumption:
 
 ## Statistics
 
-- **Total Files**: 26
-- **Total Packages**: 4
+- **Total Files**: 35
+- **Total Packages**: 5
 - **Required Directories**: 4/4 present
 - **Violations**: 0
-- **External Dependencies**: 20
+- **External Dependencies**: 27
 
 ---
 

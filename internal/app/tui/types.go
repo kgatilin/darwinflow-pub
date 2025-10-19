@@ -13,6 +13,7 @@ const (
 	ViewSessionList ViewState = iota
 	ViewSessionDetail
 	ViewAnalysisViewer
+	ViewLogViewer
 	ViewAnalysisAction
 	ViewSaveDialog
 	ViewProgress
@@ -30,6 +31,7 @@ type SessionInfo struct {
 	HasAnalysis     bool
 	LatestAnalysis  *domain.SessionAnalysis
 	AnalysisTypes   []string // List of analysis prompt names
+	TokenCount      int      // Estimated token count for markdown log
 }
 
 // Message types for Bubble Tea updates
