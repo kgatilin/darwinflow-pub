@@ -218,7 +218,14 @@ func (m *AppModel) updateCurrentView(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the current view
 func (m *AppModel) View() string {
 	if m.err != nil {
-		return errorStyle.Render(fmt.Sprintf("Error: %v\n\nPress ctrl+c to quit", m.err))
+		// Wrap error text to terminal width (with some padding for border)
+		maxWidth := m.width - 10
+		if maxWidth < 40 {
+			maxWidth = 40
+		}
+		errText := fmt.Sprintf("Error: %v\n\nPress ctrl+c to quit", m.err)
+		wrappedErr := lipgloss.NewStyle().Width(maxWidth).Render(errText)
+		return errorStyle.Render(wrappedErr)
 	}
 
 	if m.loading {

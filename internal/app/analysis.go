@@ -528,8 +528,8 @@ func (e *ClaudeCLIExecutor) Execute(ctx context.Context, prompt string) (string,
 // ExecuteWithOptions runs claude with custom options
 // options can override config settings (model, tokenLimit, etc.)
 func (e *ClaudeCLIExecutor) ExecuteWithOptions(ctx context.Context, prompt string, options map[string]interface{}) (string, error) {
-	// Build command arguments
-	args := []string{"-p"}
+	// Build command arguments (no -p flag, we'll use direct prompt)
+	args := []string{}
 
 	// Apply model from config or options
 	model := e.config.Analysis.Model
@@ -540,27 +540,28 @@ func (e *ClaudeCLIExecutor) ExecuteWithOptions(ctx context.Context, prompt strin
 		args = append(args, "--model", model)
 	}
 
+	var userPrompt string
+
 	// Apply system prompt mode from config
 	if e.config.Analysis.ClaudeOptions.SystemPromptMode == "replace" {
 		args = append(args, "--system-prompt", prompt)
 		// When using system prompt, we need a user prompt too
-		// Use empty prompt to just get the system prompt to work
-		prompt = "Analyze the session data provided in the system prompt."
+		userPrompt = "Analyze the session data provided in the system prompt."
 	} else if e.config.Analysis.ClaudeOptions.SystemPromptMode == "append" {
 		args = append(args, "--append-system-prompt", prompt)
-		prompt = "Analyze the session data."
+		userPrompt = "Analyze the session data."
+	} else {
+		// No system prompt mode, use prompt directly
+		userPrompt = prompt
 	}
 
 	// Apply allowed tools from config
 	if len(e.config.Analysis.ClaudeOptions.AllowedTools) > 0 {
-		args = append(args, "--allowed-tools", strings.Join(e.config.Analysis.ClaudeOptions.AllowedTools, " "))
-	} else {
-		// Empty allowed tools = no tools
-		args = append(args, "--allowed-tools", "")
+		args = append(args, "--allowed-tools", strings.Join(e.config.Analysis.ClaudeOptions.AllowedTools, ","))
 	}
 
 	// Add the user prompt last
-	args = append(args, prompt)
+	args = append(args, userPrompt)
 
 	e.logger.Debug("Executing: claude %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, "claude", args...)
