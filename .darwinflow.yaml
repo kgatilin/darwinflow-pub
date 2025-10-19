@@ -2,18 +2,33 @@ prompts:
     analysis: |+
         You are Claude Code, an AI agent that assists with software development.
 
-        Analyze your own work session below and identify what tools YOU need to make YOUR work more efficient.
+        Analyze your own work session below and identify what tools YOU need to make YOUR work FASTER and more efficient.
 
         ## Your Task
 
-        Review your session and identify where YOU (the agent) were inefficient due to lack of tools. Specifically look for:
+        Review your session and identify where YOU (the agent) were inefficient due to lack of tools. **Your goal is to minimize execution time and tool call count while completing tasks correctly.**
+
+        Specifically look for:
 
         1. **Repetitive Low-Level Operations**: Where you had to perform multiple primitive operations that could be a single tool
+           - Example: Multiple Read calls to gather project context (same files read repeatedly across sessions)
+           - Example: Sequential Grep/Glob operations that could be one complex search
+
         2. **Missing Specialized Agents**: Task types that would benefit from dedicated subagents with specialized capabilities
+
         3. **Tool Gaps**: Operations you struggled with or had to work around due to missing functionality
+
         4. **Workflow Inefficiencies**: Multi-step sequences you repeat that should be automated
 
-        **IMPORTANT**: If the session was already efficient and you identify no significant tool gaps, pattern inefficiencies, or repeated manual operations, it's perfectly valid to conclude that no improvements are needed. Simple tasks completed efficiently don't require new tools.
+        5. **Performance Bottlenecks**: Analyze the relationship between:
+           - Task complexity (simple vs complex)
+           - Execution time (how long it took)
+           - Tool call count (how many tools you invoked)
+           - Pattern: If you see the same context-gathering reads across sessions, this is a pattern to optimize
+
+        **OPTIMIZATION PRINCIPLE**: Favor creating fewer, more complex tools over using many simple tools. If a pattern requires 10 tool calls, consider whether a single specialized tool could do it in 1-2 calls.
+
+        **IMPORTANT**: If the session was already efficient (fast execution, minimal tool calls for the task complexity) and you identify no significant tool gaps, pattern inefficiencies, or repeated manual operations, it's perfectly valid to conclude that no improvements are needed. Simple tasks completed efficiently don't require new tools.
 
         ## Tool Categories to Consider
 
@@ -41,7 +56,13 @@ prompts:
         Use the following format:
 
         ### What Made Me Inefficient
-        [Describe specific moments where you lacked the right tools, with examples from the session]
+
+        Describe specific moments where you were slow or used too many tool calls. Include:
+        - **Repetitive patterns**: Did you perform the same operations multiple times? (e.g., reading the same files for context)
+        - **Tool call bloat**: Where did you use many tools when fewer complex tools would suffice?
+        - **Speed bottlenecks**: What took longer than it should for the task complexity?
+
+        Provide concrete examples from the session with tool counts and patterns.
 
         ### Tools I Need
 
@@ -49,19 +70,30 @@ prompts:
 
         **Tool: [Name]**
         - **What I Need**: Clear description of the capability
-        - **Why I Need It**: How it would make YOUR work more efficient (not the human's)
+        - **Why I Need It**: How it would make YOUR work FASTER and reduce tool calls
+          - Current: X tool calls taking Y time
+          - With tool: Z tool calls taking W time
         - **Type**: [Specialized Agent | CLI Tool | Claude Code Feature | Workflow Automation]
         - **How I Would Use It**: Concrete example from this session showing how you would invoke it
         - **Implementation Note**: Brief technical approach
 
+        ### Performance Metrics
+
+        For this session, report:
+        - **Total tool calls**: Count of all tool invocations
+        - **Execution time**: Approximate duration (if observable from timestamps)
+        - **Task complexity**: Simple | Medium | Complex
+        - **Performance assessment**: Was the tool count and time appropriate for this task complexity?
+
         ### Priority Order
 
         List the tools in priority order based on:
-        1. Frequency of need in your work
-        2. Time saved per invocation
-        3. Reduction in error-prone manual steps
+        1. **Speed impact**: How much faster would this tool make you?
+        2. **Tool call reduction**: How many tool calls would this eliminate?
+        3. **Frequency of need**: How often do you encounter this pattern?
+        4. **Time saved per invocation**: Seconds/minutes saved each use
 
-        Write as: "To make my work more efficient, I need: [ordered list]"
+        Write as: "To make my work faster and more efficient, I need: [ordered list]"
 
         ---
 
