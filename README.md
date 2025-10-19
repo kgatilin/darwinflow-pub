@@ -12,12 +12,17 @@ DarwinFlow is a lightweight logging system that automatically captures all Claud
   - **Auto-Triggered Summaries**: Optional automatic analysis on session end (configurable)
   - **Parallel Execution**: Concurrent analysis with semaphore-based concurrency control
   - **Token-Aware Selection**: Smart session selection based on token limits
+- **Interactive TUI**: Browse sessions, view analyses, and manage workflows with a keyboard-driven interface
+- **Plugin System**: Extensible architecture supporting multiple entity types and workflow domains
+  - **Capability-Driven**: Entities implement capabilities (IExtensible, ITrackable, IHasContext, etc.)
+  - **Multi-Domain Support**: Use for coding workflows, project management, research notes, and more
+  - **Core Plugins**: Claude Code sessions built-in, extensible for custom entity types
 - **Log Viewer**: Query and explore captured events with `dw logs` command
 - **Event Sourcing**: Immutable event log enabling replay and analysis
 - **SQLite Storage**: Fast, file-based storage with full-text search
 - **Zero Performance Impact**: Non-blocking, concurrent-safe logging
 - **Context-Aware**: Automatically detects project context from environment
-- **Clean Architecture**: Strict 3-layer design (`cmd → internal`)
+- **Clean Architecture**: Strict 3-layer DDD design enforced by go-arch-lint
 
 ## Quick Start
 
@@ -77,23 +82,34 @@ The `dw refresh` command:
 
 ## Architecture
 
-DarwinFlow follows a strict 3-layer architecture enforced by [go-arch-lint](https://github.com/fdaines/go-arch-lint):
+DarwinFlow follows a strict Domain-Driven Design (DDD) architecture enforced by [go-arch-lint](https://github.com/fdaines/go-arch-lint):
 
 ```
-cmd → pkg → internal
+cmd → internal/app + internal/infra → internal/domain
 ```
 
-- **cmd/dw**: CLI entry points (`dw claude init`, `dw claude log`, `dw logs`)
-- **pkg/claude**: Orchestration layer (settings management, logging coordination)
-- **internal/**: Domain primitives (events, hooks config, storage interfaces)
+**Layers:**
+- **cmd/dw**: CLI entry points and command handlers
+- **internal/app**: Application services, use cases, and plugins
+- **internal/infra**: Infrastructure (database, file I/O, external APIs)
+- **internal/domain**: Pure business logic (entities, capabilities, interfaces)
 
-### Key Components
+**Dependency Rule**: Dependencies flow inward only. Domain has zero dependencies.
 
-- **Events** (`internal/events`): Event types and payload definitions
-- **Hooks** (`internal/hooks`): Claude Code hook configuration and merging logic
-- **Storage** (`internal/storage`): Storage interface definitions
-- **Logger** (`pkg/claude`): Event logging and database interaction
-- **Settings Manager** (`pkg/claude`): Claude Code settings file management
+### Plugin System
+
+**Core Concepts:**
+- **Capabilities**: Interfaces defining entity behaviors (IExtensible, ITrackable, IHasContext, etc.)
+- **Plugins**: Providers of entities (`internal/app/plugins/claude_code/`)
+- **Plugin Registry**: Routes queries to appropriate plugins based on entity type
+- **Entity Types**: Concrete implementations (sessions, tasks, roadmaps, etc.)
+
+**Current Plugins:**
+- **claude-code** (core): Provides Claude Code sessions with tracking and context
+
+**Architecture Documentation:**
+- See `docs/arch-generated.md` for complete dependency graph
+- Run `go-arch-lint docs` to regenerate after changes
 
 ## Usage
 

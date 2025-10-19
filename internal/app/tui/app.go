@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,6 +28,7 @@ var (
 // AppModel is the main orchestrator for the TUI
 type AppModel struct {
 	ctx             context.Context
+	pluginRegistry  *app.PluginRegistry
 	analysisService *app.AnalysisService
 	logsService     *app.LogsService
 	config          *domain.Config
@@ -57,6 +59,7 @@ type AppModel struct {
 // NewAppModel creates a new TUI application model
 func NewAppModel(
 	ctx context.Context,
+	pluginRegistry *app.PluginRegistry,
 	analysisService *app.AnalysisService,
 	logsService *app.LogsService,
 	config *domain.Config,
@@ -67,6 +70,7 @@ func NewAppModel(
 
 	return &AppModel{
 		ctx:             ctx,
+		pluginRegistry:  pluginRegistry,
 		analysisService: analysisService,
 		logsService:     logsService,
 		config:          config,
@@ -346,59 +350,82 @@ func (m *AppModel) View() string {
 // Command functions
 
 func (m *AppModel) loadSessions() tea.Msg {
-	// Get all session IDs
-	sessionIDs, err := m.analysisService.GetAllSessionIDs(m.ctx, 0)
+	// Query all sessions from the plugin registry
+	entities, err := m.pluginRegistry.Query(m.ctx, domain.EntityQuery{
+		EntityType: "session",
+	})
 	if err != nil {
 		return SessionsLoadedMsg{Error: err}
 	}
 
-	sessions := make([]*SessionInfo, 0, len(sessionIDs))
+	sessions := make([]*SessionInfo, 0, len(entities))
 
-	for _, sessionID := range sessionIDs {
-		// Get session logs
-		logs, err := m.logsService.ListRecentLogs(m.ctx, 0, 0, sessionID, true)
-		if err != nil || len(logs) == 0 {
-			continue
-		}
+	for _, entity := range entities {
+		// Extract session info from entity fields
+		fields := entity.GetAllFields()
 
-		// Get analyses for this session
-		analyses, err := m.analysisService.GetAnalysesBySessionID(m.ctx, sessionID)
-		if err != nil {
-			analyses = []*domain.SessionAnalysis{}
-		}
-
-		// Estimate token count for the session
-		tokenCount, err := m.analysisService.EstimateTokenCount(m.ctx, sessionID)
-		if err != nil {
-			tokenCount = 0 // Default to 0 if estimation fails
-		}
-
-		// Build session info
 		sessionInfo := &SessionInfo{
-			SessionID:     sessionID,
-			ShortID:       sessionID[:8],
-			FirstEvent:    logs[0].Timestamp,
-			LastEvent:     logs[len(logs)-1].Timestamp,
-			EventCount:    len(logs),
-			AnalysisCount: len(analyses),
-			Analyses:      analyses,
-			HasAnalysis:   len(analyses) > 0,
-			AnalysisTypes: make([]string, 0, len(analyses)),
-			TokenCount:    tokenCount,
+			SessionID:     entity.GetID(),
+			ShortID:       getStringField(fields, "short_id", ""),
+			FirstEvent:    getTimeField(fields, "first_event"),
+			LastEvent:     getTimeField(fields, "last_event"),
+			EventCount:    getIntField(fields, "event_count", 0),
+			AnalysisCount: getIntField(fields, "analysis_count", 0),
+			AnalysisTypes: getStringSliceField(fields, "analysis_types"),
+			TokenCount:    getIntField(fields, "token_count", 0),
+			HasAnalysis:   getBoolField(fields, "has_analysis", false),
 		}
 
-		for _, a := range analyses {
-			sessionInfo.AnalysisTypes = append(sessionInfo.AnalysisTypes, a.PromptName)
-		}
-
-		if len(analyses) > 0 {
-			sessionInfo.LatestAnalysis = analyses[0]
+		// Get analyses from analysis service (still needed for detailed analysis data)
+		analyses, err := m.analysisService.GetAnalysesBySessionID(m.ctx, entity.GetID())
+		if err == nil {
+			sessionInfo.Analyses = analyses
+			if len(analyses) > 0 {
+				sessionInfo.LatestAnalysis = analyses[0]
+			}
 		}
 
 		sessions = append(sessions, sessionInfo)
 	}
 
 	return SessionsLoadedMsg{Sessions: sessions}
+}
+
+// Helper functions to safely extract typed values from field map
+
+func getStringField(fields map[string]interface{}, key, defaultValue string) string {
+	if val, ok := fields[key].(string); ok {
+		return val
+	}
+	return defaultValue
+}
+
+func getIntField(fields map[string]interface{}, key string, defaultValue int) int {
+	if val, ok := fields[key].(int); ok {
+		return val
+	}
+	return defaultValue
+}
+
+func getBoolField(fields map[string]interface{}, key string, defaultValue bool) bool {
+	if val, ok := fields[key].(bool); ok {
+		return val
+	}
+	return defaultValue
+}
+
+func getTimeField(fields map[string]interface{}, key string) time.Time {
+	if val, ok := fields[key].(time.Time); ok {
+		return val
+	}
+	return time.Time{}
+}
+
+func getStringSliceField(fields map[string]interface{}, key string) []string {
+	if val, ok := fields[key].([]string); ok {
+		return val
+	}
+	return []string{}
 }
 
 func (m *AppModel) analyzeSession(sessionID, promptName string) tea.Cmd {
@@ -433,11 +460,12 @@ func (m *AppModel) saveToMarkdown(sessionID string) tea.Cmd {
 // Run starts the TUI application
 func Run(
 	ctx context.Context,
+	pluginRegistry *app.PluginRegistry,
 	analysisService *app.AnalysisService,
 	logsService *app.LogsService,
 	config *domain.Config,
 ) error {
-	m := NewAppModel(ctx, analysisService, logsService, config)
+	m := NewAppModel(ctx, pluginRegistry, analysisService, logsService, config)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

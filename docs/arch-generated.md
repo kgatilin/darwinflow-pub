@@ -15,24 +15,6 @@
 
 Required directories as defined in `.goarchlint`:
 
-### internal/domain
-**Purpose**: Core business logic, entities, value objects, domain services
-
-**Allowed dependencies**: None (isolated layer)
-
-**Status**: ✓ Exists
-
----
-
-### internal/infra
-**Purpose**: Infrastructure implementations (DB, external APIs, messaging)
-
-**Allowed dependencies**: internal/domain
-
-**Status**: ✓ Exists
-
----
-
 ### cmd
 **Purpose**: Application entry points
 
@@ -51,6 +33,24 @@ Required directories as defined in `.goarchlint`:
 
 ---
 
+### internal/domain
+**Purpose**: Core business logic, entities, value objects, domain services
+
+**Allowed dependencies**: None (isolated layer)
+
+**Status**: ✓ Exists
+
+---
+
+### internal/infra
+**Purpose**: Infrastructure implementations (DB, external APIs, messaging)
+
+**Allowed dependencies**: internal/domain
+
+**Status**: ✓ Exists
+
+---
+
 ---
 
 ## Architectural Rules
@@ -60,22 +60,22 @@ From `.goarchlint`:
 ```yaml
 structure:
   required_directories:
+    cmd: "Application entry points"
     internal/app: "Application services, use cases, orchestration"
     internal/domain: "Core business logic, entities, value objects, domain services"
     internal/infra: "Infrastructure implementations (DB, external APIs, messaging)"
-    cmd: "Application entry points"
   allow_other_directories: true
 
 rules:
   directories_import:
+    internal/infra: [internal/domain]
     cmd: [internal/app, internal/infra]
     internal/app: [internal/domain]
     internal/domain: []
-    internal/infra: [internal/domain]
   detect_unused: true
 ```
 
-**Validation Status**: ✓ No violations found
+**Validation Status**: ✗ 5 violation(s) found (see stderr output)
 
 ---
 
@@ -299,6 +299,9 @@ Detailed method-level dependencies between files:
   - NewAnalysisService
   - NewClaudeCLIExecutorWithConfig
   - NewLogsService
+  - NewPluginRegistry
+- internal/app/plugins/claude_code
+  - NewClaudeCodePlugin
 - internal/app/tui
   - Run
 - internal/infra
@@ -463,6 +466,87 @@ Detailed method-level dependencies between files:
 
 ---
 
+### internal/app/plugin_registry.go
+**Package**: app
+
+**Local Dependencies**:
+- internal/domain
+  - EntityQuery
+  - EntityTypeInfo
+  - IExtensible
+  - Plugin
+
+**External Dependencies**:
+- context
+  - Context
+- fmt
+  - Errorf
+- sync
+  - RWMutex
+
+---
+
+### internal/app/plugin_registry_test.go
+**Package**: app_test
+
+**Local Dependencies**:
+- internal/app
+  - NewPluginRegistry
+  - NoOpLogger
+- internal/domain
+  - EntityQuery
+  - EntityTypeInfo
+  - ErrNotFound
+  - IExtensible
+  - PluginInfo
+
+**External Dependencies**:
+- context
+  - Background
+  - Context
+- testing
+  - T
+
+---
+
+### internal/app/plugins/claude_code/plugin.go
+**Package**: claude_code
+
+**Local Dependencies**:
+- internal/app
+  - AnalysisService
+  - Logger
+  - LogsService
+- internal/domain
+  - EntityQuery
+  - EntityTypeInfo
+  - IExtensible
+  - PluginInfo
+  - SessionAnalysis
+
+**External Dependencies**:
+- context
+  - Context
+- fmt
+  - Errorf
+
+---
+
+### internal/app/plugins/claude_code/session_entity.go
+**Package**: claude_code
+
+**Local Dependencies**:
+- internal/domain
+  - ActivityRecord
+  - EntityContext
+  - SessionAnalysis
+
+**External Dependencies**:
+- time
+  - Time
+
+---
+
 ### internal/app/setup.go
 **Package**: app
 
@@ -526,9 +610,10 @@ Detailed method-level dependencies between files:
 - internal/app
   - AnalysisService
   - LogsService
+  - PluginRegistry
 - internal/domain
   - Config
-  - SessionAnalysis
+  - EntityQuery
 
 **External Dependencies**:
 - context
@@ -536,6 +621,8 @@ Detailed method-level dependencies between files:
 - fmt
   - Errorf
   - Sprintf
+- time
+  - Time
 - github.com/charmbracelet/bubbles/spinner
   - Dot
   - Model
@@ -695,6 +782,17 @@ Detailed method-level dependencies between files:
 
 ---
 
+### internal/domain/capability.go
+**Package**: domain
+
+**Local Dependencies**: None
+
+**External Dependencies**:
+- time
+  - Time
+
+---
+
 ### internal/domain/config.go
 **Package**: domain
 
@@ -716,6 +814,19 @@ Detailed method-level dependencies between files:
   - Now
   - Time
 - github.com/google/uuid
+  - New
+
+---
+
+### internal/domain/plugin.go
+**Package**: domain
+
+**Local Dependencies**: None
+
+**External Dependencies**:
+- context
+  - Context
+- errors
   - New
 
 ---
@@ -955,384 +1066,6 @@ Detailed method-level dependencies between files:
 
 Exported interfaces and types available for consumption:
 
-### main
-
-#### Types
-
-**TestRepeatString** `TestRepeatString(*testing.T)`
-
-**TestParseLogsFlags** `TestParseLogsFlags(*testing.T)`
-
-**TestListLogs_EmptyDB** `TestListLogs_EmptyDB(*testing.T)`
-
-**TestExecuteRawQuery_Success** `TestExecuteRawQuery_Success(*testing.T)`
-
-**TestExecuteRawQuery_InvalidSQL** `TestExecuteRawQuery_InvalidSQL(*testing.T)`
-
----
-
-### app
-
-#### Types
-
-**NoOpLogger** `NoOpLogger`
-
-**Debug** `(*NoOpLogger) Debug(string, ...interface{})`
-
-**Info** `(*NoOpLogger) Info(string, ...interface{})`
-
-**Warn** `(*NoOpLogger) Warn(string, ...interface{})`
-
-**Error** `(*NoOpLogger) Error(string, ...interface{})`
-
-**LLMExecutor** `LLMExecutor`
-
-**Logger** `Logger`
-
-**AnalysisService** `AnalysisService`
-
-**NewAnalysisService** `NewAnalysisService(domain.EventRepository, domain.AnalysisRepository, *LogsService, LLMExecutor, Logger, *domain.Config) *AnalysisService`
-
-**AnalyzeSession** `(*AnalysisService) AnalyzeSession(context.Context, string) (*domain.SessionAnalysis, error)`
-
-**AnalyzeSessionWithPrompt** `(*AnalysisService) AnalyzeSessionWithPrompt(context.Context, string) (*domain.SessionAnalysis, error)`
-
-**AnalyzeMultipleSessions** `(*AnalysisService) AnalyzeMultipleSessions(context.Context, []string, string) (map[string]*domain.SessionAnalysis, []error)`
-
-**AnalysisResult** `AnalysisResult`
-- Properties:
-  - SessionID string
-  - PromptName string
-  - Analysis *domain.SessionAnalysis
-  - Error error
-
-**AnalyzeMultipleSessionsParallel** `(*AnalysisService) AnalyzeMultipleSessionsParallel(context.Context, []string, string) (map[string]*domain.SessionAnalysis, []error)`
-
-**AnalyzeSessionWithMultiplePrompts** `(*AnalysisService) AnalyzeSessionWithMultiplePrompts(context.Context, string, []string) (map[string]*domain.SessionAnalysis, []error)`
-
-**EstimateTokenCount** `(*AnalysisService) EstimateTokenCount(context.Context, string) (int, error)`
-
-**SelectSessionsWithinTokenLimit** `(*AnalysisService) SelectSessionsWithinTokenLimit(context.Context, []string, int) ([]string, int, error)`
-
-**GetLastSession** `(*AnalysisService) GetLastSession(context.Context) (string, error)`
-
-**GetUnanalyzedSessions** `(*AnalysisService) GetUnanalyzedSessions(context.Context) ([]string, error)`
-
-**GetAnalysis** `(*AnalysisService) GetAnalysis(context.Context, string) (*domain.SessionAnalysis, error)`
-
-**GetAnalysesBySessionID** `(*AnalysisService) GetAnalysesBySessionID(context.Context, string) ([]*domain.SessionAnalysis, error)`
-
-**GetAllSessionIDs** `(*AnalysisService) GetAllSessionIDs(context.Context, int) ([]string, error)`
-
-**FilenameTmplData** `FilenameTmplData`
-- Properties:
-  - SessionID string
-  - PromptName string
-  - Date string
-  - Time string
-
-**SaveToMarkdown** `(*AnalysisService) SaveToMarkdown(context.Context, *domain.SessionAnalysis, string) (string, error)`
-
-**ClaudeCLIExecutor** `ClaudeCLIExecutor`
-
-**NewClaudeCLIExecutor** `NewClaudeCLIExecutor(Logger) *ClaudeCLIExecutor`
-
-**NewClaudeCLIExecutorWithConfig** `NewClaudeCLIExecutorWithConfig(Logger, *domain.Config) *ClaudeCLIExecutor`
-
-**Execute** `(*ClaudeCLIExecutor) Execute(context.Context, string) (string, error)`
-
-**ExecuteWithOptions** `(*ClaudeCLIExecutor) ExecuteWithOptions(context.Context, string, map[string]interface{}) (string, error)`
-
-#### Types
-
-**DefaultAnalysisPrompt** `DefaultAnalysisPrompt`
-
-**GetAnalysisPrompt** `GetAnalysisPrompt(string) string`
-
-#### Types
-
-**MockLLMExecutor** `MockLLMExecutor`
-- Properties:
-  - Response string
-  - Error error
-
-**Execute** `(*MockLLMExecutor) Execute(context.Context, string) (string, error)`
-
-**MockAnalysisRepository** `MockAnalysisRepository`
-- Properties:
-  - SavedAnalyses []*domain.SessionAnalysis
-  - UnanalyzedIDs []string
-  - AnalysisByID map[string]*domain.SessionAnalysis
-  - SaveError error
-  - GetError error
-  - UnanalyzedError error
-
-**NewMockAnalysisRepository** `NewMockAnalysisRepository() *MockAnalysisRepository`
-
-**SaveAnalysis** `(*MockAnalysisRepository) SaveAnalysis(context.Context, *domain.SessionAnalysis) error`
-
-**GetAnalysisBySessionID** `(*MockAnalysisRepository) GetAnalysisBySessionID(context.Context, string) (*domain.SessionAnalysis, error)`
-
-**GetUnanalyzedSessionIDs** `(*MockAnalysisRepository) GetUnanalyzedSessionIDs(context.Context) ([]string, error)`
-
-**GetAllAnalyses** `(*MockAnalysisRepository) GetAllAnalyses(context.Context, int) ([]*domain.SessionAnalysis, error)`
-
-**GetAllSessionIDs** `(*MockAnalysisRepository) GetAllSessionIDs(context.Context, int) ([]string, error)`
-
-**TestGetAnalysisPrompt** `TestGetAnalysisPrompt(*testing.T)`
-
-**TestClaudeCLIExecutor_Integration** `TestClaudeCLIExecutor_Integration(*testing.T)`
-
-#### Types
-
-**EventMapper** `EventMapper`
-
-**MapEventType** `(*EventMapper) MapEventType(string) domain.EventType`
-
-**TranscriptParser** `TranscriptParser`
-
-**ContextDetector** `ContextDetector`
-
-**ContentNormalizer** `ContentNormalizer`
-
-**HookInputData** `HookInputData`
-- Properties:
-  - SessionID string
-  - TranscriptPath string
-  - CWD string
-  - PermissionMode string
-  - HookEventName string
-  - ToolName string
-  - ToolInput map[string]interface{}
-  - ToolOutput interface{}
-  - Error interface{}
-  - UserMessage string
-  - Prompt string
-
-**LoggerService** `LoggerService`
-
-**NewLoggerService** `NewLoggerService(domain.EventRepository, TranscriptParser, ContextDetector, ContentNormalizer) *LoggerService`
-
-**LogEvent** `(*LoggerService) LogEvent(context.Context, domain.EventType, interface{}) error`
-
-**LogFromHookInput** `(*LoggerService) LogFromHookInput(context.Context, HookInputData, domain.EventType, int) error`
-
-**Close** `(*LoggerService) Close() error`
-
-#### Types
-
-**LogRecord** `LogRecord`
-- Properties:
-  - ID string
-  - Timestamp time.Time
-  - EventType string
-  - SessionID string
-  - Payload json.RawMessage
-  - Content string
-
-**LogsService** `LogsService`
-
-**NewLogsService** `NewLogsService(domain.EventRepository, domain.RawQueryExecutor) *LogsService`
-
-**ListRecentLogs** `(*LogsService) ListRecentLogs(context.Context, int, int, string, bool) ([]*LogRecord, error)`
-
-**ExecuteRawQuery** `(*LogsService) ExecuteRawQuery(context.Context, string) (*domain.QueryResult, error)`
-
-**FormatLogRecord** `FormatLogRecord(int, *LogRecord) string`
-
-**FormatQueryValue** `FormatQueryValue(interface{}) string`
-
-**FormatLogsAsCSV** `FormatLogsAsCSV(io.Writer, []*LogRecord) error`
-
-**FormatLogsAsMarkdown** `FormatLogsAsMarkdown(io.Writer, []*LogRecord) error`
-
-**SessionGroup** `SessionGroup`
-- Properties:
-  - SessionID string
-  - Records []*LogRecord
-  - StartTime time.Time
-  - EndTime time.Time
-
-#### Types
-
-**DefaultDBPath** `DefaultDBPath`
-
-**HookConfigManager** `HookConfigManager`
-
-**SetupService** `SetupService`
-
-**NewSetupService** `NewSetupService(domain.EventRepository, HookConfigManager) *SetupService`
-
-**Initialize** `(*SetupService) Initialize(context.Context, string) error`
-
-**GetSettingsPath** `(*SetupService) GetSettingsPath() string`
-
----
-
-### tui
-
-#### Types
-
-**AnalysisViewerModel** `AnalysisViewerModel`
-
-**NewAnalysisViewerModel** `NewAnalysisViewerModel(*domain.SessionAnalysis) AnalysisViewerModel`
-
-**Init** `(AnalysisViewerModel) Init() tea.Cmd`
-
-**Update** `(AnalysisViewerModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
-
-**View** `(AnalysisViewerModel) View() string`
-
-**BackToDetailMsg** `BackToDetailMsg`
-
-#### Types
-
-**AppModel** `AppModel`
-
-**NewAppModel** `NewAppModel(context.Context, *app.AnalysisService, *app.LogsService, *domain.Config) *AppModel`
-
-**Init** `(*AppModel) Init() tea.Cmd`
-
-**Update** `(*AppModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
-
-**View** `(*AppModel) View() string`
-
-**Run** `Run(context.Context, *app.AnalysisService, *app.LogsService, *domain.Config) error`
-
-#### Types
-
-**LogViewerModel** `LogViewerModel`
-
-**NewLogViewerModel** `NewLogViewerModel(string, []*app.LogRecord) LogViewerModel`
-
-**Init** `(LogViewerModel) Init() tea.Cmd`
-
-**Update** `(LogViewerModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
-
-**View** `(LogViewerModel) View() string`
-
-#### Types
-
-**SessionDetailModel** `SessionDetailModel`
-
-**NewSessionDetailModel** `NewSessionDetailModel(*SessionInfo) SessionDetailModel`
-
-**Init** `(SessionDetailModel) Init() tea.Cmd`
-
-**Update** `(SessionDetailModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
-
-**View** `(SessionDetailModel) View() string`
-
-**BackToListMsg** `BackToListMsg`
-
-**AnalyzeSessionMsg** `AnalyzeSessionMsg`
-- Properties:
-  - SessionID string
-
-**ReanalyzeSessionMsg** `ReanalyzeSessionMsg`
-- Properties:
-  - SessionID string
-
-**SaveToMarkdownMsg** `SaveToMarkdownMsg`
-- Properties:
-  - SessionID string
-
-**ViewAnalysisMsg** `ViewAnalysisMsg`
-- Properties:
-  - SessionID string
-
-**ViewLogMsg** `ViewLogMsg`
-- Properties:
-  - SessionID string
-
-#### Types
-
-**TestFormatTokenCount** `TestFormatTokenCount(*testing.T)`
-
-#### Types
-
-**SessionItem** `SessionItem`
-
-**FilterValue** `(SessionItem) FilterValue() string`
-
-**Title** `(SessionItem) Title() string`
-
-**Description** `(SessionItem) Description() string`
-
-**SessionListModel** `SessionListModel`
-
-**NewSessionListModel** `NewSessionListModel([]*SessionInfo) SessionListModel`
-
-**Init** `(SessionListModel) Init() tea.Cmd`
-
-**Update** `(SessionListModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
-
-**View** `(SessionListModel) View() string`
-
-**GetSelectedSession** `(SessionListModel) GetSelectedSession() *SessionInfo`
-
-**UpdateSessions** `(*SessionListModel) UpdateSessions([]*SessionInfo)`
-
-**SelectedSessionMsg** `SelectedSessionMsg`
-- Properties:
-  - Session *SessionInfo
-
-**RefreshRequestMsg** `RefreshRequestMsg`
-
-#### Types
-
-**ViewState** `ViewState`
-
-**ViewSessionList** `ViewSessionList`
-
-**ViewSessionDetail** `ViewSessionDetail`
-
-**ViewAnalysisViewer** `ViewAnalysisViewer`
-
-**ViewLogViewer** `ViewLogViewer`
-
-**ViewAnalysisAction** `ViewAnalysisAction`
-
-**ViewSaveDialog** `ViewSaveDialog`
-
-**ViewProgress** `ViewProgress`
-
-**SessionInfo** `SessionInfo`
-- Properties:
-  - SessionID string
-  - ShortID string
-  - FirstEvent time.Time
-  - LastEvent time.Time
-  - EventCount int
-  - AnalysisCount int
-  - Analyses []*domain.SessionAnalysis
-  - HasAnalysis bool
-  - LatestAnalysis *domain.SessionAnalysis
-  - AnalysisTypes []string
-  - TokenCount int
-
-**SessionsLoadedMsg** `SessionsLoadedMsg`
-- Properties:
-  - Sessions []*SessionInfo
-  - Error error
-
-**AnalysisCompleteMsg** `AnalysisCompleteMsg`
-- Properties:
-  - SessionID string
-  - Analysis *domain.SessionAnalysis
-  - Error error
-
-**SaveCompleteMsg** `SaveCompleteMsg`
-- Properties:
-  - FilePath string
-  - Error error
-
-**ErrorMsg** `ErrorMsg`
-- Properties:
-  - Error error
-
----
-
 ### domain
 
 #### Types
@@ -1359,6 +1092,31 @@ Exported interfaces and types available for consumption:
   - Description string
   - Rationale string
   - Examples []string
+
+#### Types
+
+**IExtensible** `IExtensible`
+
+**IHasContext** `IHasContext`
+
+**EntityContext** `EntityContext`
+- Properties:
+  - RelatedEntities map[string][]string
+  - LinkedFiles []string
+  - RecentActivity []ActivityRecord
+  - Metadata map[string]interface{}
+
+**ActivityRecord** `ActivityRecord`
+- Properties:
+  - Timestamp time.Time
+  - Action string
+  - Details map[string]interface{}
+
+**ITrackable** `ITrackable`
+
+**ISchedulable** `ISchedulable`
+
+**IRelatable** `IRelatable`
 
 #### Types
 
@@ -1466,6 +1224,37 @@ Exported interfaces and types available for consumption:
   - Error string
   - StackTrace string
   - Context string
+
+#### Types
+
+**ErrNotFound** `ErrNotFound`
+
+**Plugin** `Plugin`
+
+**PluginInfo** `PluginInfo`
+- Properties:
+  - Name string
+  - Version string
+  - Description string
+  - IsCore bool
+
+**EntityTypeInfo** `EntityTypeInfo`
+- Properties:
+  - Type string
+  - DisplayName string
+  - DisplayNamePlural string
+  - Capabilities []string
+  - Icon string
+
+**EntityQuery** `EntityQuery`
+- Properties:
+  - EntityType string
+  - Capabilities []string
+  - Filters map[string]interface{}
+  - Limit int
+  - Offset int
+  - OrderBy string
+  - OrderDesc bool
 
 #### Types
 
@@ -1711,13 +1500,509 @@ Exported interfaces and types available for consumption:
 
 ---
 
+### main
+
+#### Types
+
+**TestRepeatString** `TestRepeatString(*testing.T)`
+
+**TestParseLogsFlags** `TestParseLogsFlags(*testing.T)`
+
+**TestListLogs_EmptyDB** `TestListLogs_EmptyDB(*testing.T)`
+
+**TestExecuteRawQuery_Success** `TestExecuteRawQuery_Success(*testing.T)`
+
+**TestExecuteRawQuery_InvalidSQL** `TestExecuteRawQuery_InvalidSQL(*testing.T)`
+
+---
+
+### app
+
+#### Types
+
+**NoOpLogger** `NoOpLogger`
+
+**Debug** `(*NoOpLogger) Debug(string, ...interface{})`
+
+**Info** `(*NoOpLogger) Info(string, ...interface{})`
+
+**Warn** `(*NoOpLogger) Warn(string, ...interface{})`
+
+**Error** `(*NoOpLogger) Error(string, ...interface{})`
+
+**LLMExecutor** `LLMExecutor`
+
+**Logger** `Logger`
+
+**AnalysisService** `AnalysisService`
+
+**NewAnalysisService** `NewAnalysisService(domain.EventRepository, domain.AnalysisRepository, *LogsService, LLMExecutor, Logger, *domain.Config) *AnalysisService`
+
+**AnalyzeSession** `(*AnalysisService) AnalyzeSession(context.Context, string) (*domain.SessionAnalysis, error)`
+
+**AnalyzeSessionWithPrompt** `(*AnalysisService) AnalyzeSessionWithPrompt(context.Context, string) (*domain.SessionAnalysis, error)`
+
+**AnalyzeMultipleSessions** `(*AnalysisService) AnalyzeMultipleSessions(context.Context, []string, string) (map[string]*domain.SessionAnalysis, []error)`
+
+**AnalysisResult** `AnalysisResult`
+- Properties:
+  - SessionID string
+  - PromptName string
+  - Analysis *domain.SessionAnalysis
+  - Error error
+
+**AnalyzeMultipleSessionsParallel** `(*AnalysisService) AnalyzeMultipleSessionsParallel(context.Context, []string, string) (map[string]*domain.SessionAnalysis, []error)`
+
+**AnalyzeSessionWithMultiplePrompts** `(*AnalysisService) AnalyzeSessionWithMultiplePrompts(context.Context, string, []string) (map[string]*domain.SessionAnalysis, []error)`
+
+**EstimateTokenCount** `(*AnalysisService) EstimateTokenCount(context.Context, string) (int, error)`
+
+**SelectSessionsWithinTokenLimit** `(*AnalysisService) SelectSessionsWithinTokenLimit(context.Context, []string, int) ([]string, int, error)`
+
+**GetLastSession** `(*AnalysisService) GetLastSession(context.Context) (string, error)`
+
+**GetUnanalyzedSessions** `(*AnalysisService) GetUnanalyzedSessions(context.Context) ([]string, error)`
+
+**GetAnalysis** `(*AnalysisService) GetAnalysis(context.Context, string) (*domain.SessionAnalysis, error)`
+
+**GetAnalysesBySessionID** `(*AnalysisService) GetAnalysesBySessionID(context.Context, string) ([]*domain.SessionAnalysis, error)`
+
+**GetAllSessionIDs** `(*AnalysisService) GetAllSessionIDs(context.Context, int) ([]string, error)`
+
+**FilenameTmplData** `FilenameTmplData`
+- Properties:
+  - SessionID string
+  - PromptName string
+  - Date string
+  - Time string
+
+**SaveToMarkdown** `(*AnalysisService) SaveToMarkdown(context.Context, *domain.SessionAnalysis, string) (string, error)`
+
+**ClaudeCLIExecutor** `ClaudeCLIExecutor`
+
+**NewClaudeCLIExecutor** `NewClaudeCLIExecutor(Logger) *ClaudeCLIExecutor`
+
+**NewClaudeCLIExecutorWithConfig** `NewClaudeCLIExecutorWithConfig(Logger, *domain.Config) *ClaudeCLIExecutor`
+
+**Execute** `(*ClaudeCLIExecutor) Execute(context.Context, string) (string, error)`
+
+**ExecuteWithOptions** `(*ClaudeCLIExecutor) ExecuteWithOptions(context.Context, string, map[string]interface{}) (string, error)`
+
+#### Types
+
+**DefaultAnalysisPrompt** `DefaultAnalysisPrompt`
+
+**GetAnalysisPrompt** `GetAnalysisPrompt(string) string`
+
+#### Types
+
+**MockLLMExecutor** `MockLLMExecutor`
+- Properties:
+  - Response string
+  - Error error
+
+**Execute** `(*MockLLMExecutor) Execute(context.Context, string) (string, error)`
+
+**MockAnalysisRepository** `MockAnalysisRepository`
+- Properties:
+  - SavedAnalyses []*domain.SessionAnalysis
+  - UnanalyzedIDs []string
+  - AnalysisByID map[string]*domain.SessionAnalysis
+  - SaveError error
+  - GetError error
+  - UnanalyzedError error
+
+**NewMockAnalysisRepository** `NewMockAnalysisRepository() *MockAnalysisRepository`
+
+**SaveAnalysis** `(*MockAnalysisRepository) SaveAnalysis(context.Context, *domain.SessionAnalysis) error`
+
+**GetAnalysisBySessionID** `(*MockAnalysisRepository) GetAnalysisBySessionID(context.Context, string) (*domain.SessionAnalysis, error)`
+
+**GetUnanalyzedSessionIDs** `(*MockAnalysisRepository) GetUnanalyzedSessionIDs(context.Context) ([]string, error)`
+
+**GetAllAnalyses** `(*MockAnalysisRepository) GetAllAnalyses(context.Context, int) ([]*domain.SessionAnalysis, error)`
+
+**GetAllSessionIDs** `(*MockAnalysisRepository) GetAllSessionIDs(context.Context, int) ([]string, error)`
+
+**TestGetAnalysisPrompt** `TestGetAnalysisPrompt(*testing.T)`
+
+**TestClaudeCLIExecutor_Integration** `TestClaudeCLIExecutor_Integration(*testing.T)`
+
+#### Types
+
+**EventMapper** `EventMapper`
+
+**MapEventType** `(*EventMapper) MapEventType(string) domain.EventType`
+
+**TranscriptParser** `TranscriptParser`
+
+**ContextDetector** `ContextDetector`
+
+**ContentNormalizer** `ContentNormalizer`
+
+**HookInputData** `HookInputData`
+- Properties:
+  - SessionID string
+  - TranscriptPath string
+  - CWD string
+  - PermissionMode string
+  - HookEventName string
+  - ToolName string
+  - ToolInput map[string]interface{}
+  - ToolOutput interface{}
+  - Error interface{}
+  - UserMessage string
+  - Prompt string
+
+**LoggerService** `LoggerService`
+
+**NewLoggerService** `NewLoggerService(domain.EventRepository, TranscriptParser, ContextDetector, ContentNormalizer) *LoggerService`
+
+**LogEvent** `(*LoggerService) LogEvent(context.Context, domain.EventType, interface{}) error`
+
+**LogFromHookInput** `(*LoggerService) LogFromHookInput(context.Context, HookInputData, domain.EventType, int) error`
+
+**Close** `(*LoggerService) Close() error`
+
+#### Types
+
+**LogRecord** `LogRecord`
+- Properties:
+  - ID string
+  - Timestamp time.Time
+  - EventType string
+  - SessionID string
+  - Payload json.RawMessage
+  - Content string
+
+**LogsService** `LogsService`
+
+**NewLogsService** `NewLogsService(domain.EventRepository, domain.RawQueryExecutor) *LogsService`
+
+**ListRecentLogs** `(*LogsService) ListRecentLogs(context.Context, int, int, string, bool) ([]*LogRecord, error)`
+
+**ExecuteRawQuery** `(*LogsService) ExecuteRawQuery(context.Context, string) (*domain.QueryResult, error)`
+
+**FormatLogRecord** `FormatLogRecord(int, *LogRecord) string`
+
+**FormatQueryValue** `FormatQueryValue(interface{}) string`
+
+**FormatLogsAsCSV** `FormatLogsAsCSV(io.Writer, []*LogRecord) error`
+
+**FormatLogsAsMarkdown** `FormatLogsAsMarkdown(io.Writer, []*LogRecord) error`
+
+**SessionGroup** `SessionGroup`
+- Properties:
+  - SessionID string
+  - Records []*LogRecord
+  - StartTime time.Time
+  - EndTime time.Time
+
+#### Types
+
+**PluginRegistry** `PluginRegistry`
+
+**NewPluginRegistry** `NewPluginRegistry(Logger) *PluginRegistry`
+
+**RegisterPlugin** `(*PluginRegistry) RegisterPlugin(domain.Plugin) error`
+
+**GetPlugin** `(*PluginRegistry) GetPlugin(string) (domain.Plugin, error)`
+
+**GetPluginForEntityType** `(*PluginRegistry) GetPluginForEntityType(string) (domain.Plugin, error)`
+
+**GetAllPlugins** `(*PluginRegistry) GetAllPlugins() []domain.Plugin`
+
+**GetAllEntityTypes** `(*PluginRegistry) GetAllEntityTypes() []domain.EntityTypeInfo`
+
+**Query** `(*PluginRegistry) Query(context.Context, domain.EntityQuery) ([]domain.IExtensible, error)`
+
+**GetEntity** `(*PluginRegistry) GetEntity(context.Context, string) (domain.IExtensible, error)`
+
+**UpdateEntity** `(*PluginRegistry) UpdateEntity(context.Context, string, map[string]interface{}) (domain.IExtensible, error)`
+
+#### Types
+
+**DefaultDBPath** `DefaultDBPath`
+
+**HookConfigManager** `HookConfigManager`
+
+**SetupService** `SetupService`
+
+**NewSetupService** `NewSetupService(domain.EventRepository, HookConfigManager) *SetupService`
+
+**Initialize** `(*SetupService) Initialize(context.Context, string) error`
+
+**GetSettingsPath** `(*SetupService) GetSettingsPath() string`
+
+---
+
+### app_test
+
+#### Types
+
+**MockPlugin** `MockPlugin`
+
+**NewMockPlugin** `NewMockPlugin(string, []domain.EntityTypeInfo) *MockPlugin`
+
+**GetInfo** `(*MockPlugin) GetInfo() domain.PluginInfo`
+
+**GetEntityTypes** `(*MockPlugin) GetEntityTypes() []domain.EntityTypeInfo`
+
+**Query** `(*MockPlugin) Query(context.Context, domain.EntityQuery) ([]domain.IExtensible, error)`
+
+**GetEntity** `(*MockPlugin) GetEntity(context.Context, string) (domain.IExtensible, error)`
+
+**UpdateEntity** `(*MockPlugin) UpdateEntity(context.Context, string, map[string]interface{}) (domain.IExtensible, error)`
+
+**MockEntity** `MockEntity`
+
+**NewMockEntity** `NewMockEntity(string, []string) *MockEntity`
+
+**GetID** `(*MockEntity) GetID() string`
+
+**GetType** `(*MockEntity) GetType() string`
+
+**GetCapabilities** `(*MockEntity) GetCapabilities() []string`
+
+**GetField** `(*MockEntity) GetField(string) interface{}`
+
+**GetAllFields** `(*MockEntity) GetAllFields() map[string]interface{}`
+
+**TestPluginRegistry_RegisterPlugin** `TestPluginRegistry_RegisterPlugin(*testing.T)`
+
+**TestPluginRegistry_RegisterPlugin_Duplicate** `TestPluginRegistry_RegisterPlugin_Duplicate(*testing.T)`
+
+**TestPluginRegistry_RegisterPlugin_EntityTypeConflict** `TestPluginRegistry_RegisterPlugin_EntityTypeConflict(*testing.T)`
+
+**TestPluginRegistry_GetPluginForEntityType** `TestPluginRegistry_GetPluginForEntityType(*testing.T)`
+
+**TestPluginRegistry_Query** `TestPluginRegistry_Query(*testing.T)`
+
+**TestPluginRegistry_GetAllEntityTypes** `TestPluginRegistry_GetAllEntityTypes(*testing.T)`
+
+---
+
+### claude_code
+
+#### Types
+
+**ClaudeCodePlugin** `ClaudeCodePlugin`
+
+**NewClaudeCodePlugin** `NewClaudeCodePlugin(*app.AnalysisService, *app.LogsService, app.Logger) *ClaudeCodePlugin`
+
+**GetInfo** `(*ClaudeCodePlugin) GetInfo() domain.PluginInfo`
+
+**GetEntityTypes** `(*ClaudeCodePlugin) GetEntityTypes() []domain.EntityTypeInfo`
+
+**Query** `(*ClaudeCodePlugin) Query(context.Context, domain.EntityQuery) ([]domain.IExtensible, error)`
+
+**GetEntity** `(*ClaudeCodePlugin) GetEntity(context.Context, string) (domain.IExtensible, error)`
+
+**UpdateEntity** `(*ClaudeCodePlugin) UpdateEntity(context.Context, string, map[string]interface{}) (domain.IExtensible, error)`
+
+#### Types
+
+**SessionEntity** `SessionEntity`
+
+**NewSessionEntity** `NewSessionEntity(string, time.Time, int, []*domain.SessionAnalysis, int) *SessionEntity`
+
+**GetID** `(*SessionEntity) GetID() string`
+
+**GetType** `(*SessionEntity) GetType() string`
+
+**GetCapabilities** `(*SessionEntity) GetCapabilities() []string`
+
+**GetField** `(*SessionEntity) GetField(string) interface{}`
+
+**GetAllFields** `(*SessionEntity) GetAllFields() map[string]interface{}`
+
+**GetContext** `(*SessionEntity) GetContext() *domain.EntityContext`
+
+**GetStatus** `(*SessionEntity) GetStatus() string`
+
+**GetProgress** `(*SessionEntity) GetProgress() float64`
+
+**IsBlocked** `(*SessionEntity) IsBlocked() bool`
+
+**GetBlockReason** `(*SessionEntity) GetBlockReason() string`
+
+**GetAnalyses** `(*SessionEntity) GetAnalyses() []*domain.SessionAnalysis`
+
+**GetLatestAnalysis** `(*SessionEntity) GetLatestAnalysis() *domain.SessionAnalysis`
+
+---
+
+### tui
+
+#### Types
+
+**AnalysisViewerModel** `AnalysisViewerModel`
+
+**NewAnalysisViewerModel** `NewAnalysisViewerModel(*domain.SessionAnalysis) AnalysisViewerModel`
+
+**Init** `(AnalysisViewerModel) Init() tea.Cmd`
+
+**Update** `(AnalysisViewerModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(AnalysisViewerModel) View() string`
+
+**BackToDetailMsg** `BackToDetailMsg`
+
+#### Types
+
+**AppModel** `AppModel`
+
+**NewAppModel** `NewAppModel(context.Context, *app.PluginRegistry, *app.AnalysisService, *app.LogsService, *domain.Config) *AppModel`
+
+**Init** `(*AppModel) Init() tea.Cmd`
+
+**Update** `(*AppModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(*AppModel) View() string`
+
+**Run** `Run(context.Context, *app.PluginRegistry, *app.AnalysisService, *app.LogsService, *domain.Config) error`
+
+#### Types
+
+**LogViewerModel** `LogViewerModel`
+
+**NewLogViewerModel** `NewLogViewerModel(string, []*app.LogRecord) LogViewerModel`
+
+**Init** `(LogViewerModel) Init() tea.Cmd`
+
+**Update** `(LogViewerModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(LogViewerModel) View() string`
+
+#### Types
+
+**SessionDetailModel** `SessionDetailModel`
+
+**NewSessionDetailModel** `NewSessionDetailModel(*SessionInfo) SessionDetailModel`
+
+**Init** `(SessionDetailModel) Init() tea.Cmd`
+
+**Update** `(SessionDetailModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(SessionDetailModel) View() string`
+
+**BackToListMsg** `BackToListMsg`
+
+**AnalyzeSessionMsg** `AnalyzeSessionMsg`
+- Properties:
+  - SessionID string
+
+**ReanalyzeSessionMsg** `ReanalyzeSessionMsg`
+- Properties:
+  - SessionID string
+
+**SaveToMarkdownMsg** `SaveToMarkdownMsg`
+- Properties:
+  - SessionID string
+
+**ViewAnalysisMsg** `ViewAnalysisMsg`
+- Properties:
+  - SessionID string
+
+**ViewLogMsg** `ViewLogMsg`
+- Properties:
+  - SessionID string
+
+#### Types
+
+**TestFormatTokenCount** `TestFormatTokenCount(*testing.T)`
+
+#### Types
+
+**SessionItem** `SessionItem`
+
+**FilterValue** `(SessionItem) FilterValue() string`
+
+**Title** `(SessionItem) Title() string`
+
+**Description** `(SessionItem) Description() string`
+
+**SessionListModel** `SessionListModel`
+
+**NewSessionListModel** `NewSessionListModel([]*SessionInfo) SessionListModel`
+
+**Init** `(SessionListModel) Init() tea.Cmd`
+
+**Update** `(SessionListModel) Update(tea.Msg) (tea.Model, tea.Cmd)`
+
+**View** `(SessionListModel) View() string`
+
+**GetSelectedSession** `(SessionListModel) GetSelectedSession() *SessionInfo`
+
+**UpdateSessions** `(*SessionListModel) UpdateSessions([]*SessionInfo)`
+
+**SelectedSessionMsg** `SelectedSessionMsg`
+- Properties:
+  - Session *SessionInfo
+
+**RefreshRequestMsg** `RefreshRequestMsg`
+
+#### Types
+
+**ViewState** `ViewState`
+
+**ViewSessionList** `ViewSessionList`
+
+**ViewSessionDetail** `ViewSessionDetail`
+
+**ViewAnalysisViewer** `ViewAnalysisViewer`
+
+**ViewLogViewer** `ViewLogViewer`
+
+**ViewAnalysisAction** `ViewAnalysisAction`
+
+**ViewSaveDialog** `ViewSaveDialog`
+
+**ViewProgress** `ViewProgress`
+
+**SessionInfo** `SessionInfo`
+- Properties:
+  - SessionID string
+  - ShortID string
+  - FirstEvent time.Time
+  - LastEvent time.Time
+  - EventCount int
+  - AnalysisCount int
+  - Analyses []*domain.SessionAnalysis
+  - HasAnalysis bool
+  - LatestAnalysis *domain.SessionAnalysis
+  - AnalysisTypes []string
+  - TokenCount int
+
+**SessionsLoadedMsg** `SessionsLoadedMsg`
+- Properties:
+  - Sessions []*SessionInfo
+  - Error error
+
+**AnalysisCompleteMsg** `AnalysisCompleteMsg`
+- Properties:
+  - SessionID string
+  - Analysis *domain.SessionAnalysis
+  - Error error
+
+**SaveCompleteMsg** `SaveCompleteMsg`
+- Properties:
+  - FilePath string
+  - Error error
+
+**ErrorMsg** `ErrorMsg`
+- Properties:
+  - Error error
+
+---
+
 ## Statistics
 
-- **Total Files**: 35
-- **Total Packages**: 5
+- **Total Files**: 41
+- **Total Packages**: 7
 - **Required Directories**: 4/4 present
-- **Violations**: 0
-- **External Dependencies**: 27
+- **Violations**: 5
+- **External Dependencies**: 28
 
 ---
 

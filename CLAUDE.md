@@ -36,6 +36,51 @@
 - **Log Viewer**: Query interface with SQL support for exploring captured events
 - **AI Analysis**: Uses Claude CLI to analyze sessions and suggest workflow optimizations
 
+### Plugin System Architecture
+
+**DarwinFlow uses a capability-driven plugin system** to enable extensibility across different workflow types.
+
+**Core Concepts**:
+- **Capabilities**: Interfaces that define what an entity can do (IExtensible, IHasContext, ITrackable, ISchedulable, IRelatable)
+- **Plugins**: Providers of entities (built-in core plugins or external plugins)
+- **Plugin Registry**: Central manager that routes queries to appropriate plugins
+- **Entity Types**: Concrete types provided by plugins (e.g., "session", "task", "roadmap")
+
+**Capability Interfaces** (defined in `internal/domain/capability.go`):
+- `IExtensible` - Base capability: ID, type, fields (all entities must implement)
+- `IHasContext` - Entities with related data (files, activity, metadata)
+- `ITrackable` - Status and progress tracking
+- `ISchedulable` - Time-based scheduling (start date, due date)
+- `IRelatable` - Explicit relationships between entities
+
+**Plugin Architecture**:
+- **Plugin Interface** (`internal/domain/plugin.go`): Contract all plugins must implement
+- **PluginRegistry** (`internal/app/plugin_registry.go`): Manages plugin lifecycle and routing
+- **Claude Code Plugin** (`internal/app/plugins/claude_code/`): Core plugin providing "session" entities
+  - Implements IExtensible + IHasContext + ITrackable
+  - Wraps existing Claude Code session data
+  - Read-only (sessions cannot be modified)
+
+**How It Works**:
+1. TUI queries PluginRegistry for entities
+2. Registry routes to appropriate plugin based on entity type
+3. Plugin returns entities implementing capability interfaces
+4. TUI renders based on capabilities (not entity types)
+5. Same UI components work for all entity types with same capabilities
+
+**Benefits**:
+- Add new entity types without changing main tool
+- UI automatically supports new entities if they implement known capabilities
+- Cross-project workflow optimization (analyze patterns across all entity types)
+- Extensible for different workflow domains (coding, project management, research, etc.)
+
+**Current State**:
+- ✅ Core plugin infrastructure implemented
+- ✅ Claude-code plugin providing sessions
+- ✅ TUI using plugin system
+- 🔄 External plugin discovery (planned)
+- 🔄 Subprocess communication protocol (planned)
+
 ### Architecture Documentation
 
 For detailed architecture and API information, see:
@@ -116,8 +161,15 @@ When working on this project:
 5. Write tests for new functionality (aim for 70-80% coverage)
 6. **Update documentation** (README.md and CLAUDE.md) when adding features
 7. Run tests and linter before committing
-8. Regenerate architecture docs if needed
+8. Regenerate architecture docs if needed (`go-arch-lint docs`)
 9. **Commit after each iteration** - After completing each logical task/iteration, commit all changes with a concise, informative commit message (e.g., "add session refresh feature" rather than long explanations)
+
+**Working with the Plugin System**:
+- New entity types should implement capability interfaces (IExtensible, ITrackable, etc.)
+- Core plugins live in `internal/app/plugins/` (built-in, ship with tool)
+- External plugins will use `.workflow/plugin.json` discovery (future)
+- Plugin tests should verify capability interface compliance
+- TUI should render based on capabilities, not entity types
 
 ---
 
@@ -339,8 +391,7 @@ Update the development documentation when:
 Regenerate when architecture or API changes:
 ```bash
 # After modifying package dependencies or exports
-go-arch-lint -detailed -format=markdown . > docs/arch-generated.md 2>&1
-go-arch-lint -format=api . > docs/public-api-generated.md 2>&1
+go-arch-lint docs
 ```
 
 ## Documentation Checklist

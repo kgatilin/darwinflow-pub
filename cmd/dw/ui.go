@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
+	"github.com/kgatilin/darwinflow-pub/internal/app/plugins/claude_code"
 	"github.com/kgatilin/darwinflow-pub/internal/app/tui"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
@@ -54,9 +55,19 @@ func uiCommand(args []string) {
 	llmExecutor := app.NewClaudeCLIExecutorWithConfig(logger, config)
 	analysisService := app.NewAnalysisService(repo, repo, logsService, llmExecutor, logger, config)
 
+	// Create plugin registry
+	registry := app.NewPluginRegistry(logger)
+
+	// Register claude-code core plugin
+	claudeCodePlugin := claude_code.NewClaudeCodePlugin(analysisService, logsService, logger)
+	if err := registry.RegisterPlugin(claudeCodePlugin); err != nil {
+		fmt.Fprintf(os.Stderr, "Error registering claude-code plugin: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Run TUI
 	ctx := context.Background()
-	if err := tui.Run(ctx, analysisService, logsService, config); err != nil {
+	if err := tui.Run(ctx, registry, analysisService, logsService, config); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running UI: %v\n", err)
 		os.Exit(1)
 	}
