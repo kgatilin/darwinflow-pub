@@ -7,8 +7,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"text/template"
+	"time"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
@@ -371,15 +374,117 @@ func (s *AnalysisService) GetUnanalyzedSessions(ctx context.Context) ([]string, 
 	return s.analysisRepo.GetUnanalyzedSessionIDs(ctx)
 }
 
-// GetAnalysis retrieves the analysis for a session
+// GetAnalysis retrieves the most recent analysis for a session
 func (s *AnalysisService) GetAnalysis(ctx context.Context, sessionID string) (*domain.SessionAnalysis, error) {
 	return s.analysisRepo.GetAnalysisBySessionID(ctx, sessionID)
+}
+
+// GetAnalysesBySessionID retrieves all analyses for a session
+func (s *AnalysisService) GetAnalysesBySessionID(ctx context.Context, sessionID string) ([]*domain.SessionAnalysis, error) {
+	return s.analysisRepo.GetAnalysesBySessionID(ctx, sessionID)
 }
 
 // GetAllSessionIDs retrieves all session IDs, ordered by most recent first
 // If limit > 0, returns only the latest N sessions
 func (s *AnalysisService) GetAllSessionIDs(ctx context.Context, limit int) ([]string, error) {
 	return s.analysisRepo.GetAllSessionIDs(ctx, limit)
+}
+
+// FilenameTmplData contains template data for filename generation
+type FilenameTmplData struct {
+	SessionID  string
+	PromptName string
+	Date       string
+	Time       string
+}
+
+// SaveToMarkdown saves an analysis to a markdown file
+// outputDir: directory to save the file (empty uses config default)
+// filename: filename override (empty uses config template)
+func (s *AnalysisService) SaveToMarkdown(ctx context.Context, analysis *domain.SessionAnalysis, outputDir, filename string) (string, error) {
+	if analysis == nil {
+		return "", fmt.Errorf("analysis is nil")
+	}
+
+	// Use config default if outputDir not specified
+	if outputDir == "" {
+		outputDir = s.config.UI.DefaultOutputDir
+		if outputDir == "" {
+			outputDir = "./analysis-outputs"
+		}
+	}
+
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Generate filename if not specified
+	if filename == "" {
+		tmplStr := s.config.UI.FilenameTemplate
+		if tmplStr == "" {
+			tmplStr = "{{.SessionID}}-{{.PromptName}}-{{.Date}}.md"
+		}
+
+		// Parse and execute template
+		tmpl, err := template.New("filename").Parse(tmplStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid filename template: %w", err)
+		}
+
+		now := time.Now()
+		data := FilenameTmplData{
+			SessionID:  analysis.SessionID[:8], // Use first 8 chars of session ID
+			PromptName: analysis.PromptName,
+			Date:       now.Format("2006-01-02"),
+			Time:       now.Format("15-04-05"),
+		}
+
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return "", fmt.Errorf("failed to generate filename: %w", err)
+		}
+
+		filename = buf.String()
+	}
+
+	// Ensure .md extension
+	if filepath.Ext(filename) != ".md" {
+		filename = filename + ".md"
+	}
+
+	// Build full path
+	fullPath := filepath.Join(outputDir, filename)
+
+	// Create markdown content
+	content := fmt.Sprintf(`# Session Analysis: %s
+
+**Session ID**: %s
+**Analysis Type**: %s
+**Prompt**: %s
+**Model**: %s
+**Analyzed At**: %s
+
+---
+
+%s
+`,
+		analysis.SessionID[:8],
+		analysis.SessionID,
+		analysis.AnalysisType,
+		analysis.PromptName,
+		analysis.ModelUsed,
+		analysis.AnalyzedAt.Format(time.RFC3339),
+		analysis.AnalysisResult,
+	)
+
+	// Write file
+	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+
+	s.logger.Info("Saved analysis to %s", fullPath)
+	return fullPath, nil
 }
 
 // ClaudeCLIExecutor implements LLMExecutor using the claude CLI tool

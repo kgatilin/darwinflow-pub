@@ -68,6 +68,9 @@ type AnalysisRepository interface {
 	// GetAnalysisBySessionID retrieves the most recent analysis for a session
 	GetAnalysisBySessionID(ctx context.Context, sessionID string) (*SessionAnalysis, error)
 
+	// GetAnalysesBySessionID retrieves all analyses for a session, ordered by analyzed_at DESC
+	GetAnalysesBySessionID(ctx context.Context, sessionID string) ([]*SessionAnalysis, error)
+
 	// GetUnanalyzedSessionIDs retrieves session IDs that have not been analyzed
 	GetUnanalyzedSessionIDs(ctx context.Context) ([]string, error)
 

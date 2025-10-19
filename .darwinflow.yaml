@@ -15,6 +15,12 @@ analysis:
     allowed_tools: []
     system_prompt_mode: "replace"
 
+ui:
+  default_output_dir: "./analysis-outputs"
+  # Available placeholders: {{.SessionID}}, {{.PromptName}}, {{.Date}}, {{.Time}}
+  filename_template: "{{.SessionID}}-{{.PromptName}}-{{.Date}}.md"
+  auto_refresh_interval: ""  # e.g., "30s" to auto-refresh, empty to disable
+
 prompts:
   session_summary: |+
     Analyze this Claude Code session and provide a concise summary.

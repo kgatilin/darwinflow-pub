@@ -11,6 +11,11 @@
   - `dw refresh` - Update database schema and hooks to latest version (run after upgrading)
   - `dw claude log` - Log events (called by hooks)
   - `dw logs` - View and query logged events
+  - `dw ui` - Interactive terminal UI for browsing and analyzing sessions
+    - Session list view with analysis status indicators
+    - Session detail view with analysis previews
+    - Quick actions: analyze, re-analyze, save to markdown, view full analysis
+    - Keyboard-driven navigation (arrow keys, Enter, shortcuts)
   - `dw analyze` - AI-powered session analysis with configurable prompts
     - `--last` - Analyze most recent session
     - `--session-id <id>` - Analyze specific session
@@ -87,6 +92,17 @@ For detailed architecture and API information, see:
 - **Refresh Capability**: Re-analyze sessions with updated prompts using `--refresh --limit N`
 - **Multiple Analyses Per Session**: Each session can have multiple analyses (one per prompt type)
 - Persistent storage in `session_analyses` table with `analysis_type` and `prompt_name` fields
+
+**Interactive UI Features**:
+- **Terminal UI**: Built with Bubble Tea framework for responsive, keyboard-driven interaction
+- **Session Management**: Browse all sessions with analysis status indicators (✓ analyzed, ✗ not analyzed, ⟳N multiple analyses)
+- **Session Details**: View metadata, event counts, and analysis previews in dedicated detail view
+- **Analysis Actions**: Quick actions to analyze, re-analyze, view full analysis, or save to markdown
+- **Markdown Export**: Save analyses to configurable directory with customizable filename templates
+- **UI Configuration** (`.darwinflow.yaml`):
+  - `ui.default_output_dir`: Directory for saved markdown files (default: "./analysis-outputs")
+  - `ui.filename_template`: Template for filenames with placeholders {{.SessionID}}, {{.PromptName}}, {{.Date}}, {{.Time}}
+  - `ui.auto_refresh_interval`: Auto-refresh interval (e.g., "30s", empty = disabled)
 
 ### Development Workflow
 

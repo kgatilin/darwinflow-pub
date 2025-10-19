@@ -435,6 +435,59 @@ func (r *SQLiteEventRepository) GetAnalysisBySessionID(ctx context.Context, sess
 	return &analysis, nil
 }
 
+// GetAnalysesBySessionID retrieves all analyses for a session, ordered by analyzed_at DESC
+func (r *SQLiteEventRepository) GetAnalysesBySessionID(ctx context.Context, sessionID string) ([]*domain.SessionAnalysis, error) {
+	query := `
+		SELECT id, session_id, analyzed_at, analysis_result, model_used, prompt_used, patterns_summary,
+		       COALESCE(analysis_type, 'tool_analysis') as analysis_type,
+		       COALESCE(prompt_name, 'analysis') as prompt_name
+		FROM session_analyses
+		WHERE session_id = ?
+		ORDER BY analyzed_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query analyses: %w", err)
+	}
+	defer rows.Close()
+
+	var analyses []*domain.SessionAnalysis
+	for rows.Next() {
+		var analysis domain.SessionAnalysis
+		var analyzedAtMs int64
+		var modelUsed, promptUsed, patternsSummary sql.NullString
+
+		err := rows.Scan(
+			&analysis.ID,
+			&analysis.SessionID,
+			&analyzedAtMs,
+			&analysis.AnalysisResult,
+			&modelUsed,
+			&promptUsed,
+			&patternsSummary,
+			&analysis.AnalysisType,
+			&analysis.PromptName,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan analysis: %w", err)
+		}
+
+		analysis.AnalyzedAt = millisecondsToTime(analyzedAtMs)
+		analysis.ModelUsed = modelUsed.String
+		analysis.PromptUsed = promptUsed.String
+		analysis.PatternsSummary = patternsSummary.String
+
+		analyses = append(analyses, &analysis)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return analyses, nil
+}
+
 // GetUnanalyzedSessionIDs retrieves session IDs that have not been analyzed
 func (r *SQLiteEventRepository) GetUnanalyzedSessionIDs(ctx context.Context) ([]string, error) {
 	query := `

@@ -20,6 +20,8 @@ func main() {
 		handleLogs(os.Args[2:])
 	case "analyze":
 		analyzeCmd(os.Args[2:])
+	case "ui":
+		uiCommand(os.Args[2:])
 	case "config":
 		configCmd(os.Args[2:])
 	case "refresh":
@@ -41,6 +43,7 @@ func printUsage() {
 	fmt.Println("  dw claude log        Log a Claude Code event")
 	fmt.Println("  dw logs              View logged events from the database")
 	fmt.Println("  dw analyze           Analyze sessions to identify tool gaps and inefficiencies")
+	fmt.Println("  dw ui                Interactive UI for browsing and analyzing sessions")
 	fmt.Println("  dw config            Manage DarwinFlow configuration")
 	fmt.Println("  dw refresh           Update database schema and hooks to latest version")
 	fmt.Println("  dw help              Show this help message")

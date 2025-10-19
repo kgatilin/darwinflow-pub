@@ -5,6 +5,9 @@ type Config struct {
 	// Analysis contains analysis execution settings
 	Analysis AnalysisConfig `yaml:"analysis" json:"analysis"`
 
+	// UI contains interactive UI settings
+	UI UIConfig `yaml:"ui" json:"ui"`
+
 	// Prompts contains named prompts for different use cases
 	Prompts map[string]string `yaml:"prompts" json:"prompts"`
 }
@@ -43,6 +46,20 @@ type ClaudeOptions struct {
 	SystemPromptMode string `yaml:"system_prompt_mode" json:"system_prompt_mode"`
 }
 
+// UIConfig contains settings for the interactive UI
+type UIConfig struct {
+	// DefaultOutputDir is the default directory for saving analysis markdown files
+	DefaultOutputDir string `yaml:"default_output_dir" json:"default_output_dir"`
+
+	// FilenameTemplate is the template for generating markdown filenames
+	// Available placeholders: {{.SessionID}}, {{.PromptName}}, {{.Date}}, {{.Time}}
+	FilenameTemplate string `yaml:"filename_template" json:"filename_template"`
+
+	// AutoRefreshInterval is the interval for auto-refreshing the session list
+	// Format: "30s", "1m", etc. Empty or "0" disables auto-refresh
+	AutoRefreshInterval string `yaml:"auto_refresh_interval" json:"auto_refresh_interval"`
+}
+
 // AllowedModels is the whitelist of valid model aliases and full names
 var AllowedModels = map[string]bool{
 	// Aliases (recommended)
@@ -79,6 +96,11 @@ func DefaultConfig() *Config {
 				AllowedTools:     []string{}, // No tools for pure analysis
 				SystemPromptMode: "replace",  // Use --system-prompt
 			},
+		},
+		UI: UIConfig{
+			DefaultOutputDir:    "./analysis-outputs",
+			FilenameTemplate:    "{{.SessionID}}-{{.PromptName}}-{{.Date}}.md",
+			AutoRefreshInterval: "", // Disabled by default
 		},
 		Prompts: map[string]string{
 			"session_summary": DefaultSessionSummaryPrompt,

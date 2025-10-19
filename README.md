@@ -117,6 +117,11 @@ dw logs --help                             # Show database schema and help
 # Execute arbitrary SQL queries
 dw logs --query "SELECT event_type, COUNT(*) FROM events GROUP BY event_type"
 
+# Interactive UI for session management
+dw ui                                      # Launch interactive terminal UI
+dw ui --debug                              # Launch with debug logging
+dw ui --db /path/to/db                     # Use custom database path
+
 # Analyze sessions using AI
 dw analyze --last                          # Analyze the most recent session
 dw analyze --session-id <id>               # Analyze a specific session
@@ -188,6 +193,48 @@ The output includes specific tool suggestions categorized as:
 - Claude Code Features (new built-in capabilities)
 - Workflow Automations (multi-step operations as single tools)
 
+#### Interactive UI
+
+The `dw ui` command launches an interactive terminal UI for browsing and managing sessions:
+
+**Features:**
+- **Session List View**: Browse all sessions with analysis status indicators
+  - ✓ = Analyzed
+  - ✗ = Not analyzed
+  - ⟳N = Multiple analyses (N = count)
+- **Session Details**: View session metadata, event counts, and analysis previews
+- **Quick Actions**: Analyze, re-analyze, view, or save analyses to markdown
+- **Keyboard Navigation**: Fast, keyboard-driven interface
+
+**Keyboard Controls:**
+
+*Session List:*
+- `↑/↓` - Navigate sessions
+- `Enter` - View session details
+- `r` - Refresh session list
+- `q` - Quit
+
+*Session Detail:*
+- `a` - Analyze session (run new analysis)
+- `r` - Re-analyze session (refresh existing analysis)
+- `s` - Save analysis to markdown file
+- `v` - View full analysis
+- `Esc/q` - Back to list
+
+**Example Workflow:**
+```bash
+# Launch interactive UI
+dw ui
+
+# Navigate to a session and press Enter
+# View analysis status and previews
+# Press 'a' to analyze if not analyzed
+# Press 's' to save analysis to markdown
+# Press 'q' to return to list
+```
+
+Markdown files are saved to the directory configured in `.darwinflow.yaml` (default: `./analysis-outputs/`) with customizable filename templates.
+
 ### Configuration
 
 DarwinFlow uses `.darwinflow.yaml` for configuration. Create this file in your project root or home directory:
@@ -209,6 +256,13 @@ analysis:
   claude_options:
     allowed_tools: []                      # Tools available during analysis (empty = none)
     system_prompt_mode: "replace"          # "replace" or "append"
+
+ui:
+  default_output_dir: "./analysis-outputs" # Directory for saved markdown files
+  # Filename template for saved analyses
+  # Available: {{.SessionID}}, {{.PromptName}}, {{.Date}}, {{.Time}}
+  filename_template: "{{.SessionID}}-{{.PromptName}}-{{.Date}}.md"
+  auto_refresh_interval: ""                # e.g., "30s" for auto-refresh (empty = disabled)
 
 prompts:
   session_summary: |
