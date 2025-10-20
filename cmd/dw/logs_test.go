@@ -2,7 +2,10 @@ package main_test
 
 import (
 	"context"
+	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	main "github.com/kgatilin/darwinflow-pub/cmd/dw"
@@ -67,6 +70,11 @@ func TestParseLogsFlags(t *testing.T) {
 			args: []string{"--session-limit", "5", "--format", "markdown"},
 			want: main.LogsOptions{Limit: 20, SessionLimit: 5, Query: "", SessionID: "", Ordered: false, Format: "markdown", Help: false},
 		},
+		{
+			name: "csv format",
+			args: []string{"--format", "csv"},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 0, Query: "", SessionID: "", Ordered: false, Format: "csv", Help: false},
+		},
 	}
 
 	for _, tt := range tests {
@@ -118,12 +126,28 @@ func TestListLogs_EmptyDB(t *testing.T) {
 	}
 	defer store.Close()
 
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
 	// Test ListLogs with empty database - should not error
 	service := app.NewLogsService(store, store)
 	opts := &main.LogsOptions{Limit: 10, SessionLimit: 0}
 	err = main.ListLogs(ctx, service, opts)
+
+	// Restore stdout and capture output
+	w.Close()
+	os.Stdout = oldStdout
+	output, _ := io.ReadAll(r)
+
 	if err != nil {
 		t.Errorf("ListLogs with empty DB failed: %v", err)
+	}
+
+	// Should display "No logs found" message
+	if !strings.Contains(string(output), "No logs found") {
+		t.Errorf("Expected 'No logs found' message, got: %s", output)
 	}
 }
 
@@ -142,11 +166,27 @@ func TestExecuteRawQuery_Success(t *testing.T) {
 	}
 	defer store.Close()
 
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
 	// Test ExecuteRawQuery with valid query
 	service := app.NewLogsService(store, store)
 	err = main.ExecuteRawQuery(ctx, service, "SELECT COUNT(*) FROM events")
+
+	w.Close()
+	os.Stdout = oldStdout
+	output, _ := io.ReadAll(r)
+
 	if err != nil {
 		t.Errorf("ExecuteRawQuery failed: %v", err)
+	}
+
+	// Should have column headers and row count
+	outputStr := string(output)
+	if !strings.Contains(outputStr, "rows") {
+		t.Errorf("Expected row count in output, got: %s", outputStr)
 	}
 }
 
@@ -170,5 +210,29 @@ func TestExecuteRawQuery_InvalidSQL(t *testing.T) {
 	err = main.ExecuteRawQuery(ctx, service, "INVALID SQL QUERY")
 	if err == nil {
 		t.Error("Expected error for invalid SQL, got nil")
+	}
+}
+
+func TestParseLogsFlags_InvalidFlag(t *testing.T) {
+	// Test with an invalid flag
+	_, err := main.ParseLogsFlags([]string{"--invalid-flag"})
+	if err == nil {
+		t.Error("Expected error for invalid flag, got nil")
+	}
+}
+
+func TestParseLogsFlags_AllFormats(t *testing.T) {
+	formats := []string{"text", "csv", "markdown"}
+
+	for _, format := range formats {
+		t.Run(format, func(t *testing.T) {
+			opts, err := main.ParseLogsFlags([]string{"--format", format})
+			if err != nil {
+				t.Errorf("ParseLogsFlags failed for format %s: %v", format, err)
+			}
+			if opts.Format != format {
+				t.Errorf("Expected format %s, got %s", format, opts.Format)
+			}
+		})
 	}
 }
