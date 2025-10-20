@@ -7,7 +7,6 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
-	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
 // AppServices contains all app-layer services needed by commands.
@@ -62,15 +61,8 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 	analysisService := app.NewAnalysisService(repo, repo, logsService, llmExecutor, logger, config)
 
 	// 6. Create setup service (for init command)
-	hookConfigManager, err := claude_code.NewHookConfigManager()
-	if err != nil {
-		logger.Warn("Failed to create hook config manager: %v", err)
-		// Non-fatal - setupService will be nil
-	}
-	var setupService *app.SetupService
-	if hookConfigManager != nil {
-		setupService = app.NewSetupService(repo, hookConfigManager)
-	}
+	// SetupService is now plugin-agnostic - it queries plugins for IHookProvider capability
+	setupService := app.NewSetupService(repo, logger)
 
 	// 7. Get working directory
 	workingDir, err := os.Getwd()
@@ -82,31 +74,29 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 	pluginRegistry := app.NewPluginRegistry(logger)
 
 	// 9. Create command handler for plugin commands
-	var handler *app.ClaudeCommandHandler
-	if setupService != nil {
-		transcriptParser := infra.NewTranscriptParser()
-		contextDetector := infra.NewContextDetector()
-		hookInputParser := infra.NewHookInputParserAdapter()
-		eventMapper := &app.EventMapper{}
+	transcriptParser := infra.NewTranscriptParser()
+	contextDetector := infra.NewContextDetector()
+	hookInputParser := infra.NewHookInputParserAdapter()
+	eventMapper := &app.EventMapper{}
 
-		loggerService := app.NewLoggerService(
-			nil, // Repository accessed through services
-			transcriptParser,
-			contextDetector,
-			infra.NormalizeContent,
-		)
+	loggerService := app.NewLoggerService(
+		nil, // Repository accessed through services
+		transcriptParser,
+		contextDetector,
+		infra.NormalizeContent,
+	)
 
-		handler = app.NewClaudeCommandHandler(
-			setupService,
-			loggerService,
-			analysisService,
-			hookInputParser,
-			eventMapper,
-			configLoader,
-			logger,
-			os.Stdout,
-		)
-	}
+	handler := app.NewClaudeCommandHandler(
+		setupService,
+		loggerService,
+		analysisService,
+		hookInputParser,
+		eventMapper,
+		configLoader,
+		logger,
+		os.Stdout,
+		pluginRegistry,
+	)
 
 	// 10. Register built-in plugins (cmd layer handles plugin imports)
 	if err := RegisterBuiltInPlugins(

@@ -3,10 +3,12 @@ package app_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
 // MockEventRepository for testing
@@ -48,109 +50,213 @@ func (m *MockEventRepository) Close() error {
 	return nil
 }
 
-// MockHookConfigManager for testing
-type MockHookConfigManager struct {
-	installError  error
-	settingsPath  string
-	installCalled bool
+// MockLogger for testing
+type MockLogger struct {
+	warnings []string
+	errors   []string
 }
 
-func (m *MockHookConfigManager) InstallDarwinFlowHooks() error {
+func (m *MockLogger) Debug(format string, args ...interface{}) {
+}
+
+func (m *MockLogger) Info(format string, args ...interface{}) {
+}
+
+func (m *MockLogger) Warn(format string, args ...interface{}) {
+	m.warnings = append(m.warnings, fmt.Sprintf(format, args...))
+}
+
+func (m *MockLogger) Error(format string, args ...interface{}) {
+	m.errors = append(m.errors, fmt.Sprintf(format, args...))
+}
+
+// MockHookProvider implements IHookProvider for testing
+type MockHookProvider struct {
+	pluginInfo       pluginsdk.PluginInfo
+	hooks            []pluginsdk.HookConfiguration
+	installError     error
+	refreshError     error
+	installCalled    bool
+	refreshCalled    bool
+	installWorkdir   string
+	refreshWorkdir   string
+}
+
+func (m *MockHookProvider) GetInfo() pluginsdk.PluginInfo {
+	return m.pluginInfo
+}
+
+func (m *MockHookProvider) GetCapabilities() []string {
+	return []string{"IHookProvider"}
+}
+
+func (m *MockHookProvider) GetHooks() []pluginsdk.HookConfiguration {
+	return m.hooks
+}
+
+func (m *MockHookProvider) InstallHooks(workingDir string) error {
 	m.installCalled = true
-	if m.installError != nil {
-		return m.installError
-	}
-	return nil
+	m.installWorkdir = workingDir
+	return m.installError
 }
 
-func (m *MockHookConfigManager) GetSettingsPath() string {
-	return m.settingsPath
+func (m *MockHookProvider) RefreshHooks(workingDir string) error {
+	m.refreshCalled = true
+	m.refreshWorkdir = workingDir
+	return m.refreshError
+}
+
+// MockPlainPlugin implements Plugin for testing (without IHookProvider)
+type MockPlainPlugin struct {
+	pluginInfo pluginsdk.PluginInfo
+}
+
+func (m *MockPlainPlugin) GetInfo() pluginsdk.PluginInfo {
+	return m.pluginInfo
+}
+
+func (m *MockPlainPlugin) GetCapabilities() []string {
+	return []string{}
 }
 
 func TestNewSetupService(t *testing.T) {
 	repo := &MockEventRepository{}
-	hookMgr := &MockHookConfigManager{settingsPath: "/test/settings.json"}
+	logger := &MockLogger{}
 
-	service := app.NewSetupService(repo, hookMgr)
+	service := app.NewSetupService(repo, logger)
 	if service == nil {
 		t.Error("Expected non-nil SetupService")
 	}
 }
 
-func TestSetupService_Initialize_Success(t *testing.T) {
+func TestSetupService_Initialize_WithHookProvider(t *testing.T) {
+	tmpDir := t.TempDir()
 	repo := &MockEventRepository{}
-	hookMgr := &MockHookConfigManager{settingsPath: "/test/settings.json"}
+	logger := &MockLogger{}
+	service := app.NewSetupService(repo, logger)
 
-	service := app.NewSetupService(repo, hookMgr)
-
-	// Use a temp directory for testing
-	// Note: In real scenario, this would create directories. For unit test,
-	// we're testing the service logic, not the filesystem operations.
-	// A full integration test would use a real temp directory.
+	// Create mock plugin with IHookProvider
+	mockHook := &MockHookProvider{
+		pluginInfo: pluginsdk.PluginInfo{Name: "test-plugin", Version: "1.0.0"},
+		hooks: []pluginsdk.HookConfiguration{
+			{TriggerType: "trigger.test", Name: "TestHook", Command: "test"},
+		},
+	}
 
 	ctx := context.Background()
+	plugins := []pluginsdk.Plugin{mockHook}
 
-	// This will fail because we can't create directories in tests without tempdir
-	// but we can verify the error handling works
-	_ = service.Initialize(ctx, "/nonexistent/path/test.db")
-	// We expect this to potentially fail on directory creation, which is fine
-	// The important thing is the service doesn't panic and handles errors
+	err := service.Initialize(ctx, fmt.Sprintf("%s/test.db", tmpDir), plugins)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
 
-	// Verify the service was created correctly
-	if service == nil {
-		t.Error("Service should exist")
+	// Verify InstallHooks was called
+	if !mockHook.installCalled {
+		t.Error("Expected InstallHooks to be called")
+	}
+
+	// Verify working dir was passed correctly
+	if mockHook.installWorkdir != tmpDir {
+		t.Errorf("Expected workdir %s, got %s", tmpDir, mockHook.installWorkdir)
+	}
+}
+
+func TestSetupService_Initialize_SkipsPluginsWithoutHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo := &MockEventRepository{}
+	logger := &MockLogger{}
+	service := app.NewSetupService(repo, logger)
+
+	// Create mock plugin without IHookProvider
+	mockPlugin := &MockPlainPlugin{
+		pluginInfo: pluginsdk.PluginInfo{Name: "no-hooks", Version: "1.0.0"},
+	}
+
+	// Create mock plugin with IHookProvider
+	mockHook := &MockHookProvider{
+		pluginInfo: pluginsdk.PluginInfo{Name: "with-hooks", Version: "1.0.0"},
+	}
+
+	ctx := context.Background()
+	plugins := []pluginsdk.Plugin{mockPlugin, mockHook}
+
+	err := service.Initialize(ctx, fmt.Sprintf("%s/test.db", tmpDir), plugins)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Verify only hook provider's InstallHooks was called
+	if !mockHook.installCalled {
+		t.Error("Expected InstallHooks to be called on hook provider")
+	}
+}
+
+func TestSetupService_Initialize_PluginHookError(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo := &MockEventRepository{}
+	logger := &MockLogger{}
+	service := app.NewSetupService(repo, logger)
+
+	// Create mock plugin with hook installation error
+	hookError := fmt.Errorf("hook install failed")
+	mockHook := &MockHookProvider{
+		pluginInfo:   pluginsdk.PluginInfo{Name: "failing-plugin", Version: "1.0.0"},
+		installError: hookError,
+	}
+
+	ctx := context.Background()
+	plugins := []pluginsdk.Plugin{mockHook}
+
+	err := service.Initialize(ctx, fmt.Sprintf("%s/test.db", tmpDir), plugins)
+	if err == nil {
+		t.Error("Expected Initialize to return error when plugin hook install fails")
+	}
+
+	// Verify error contains plugin name
+	if err != nil {
+		if errStr := err.Error(); len(errStr) < 15 || errStr[:15] != "hook installati" {
+			// Check if error contains "failing-plugin"
+			if !strings.Contains(errStr, "failing-plugin") {
+				t.Errorf("Expected error to contain plugin name, got: %v", err)
+			}
+		}
+	}
+
+	// Verify warning was logged
+	if len(logger.warnings) == 0 {
+		t.Error("Expected warning to be logged")
+	}
+}
+
+func TestSetupService_Initialize_NoPlugins(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo := &MockEventRepository{}
+	logger := &MockLogger{}
+	service := app.NewSetupService(repo, logger)
+
+	ctx := context.Background()
+	plugins := []pluginsdk.Plugin{}
+
+	err := service.Initialize(ctx, fmt.Sprintf("%s/test.db", tmpDir), plugins)
+	if err != nil {
+		t.Fatalf("Initialize failed with no plugins: %v", err)
 	}
 }
 
 func TestSetupService_Initialize_RepositoryError(t *testing.T) {
+	tmpDir := t.TempDir()
 	expectedErr := fmt.Errorf("repository init failed")
 	repo := &MockEventRepository{initError: expectedErr}
-	hookMgr := &MockHookConfigManager{settingsPath: "/test/settings.json"}
-
-	service := app.NewSetupService(repo, hookMgr)
-
-	ctx := context.Background()
-
-	// Even though directory creation might fail, if repo.Initialize is called
-	// and returns an error, we should see that error (wrapped)
-	_ = service.Initialize(ctx, "/tmp/test.db")
-
-	// The error might be from directory creation or repository init
-	// What matters is that errors are propagated and no panic occurs
-}
-
-func TestSetupService_Initialize_HookError(t *testing.T) {
-	expectedErr := fmt.Errorf("hook install failed")
-	repo := &MockEventRepository{}
-	hookMgr := &MockHookConfigManager{
-		installError: expectedErr,
-		settingsPath: "/test/settings.json",
-	}
-
-	service := app.NewSetupService(repo, hookMgr)
+	logger := &MockLogger{}
+	service := app.NewSetupService(repo, logger)
 
 	ctx := context.Background()
+	plugins := []pluginsdk.Plugin{}
 
-	// This will likely fail on directory creation before reaching hooks
-	// but if it does reach hooks, the error should propagate
-	_ = service.Initialize(ctx, "/tmp/test.db")
-
-	// Verify no panic
-	// In a real integration test with temp directories, we'd verify:
-	// - hookMgr.installCalled is true
-	// - err is not nil and contains the hook error
-}
-
-func TestSetupService_GetSettingsPath(t *testing.T) {
-	repo := &MockEventRepository{}
-	expectedPath := "/home/user/.config/claude/settings.json"
-	hookMgr := &MockHookConfigManager{settingsPath: expectedPath}
-
-	service := app.NewSetupService(repo, hookMgr)
-
-	path := service.GetSettingsPath()
-	if path != expectedPath {
-		t.Errorf("Expected settings path %s, got %s", expectedPath, path)
+	err := service.Initialize(ctx, fmt.Sprintf("%s/test.db", tmpDir), plugins)
+	if err == nil {
+		t.Error("Expected Initialize to return error when repository fails")
 	}
 }
 

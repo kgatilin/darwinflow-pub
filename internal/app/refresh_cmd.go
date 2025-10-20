@@ -4,17 +4,21 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
-// RefreshCommandHandler handles the refresh command logic
+// RefreshCommandHandler handles the refresh command logic.
+// This handler is plugin-agnostic: it queries all plugins for IHookProvider capability
+// and refreshes hooks for each one that provides them.
 type RefreshCommandHandler struct {
-	repo              domain.EventRepository
-	hookConfigManager HookConfigManager
-	configLoader      ConfigLoader
-	logger            Logger
-	out               io.Writer
+	repo          domain.EventRepository
+	pluginRegistry *PluginRegistry
+	configLoader  ConfigLoader
+	logger        Logger
+	out           io.Writer
 }
 
 // ConfigLoader interface for config loading
@@ -26,17 +30,17 @@ type ConfigLoader interface {
 // NewRefreshCommandHandler creates a new refresh command handler
 func NewRefreshCommandHandler(
 	repo domain.EventRepository,
-	hookConfigManager HookConfigManager,
+	pluginRegistry *PluginRegistry,
 	configLoader ConfigLoader,
 	logger Logger,
 	out io.Writer,
 ) *RefreshCommandHandler {
 	return &RefreshCommandHandler{
-		repo:              repo,
-		hookConfigManager: hookConfigManager,
-		configLoader:      configLoader,
-		logger:            logger,
-		out:               out,
+		repo:          repo,
+		pluginRegistry: pluginRegistry,
+		configLoader:  configLoader,
+		logger:        logger,
+		out:           out,
 	}
 }
 
@@ -52,13 +56,39 @@ func (h *RefreshCommandHandler) Execute(ctx context.Context, dbPath string) erro
 	}
 	fmt.Fprintf(h.out, "✓ Database schema updated: %s\n", dbPath)
 
-	// Step 2: Update hooks
+	// Step 2: Update hooks from all plugins
 	fmt.Fprintln(h.out)
-	fmt.Fprintln(h.out, "Updating Claude Code hooks...")
-	if err := h.hookConfigManager.InstallDarwinFlowHooks(); err != nil {
-		return fmt.Errorf("error updating hooks: %w", err)
+	fmt.Fprintln(h.out, "Updating hooks for all plugins...")
+
+	// Get current working directory
+	workingDir, err := os.Getwd()
+	if err != nil {
+		workingDir = "."
 	}
-	fmt.Fprintf(h.out, "✓ Hooks updated: %s\n", h.hookConfigManager.GetSettingsPath())
+
+	// Get all registered plugins
+	plugins := h.pluginRegistry.GetAllPlugins()
+	hasPluginErrors := false
+
+	for _, plugin := range plugins {
+		// Check if plugin implements IHookProvider capability
+		hookProvider, ok := plugin.(pluginsdk.IHookProvider)
+		if !ok {
+			// Plugin doesn't provide hooks, skip it
+			continue
+		}
+
+		// Refresh hooks for this plugin
+		fmt.Fprintf(h.out, "  → Refreshing hooks for plugin: %s\n", plugin.GetInfo().Name)
+		if err := hookProvider.RefreshHooks(workingDir); err != nil {
+			fmt.Fprintf(h.out, "    ⚠️  Hook refresh failed for %s: %v\n", plugin.GetInfo().Name, err)
+			h.logger.Warn("Hook refresh failed for plugin %s: %v", plugin.GetInfo().Name, err)
+			hasPluginErrors = true
+			// Continue to other plugins, don't fail completely
+		} else {
+			fmt.Fprintf(h.out, "    ✓ Hooks refreshed for %s\n", plugin.GetInfo().Name)
+		}
+	}
 
 	// Step 3: Initialize config if needed
 	fmt.Fprintln(h.out)
@@ -85,9 +115,14 @@ func (h *RefreshCommandHandler) Execute(ctx context.Context, dbPath string) erro
 	fmt.Fprintln(h.out)
 	fmt.Fprintln(h.out, "Changes applied:")
 	fmt.Fprintln(h.out, "  • Database schema updated with latest migrations")
-	fmt.Fprintln(h.out, "  • Hooks updated to latest version")
+	fmt.Fprintln(h.out, "  • Hooks refreshed for all plugins")
 	fmt.Fprintln(h.out, "  • Configuration verified")
 	fmt.Fprintln(h.out)
+
+	if hasPluginErrors {
+		fmt.Fprintln(h.out, "Note: Some plugins had errors during hook refresh. See output above.")
+	}
+
 	fmt.Fprintln(h.out, "You may need to restart Claude Code for changes to take effect.")
 
 	return nil

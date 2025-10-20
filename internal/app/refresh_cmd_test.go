@@ -47,26 +47,6 @@ func (m *mockEventRepository) FindByQuery(ctx context.Context, query domain.Even
 	return nil, nil
 }
 
-// mockHookConfigManager is a mock for testing
-type mockHookConfigManager struct {
-	installHooksFunc   func() error
-	getSettingsPathFunc func() string
-}
-
-func (m *mockHookConfigManager) InstallDarwinFlowHooks() error {
-	if m.installHooksFunc != nil {
-		return m.installHooksFunc()
-	}
-	return nil
-}
-
-func (m *mockHookConfigManager) GetSettingsPath() string {
-	if m.getSettingsPathFunc != nil {
-		return m.getSettingsPathFunc()
-	}
-	return "/mock/settings.json"
-}
-
 // mockConfigLoader is a mock for testing
 type mockConfigLoader struct {
 	loadConfigFunc              func(path string) (*domain.Config, error)
@@ -90,12 +70,13 @@ func (m *mockConfigLoader) InitializeDefaultConfig(path string) (string, error) 
 func TestRefreshCommandHandler_Execute(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := &mockEventRepository{}
-	mockHookMgr := &mockHookConfigManager{}
+	// Create a minimal plugin registry with no plugins for testing
+	registry := app.NewPluginRegistry(&mockLogger{})
 	mockConfigLdr := &mockConfigLoader{}
 	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
-	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)
+	handler := app.NewRefreshCommandHandler(mockRepo, registry, mockConfigLdr, logger, out)
 
 	err := handler.Execute(ctx, "/test/db/path.db")
 	if err != nil {
@@ -109,7 +90,7 @@ func TestRefreshCommandHandler_Execute(t *testing.T) {
 	if !strings.Contains(output, "Database schema updated") {
 		t.Errorf("Output should confirm database update, got: %s", output)
 	}
-	if !strings.Contains(output, "Hooks updated") {
+	if !strings.Contains(output, "Updating hooks for all plugins") {
 		t.Errorf("Output should confirm hooks update, got: %s", output)
 	}
 	if !strings.Contains(output, "refreshed successfully") {
@@ -120,7 +101,7 @@ func TestRefreshCommandHandler_Execute(t *testing.T) {
 func TestRefreshCommandHandler_Execute_WithMissingConfig(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := &mockEventRepository{}
-	mockHookMgr := &mockHookConfigManager{}
+	registry := app.NewPluginRegistry(&mockLogger{})
 	mockConfigLdr := &mockConfigLoader{
 		loadConfigFunc: func(path string) (*domain.Config, error) {
 			return nil, nil // Config doesn't exist
@@ -129,7 +110,7 @@ func TestRefreshCommandHandler_Execute_WithMissingConfig(t *testing.T) {
 	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
-	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)
+	handler := app.NewRefreshCommandHandler(mockRepo, registry, mockConfigLdr, logger, out)
 
 	err := handler.Execute(ctx, "/test/db/path.db")
 	if err != nil {
@@ -149,12 +130,12 @@ func TestRefreshCommandHandler_Execute_RepositoryError(t *testing.T) {
 			return fmt.Errorf("database initialization failed")
 		},
 	}
-	mockHookMgr := &mockHookConfigManager{}
+	registry := app.NewPluginRegistry(&mockLogger{})
 	mockConfigLdr := &mockConfigLoader{}
 	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
-	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)
+	handler := app.NewRefreshCommandHandler(mockRepo, registry, mockConfigLdr, logger, out)
 
 	err := handler.Execute(ctx, "/test/db/path.db")
 	if err == nil {
@@ -165,25 +146,24 @@ func TestRefreshCommandHandler_Execute_RepositoryError(t *testing.T) {
 	}
 }
 
-func TestRefreshCommandHandler_Execute_HookError(t *testing.T) {
+func TestRefreshCommandHandler_Execute_WithPlugins(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := &mockEventRepository{}
-	mockHookMgr := &mockHookConfigManager{
-		installHooksFunc: func() error {
-			return fmt.Errorf("hook installation failed")
-		},
-	}
+	registry := app.NewPluginRegistry(&mockLogger{})
+	// Add no plugins to test the empty plugin case
 	mockConfigLdr := &mockConfigLoader{}
 	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
-	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)
+	handler := app.NewRefreshCommandHandler(mockRepo, registry, mockConfigLdr, logger, out)
 
 	err := handler.Execute(ctx, "/test/db/path.db")
-	if err == nil {
-		t.Error("Execute should fail when hook installation fails")
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
 	}
-	if !strings.Contains(err.Error(), "error updating hooks") {
-		t.Errorf("Error should mention hooks, got: %v", err)
+
+	output := out.String()
+	if !strings.Contains(output, "Updating hooks for all plugins") {
+		t.Errorf("Output should mention updating hooks, got: %s", output)
 	}
 }

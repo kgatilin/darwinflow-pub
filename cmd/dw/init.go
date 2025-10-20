@@ -48,7 +48,16 @@ func handleInit(args []string) {
 		fmt.Printf("  - %s v%s%s\n", info.Name, info.Version, coreLabel)
 	}
 
-	// 4. Initialize each plugin
+	// 4. Install hooks for all plugins that provide them
+	fmt.Println()
+	fmt.Println("Installing plugin hooks...")
+	if err := installPluginHooks(ctx, services, dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error installing plugin hooks: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("✓ Plugin hooks installed")
+
+	// 5. Initialize each plugin
 	fmt.Println()
 	fmt.Println("Initializing plugins...")
 	for _, info := range pluginInfos {
@@ -88,6 +97,7 @@ func createEventDatabase(dbPath string) error {
 }
 
 // initializePlugin checks if a plugin provides an "init" command and executes it
+// Also calls SetupService to install hooks for plugins that provide them
 // Uses the command registry to execute the plugin's init command
 func initializePlugin(ctx context.Context, services *AppServices, pluginName string) error {
 	// Create command context for plugin
@@ -112,6 +122,12 @@ func initializePlugin(ctx context.Context, services *AppServices, pluginName str
 	}
 
 	return nil
+}
+
+// installPluginHooks installs hooks for all plugins that provide them
+func installPluginHooks(ctx context.Context, services *AppServices, dbPath string) error {
+	plugins := services.PluginRegistry.GetAllPlugins()
+	return services.SetupService.Initialize(ctx, dbPath, plugins)
 }
 
 // contains checks if a string slice contains a value
