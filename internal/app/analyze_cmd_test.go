@@ -9,8 +9,15 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
-	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
+
+// mockLogger is a mock implementation of Logger for testing
+type mockLogger struct{}
+
+func (m *mockLogger) Debug(format string, args ...interface{}) {}
+func (m *mockLogger) Info(format string, args ...interface{})  {}
+func (m *mockLogger) Warn(format string, args ...interface{})  {}
+func (m *mockLogger) Error(format string, args ...interface{}) {}
 
 // mockAnalysisService is a mock implementation of AnalysisService for testing
 type mockAnalysisService struct {
@@ -88,7 +95,7 @@ func (m *mockAnalysisService) AnalyzeSessionWithMultiplePrompts(ctx context.Cont
 func TestAnalyzeCommandHandler_ViewAnalysis(t *testing.T) {
 	ctx := context.Background()
 	mockService := &mockAnalysisService{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 	handler := app.NewAnalyzeCommandHandler(mockService, logger, out)
 
@@ -114,7 +121,7 @@ func TestAnalyzeCommandHandler_ViewAnalysis(t *testing.T) {
 func TestAnalyzeCommandHandler_AnalyzeLastSession(t *testing.T) {
 	ctx := context.Background()
 	mockService := &mockAnalysisService{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 	handler := app.NewAnalyzeCommandHandler(mockService, logger, out)
 
@@ -137,7 +144,7 @@ func TestAnalyzeCommandHandler_AnalyzeLastSession(t *testing.T) {
 func TestAnalyzeCommandHandler_AnalyzeSpecificSession(t *testing.T) {
 	ctx := context.Background()
 	mockService := &mockAnalysisService{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 	handler := app.NewAnalyzeCommandHandler(mockService, logger, out)
 
@@ -160,7 +167,7 @@ func TestAnalyzeCommandHandler_AnalyzeSpecificSession(t *testing.T) {
 func TestAnalyzeCommandHandler_AnalyzeAll(t *testing.T) {
 	ctx := context.Background()
 	mockService := &mockAnalysisService{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 	handler := app.NewAnalyzeCommandHandler(mockService, logger, out)
 
@@ -183,7 +190,7 @@ func TestAnalyzeCommandHandler_AnalyzeAll(t *testing.T) {
 func TestAnalyzeCommandHandler_Refresh(t *testing.T) {
 	ctx := context.Background()
 	mockService := &mockAnalysisService{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 	handler := app.NewAnalyzeCommandHandler(mockService, logger, out)
 
@@ -207,7 +214,7 @@ func TestAnalyzeCommandHandler_Refresh(t *testing.T) {
 func TestAnalyzeCommandHandler_MultiplePrompts(t *testing.T) {
 	ctx := context.Background()
 	mockService := &mockAnalysisService{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 	handler := app.NewAnalyzeCommandHandler(mockService, logger, out)
 
@@ -230,7 +237,7 @@ func TestAnalyzeCommandHandler_MultiplePrompts(t *testing.T) {
 func TestAnalyzeCommandHandler_NoSessionSpecified(t *testing.T) {
 	ctx := context.Background()
 	mockService := &mockAnalysisService{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 	handler := app.NewAnalyzeCommandHandler(mockService, logger, out)
 

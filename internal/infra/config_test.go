@@ -255,9 +255,12 @@ func TestConfigLoader_SaveConfig(t *testing.T) {
 	config.Analysis.TokenLimit = 80000
 
 	// Save it (note: signature is SaveConfig(config, path))
-	err := loader.SaveConfig(config, configPath)
+	savedPath, err := loader.SaveConfig(config, configPath)
 	if err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	if savedPath != configPath {
+		t.Errorf("SaveConfig returned path %s, expected %s", savedPath, configPath)
 	}
 
 	// Verify file exists
@@ -336,9 +339,12 @@ func TestConfigLoader_InitializeDefaultConfig(t *testing.T) {
 	loader := infra.NewConfigLoader(logger)
 
 	// Initialize default config
-	err := loader.InitializeDefaultConfig(configPath)
+	createdPath, err := loader.InitializeDefaultConfig(configPath)
 	if err != nil {
 		t.Fatalf("InitializeDefaultConfig failed: %v", err)
+	}
+	if createdPath != configPath {
+		t.Errorf("InitializeDefaultConfig returned path %s, expected %s", createdPath, configPath)
 	}
 
 	// Verify file was created
@@ -369,13 +375,16 @@ func TestConfigLoader_InitializeDefaultConfig_InCurrentDir(t *testing.T) {
 	loader := infra.NewConfigLoader(logger)
 
 	// Initialize with empty path (should use current dir)
-	err := loader.InitializeDefaultConfig("")
+	createdPath, err := loader.InitializeDefaultConfig("")
 	if err != nil {
 		t.Fatalf("InitializeDefaultConfig failed: %v", err)
 	}
 
 	// Verify file exists in current dir
 	configPath := filepath.Join(tmpDir, ".darwinflow.yaml")
+	if createdPath != configPath {
+		t.Errorf("InitializeDefaultConfig returned path %s, expected %s", createdPath, configPath)
+	}
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("Config file was not created in current directory")
 	}

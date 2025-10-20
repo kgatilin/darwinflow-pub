@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
-	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
 // AnalyzeOptions contains options for the analyze command
@@ -35,12 +34,12 @@ type AnalysisServiceInterface interface {
 // AnalyzeCommandHandler handles the analyze command logic
 type AnalyzeCommandHandler struct {
 	analysisService AnalysisServiceInterface
-	logger          *infra.Logger
+	logger          Logger
 	out             io.Writer
 }
 
 // NewAnalyzeCommandHandler creates a new analyze command handler
-func NewAnalyzeCommandHandler(analysisService AnalysisServiceInterface, logger *infra.Logger, out io.Writer) *AnalyzeCommandHandler {
+func NewAnalyzeCommandHandler(analysisService AnalysisServiceInterface, logger Logger, out io.Writer) *AnalyzeCommandHandler {
 	return &AnalyzeCommandHandler{
 		analysisService: analysisService,
 		logger:          logger,

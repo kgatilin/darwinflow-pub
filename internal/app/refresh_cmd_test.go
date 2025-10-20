@@ -9,7 +9,6 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
-	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
 // mockEventRepository is a mock for testing
@@ -71,7 +70,7 @@ func (m *mockHookConfigManager) GetSettingsPath() string {
 // mockConfigLoader is a mock for testing
 type mockConfigLoader struct {
 	loadConfigFunc              func(path string) (*domain.Config, error)
-	initializeDefaultConfigFunc func(path string) error
+	initializeDefaultConfigFunc func(path string) (string, error)
 }
 
 func (m *mockConfigLoader) LoadConfig(path string) (*domain.Config, error) {
@@ -81,11 +80,11 @@ func (m *mockConfigLoader) LoadConfig(path string) (*domain.Config, error) {
 	return &domain.Config{}, nil
 }
 
-func (m *mockConfigLoader) InitializeDefaultConfig(path string) error {
+func (m *mockConfigLoader) InitializeDefaultConfig(path string) (string, error) {
 	if m.initializeDefaultConfigFunc != nil {
 		return m.initializeDefaultConfigFunc(path)
 	}
-	return nil
+	return ".darwinflow.yaml", nil
 }
 
 func TestRefreshCommandHandler_Execute(t *testing.T) {
@@ -93,7 +92,7 @@ func TestRefreshCommandHandler_Execute(t *testing.T) {
 	mockRepo := &mockEventRepository{}
 	mockHookMgr := &mockHookConfigManager{}
 	mockConfigLdr := &mockConfigLoader{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
 	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)
@@ -127,7 +126,7 @@ func TestRefreshCommandHandler_Execute_WithMissingConfig(t *testing.T) {
 			return nil, nil // Config doesn't exist
 		},
 	}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
 	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)
@@ -152,7 +151,7 @@ func TestRefreshCommandHandler_Execute_RepositoryError(t *testing.T) {
 	}
 	mockHookMgr := &mockHookConfigManager{}
 	mockConfigLdr := &mockConfigLoader{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
 	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)
@@ -175,7 +174,7 @@ func TestRefreshCommandHandler_Execute_HookError(t *testing.T) {
 		},
 	}
 	mockConfigLdr := &mockConfigLoader{}
-	logger := infra.NewDefaultLogger()
+	logger := &mockLogger{}
 	out := &bytes.Buffer{}
 
 	handler := app.NewRefreshCommandHandler(mockRepo, mockHookMgr, mockConfigLdr, logger, out)

@@ -65,13 +65,14 @@ func configInitCmd(args []string) {
 	}
 
 	// Create and save default config
-	if err := configLoader.InitializeDefaultConfig(""); err != nil {
+	createdPath, err := configLoader.InitializeDefaultConfig("")
+	if err != nil {
 		logger.Error("Failed to create config: %v", err)
 		fmt.Fprintf(os.Stderr, "Failed to create config: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Created config file: %s\n", configPath)
+	fmt.Printf("Created config file: %s\n", createdPath)
 	fmt.Println("\nYou can now customize the prompts in this file for your project.")
 }
 

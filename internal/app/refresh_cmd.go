@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
-	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
 // RefreshCommandHandler handles the refresh command logic
@@ -14,14 +13,14 @@ type RefreshCommandHandler struct {
 	repo              domain.EventRepository
 	hookConfigManager HookConfigManager
 	configLoader      ConfigLoader
-	logger            *infra.Logger
+	logger            Logger
 	out               io.Writer
 }
 
 // ConfigLoader interface for config loading
 type ConfigLoader interface {
 	LoadConfig(path string) (*domain.Config, error)
-	InitializeDefaultConfig(path string) error
+	InitializeDefaultConfig(path string) (string, error)
 }
 
 // NewRefreshCommandHandler creates a new refresh command handler
@@ -29,7 +28,7 @@ func NewRefreshCommandHandler(
 	repo domain.EventRepository,
 	hookConfigManager HookConfigManager,
 	configLoader ConfigLoader,
-	logger *infra.Logger,
+	logger Logger,
 	out io.Writer,
 ) *RefreshCommandHandler {
 	return &RefreshCommandHandler{
@@ -70,10 +69,11 @@ func (h *RefreshCommandHandler) Execute(ctx context.Context, dbPath string) erro
 	if err != nil || config == nil {
 		// Config doesn't exist or is invalid, create default
 		fmt.Fprintln(h.out, "Creating default configuration...")
-		if err := h.configLoader.InitializeDefaultConfig(""); err != nil {
+		configPath, err := h.configLoader.InitializeDefaultConfig("")
+		if err != nil {
 			fmt.Fprintf(h.out, "Warning: Could not create default config: %v\n", err)
 		} else {
-			fmt.Fprintf(h.out, "✓ Configuration initialized: %s\n", infra.DefaultConfigFileName)
+			fmt.Fprintf(h.out, "✓ Configuration initialized: %s\n", configPath)
 		}
 	} else {
 		fmt.Fprintln(h.out, "✓ Configuration is valid")

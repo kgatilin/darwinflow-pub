@@ -139,12 +139,12 @@ func ValidateModelAlias(model string) bool {
 	return domain.ValidateModel(model)
 }
 
-// SaveConfig saves configuration to the specified path
-func (c *ConfigLoader) SaveConfig(config *domain.Config, configPath string) error {
+// SaveConfig saves configuration to the specified path and returns the actual path used
+func (c *ConfigLoader) SaveConfig(config *domain.Config, configPath string) (string, error) {
 	if configPath == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return fmt.Errorf("failed to get current directory: %w", err)
+			return "", fmt.Errorf("failed to get current directory: %w", err)
 		}
 		configPath = filepath.Join(cwd, DefaultConfigFileName)
 	}
@@ -155,17 +155,17 @@ func (c *ConfigLoader) SaveConfig(config *domain.Config, configPath string) erro
 
 	data, err := yaml.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return "", fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return "", fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	if c.logger != nil {
 		c.logger.Info("Config saved to %s", configPath)
 	}
-	return nil
+	return configPath, nil
 }
 
 // GetPrompt retrieves a named prompt from the config
@@ -178,8 +178,8 @@ func (c *ConfigLoader) GetPrompt(config *domain.Config, promptName string) (stri
 	return prompt, exists
 }
 
-// InitializeDefaultConfig creates and saves a default config file
-func (c *ConfigLoader) InitializeDefaultConfig(configPath string) error {
+// InitializeDefaultConfig creates and saves a default config file and returns the path used
+func (c *ConfigLoader) InitializeDefaultConfig(configPath string) (string, error) {
 	config := domain.DefaultConfig()
 	return c.SaveConfig(config, configPath)
 }
