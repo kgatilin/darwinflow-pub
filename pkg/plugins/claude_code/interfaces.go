@@ -79,8 +79,18 @@ type AnalysisConfig struct {
 }
 
 // HookInputData represents data from Claude Code hooks
+// Contains all fields extracted from Claude Code's native hook input format
 type HookInputData struct {
-	SessionID string
+	SessionID      string
+	TranscriptPath string
+	CWD            string
+	PermissionMode string
+	HookEventName  string
+	ToolName       string
+	ToolInput      map[string]interface{}
+	ToolOutput     interface{}
+	Error          interface{}
+	UserMessage    string
 }
 
 // HookInputParser parses hook input from stdin

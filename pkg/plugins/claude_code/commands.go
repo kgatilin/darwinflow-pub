@@ -79,9 +79,20 @@ func (c *InitCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandConte
 
 // EmitEventCommand emits an event via the plugin SDK context
 // This command reads a structured event from stdin and emits it through the plugin context.
-// All errors are logged but never propagated - this ensures hook execution is never disrupted.
+// Supports two input formats:
 //
-// Input format (JSON from stdin):
+// 1. Claude Code Native Hook Format (HookInput):
+//
+//	{
+//	  "session_id": "abc123",
+//	  "hook_event_name": "PreToolUse",
+//	  "tool_name": "Read",
+//	  "tool_input": {...},
+//	  "cwd": "/workspace",
+//	  ...
+//	}
+//
+// 2. Plugin SDK Event Format:
 //
 //	{
 //	  "type": "tool.invoked",
@@ -92,7 +103,12 @@ func (c *InitCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandConte
 //	  "version": "1.0"
 //	}
 //
-// Required fields: type, source, metadata.session_id
+// The command auto-detects the format and converts as needed.
+// All errors are logged but never propagated - this ensures hook execution is never disrupted.
+// Required fields depend on format:
+//   - HookInput: session_id, hook_event_name
+//   - SDK Event: type, source, metadata.session_id
+//
 // The command validates input and emits to the framework's event store.
 type EmitEventCommand struct {
 	plugin *ClaudeCodePlugin
@@ -140,11 +156,29 @@ func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 		return nil // Silently fail - don't disrupt Claude Code
 	}
 
-	// Parse JSON into pluginsdk.Event
+	// Try to parse as SDK Event first
 	var event pluginsdk.Event
 	if err := json.Unmarshal(stdinData, &event); err != nil {
 		c.plugin.logger.Debug("emit-event: invalid JSON: %v", err)
 		return nil // Silently fail - don't disrupt Claude Code
+	}
+
+	// Check if this looks like a Claude Code hook input (HookInput format)
+	// vs a SDK Event format
+	if event.Type == "" && event.Source == "" {
+		// Try to parse as HookInput (Claude Code native format)
+		hookData, err := c.parseAsHookInput(stdinData)
+		if err != nil {
+			c.plugin.logger.Debug("emit-event: failed to parse as hook input: %v", err)
+			return nil // Silently fail - don't disrupt Claude Code
+		}
+
+		// Convert HookInput to SDK Event
+		event = *HookInputToEvent(hookData)
+		if event.Type == "unknown" {
+			c.plugin.logger.Debug("emit-event: unknown hook event type")
+			return nil
+		}
 	}
 
 	// Validate required fields
@@ -190,6 +224,12 @@ func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	}
 
 	return nil
+}
+
+// parseAsHookInput attempts to parse stdin data as HookInput format
+func (c *EmitEventCommand) parseAsHookInput(data []byte) (*HookInputData, error) {
+	parser := newHookInputParser()
+	return parser.Parse(data)
 }
 
 // LogCommand logs a Claude Code event from hook input
