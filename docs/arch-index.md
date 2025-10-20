@@ -20,6 +20,18 @@
 
 **Strict Mode**: Only required directories are allowed
 
+## Dependency Graph
+
+Package-level dependencies (local dependencies only):
+
+- **cmd/dw** → internal/app, internal/app/tui, internal/infra, pkg/plugins/claude_code
+- **internal/app** → internal/domain, pkg/pluginsdk
+- **internal/app/tui** → internal/app, internal/domain
+- **internal/domain** → *(no local dependencies)*
+- **internal/infra** → internal/domain
+- **pkg/plugins/claude_code** → pkg/pluginsdk
+- **pkg/pluginsdk** → *(no local dependencies)*
+
 ## Package Directory
 
 ### cmd (Application Entry Points)
