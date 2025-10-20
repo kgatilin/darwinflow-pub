@@ -7,6 +7,7 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
+	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
 // AppServices contains all app-layer services needed by commands.
@@ -61,7 +62,7 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 	analysisService := app.NewAnalysisService(repo, repo, logsService, llmExecutor, logger, config)
 
 	// 6. Create setup service (for init command)
-	hookConfigManager, err := infra.NewHookConfigManager()
+	hookConfigManager, err := claude_code.NewHookConfigManager()
 	if err != nil {
 		logger.Warn("Failed to create hook config manager: %v", err)
 		// Non-fatal - setupService will be nil

@@ -7,6 +7,7 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
+	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
 // handleRefresh updates DarwinFlow to the latest version
@@ -25,7 +26,7 @@ func handleRefresh(args []string) {
 	}
 	defer repository.Close()
 
-	hookConfigManager, err := infra.NewHookConfigManager()
+	hookConfigManager, err := claude_code.NewHookConfigManager()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating hook config manager: %v\n", err)
 		os.Exit(1)
