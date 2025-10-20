@@ -23,3 +23,6 @@ go.work
 # Backup files
 *.backup
 .agent/
+
+# Claude Code local settings
+.claude/

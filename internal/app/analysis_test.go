@@ -1,9 +1,10 @@
-package app
+package app_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
@@ -77,13 +78,13 @@ func (m *MockAnalysisRepository) GetAllSessionIDs(ctx context.Context, limit int
 
 func TestGetAnalysisPrompt(t *testing.T) {
 	sessionData := "## Session Data\n- Tool: Read\n- File: test.go"
-	prompt := GetAnalysisPrompt(sessionData)
+	prompt := app.GetAnalysisPrompt(sessionData)
 
 	if prompt == "" {
 		t.Error("Expected non-empty prompt")
 	}
 
-	if len(prompt) < len(DefaultAnalysisPrompt)+len(sessionData) {
+	if len(prompt) < len(app.DefaultAnalysisPrompt)+len(sessionData) {
 		t.Error("Prompt should contain both template and session data")
 	}
 
@@ -101,7 +102,7 @@ func TestGetAnalysisPrompt(t *testing.T) {
 func TestClaudeCLIExecutor_Integration(t *testing.T) {
 	// This is a basic integration test that just checks the executor can be created
 	// We don't actually run claude here as it may not be available in test environment
-	executor := NewClaudeCLIExecutor(&NoOpLogger{})
+	executor := app.NewClaudeCLIExecutor(&app.NoOpLogger{})
 	if executor == nil {
 		t.Error("Expected non-nil executor")
 	}

@@ -1,68 +1,131 @@
 # Refreshed by go-arch-lint refresh with preset=ddd
 # Previous config backed up to .goarchlint.backup
-# You can customize the error_prompt section to fit your project's needs
+#
+# The 'preset' section has been updated with the latest preset version.
+# Your custom 'overrides' section has been preserved.
+#
 
 module: github.com/kgatilin/darwinflow-pub
-preset_used: ddd
-error_prompt:
-    enabled: true
-    architectural_goals: |4
-        Domain-Driven Design (DDD) architecture aims to:
-        - Keep business logic pure and isolated in the domain layer
-        - Prevent infrastructure concerns from leaking into business logic
-        - Enable the domain model to evolve independently of technical implementation
-        - Make the business logic testable without external dependencies
-    principles:
-        - Domain layer has ZERO dependencies - it's the purest business logic
-        - Application layer orchestrates domain objects and use cases
-        - Infrastructure layer implements technical details (databases, APIs, messaging)
-        - 'Dependencies flow inward: cmd → infra/app → domain (never outward)'
-        - Domain should never import from app or infra layers
-    refactoring_guidance: |4
-        To refactor toward DDD compliance:
+preset:
+    name: ddd
+    structure:
+        required_directories:
+            cmd: Application entry points
+            internal/app: Application services, use cases, orchestration
+            internal/domain: Core business logic, entities, value objects, domain services
+            internal/infra: Infrastructure implementations (DB, external APIs, messaging)
+        allow_other_directories: true
+    rules:
+        directories_import:
+            cmd:
+                - internal/app
+                - internal/infra
+            internal/app:
+                - internal/domain
+            internal/domain: []
+            internal/infra:
+                - internal/domain
+        detect_unused: true
+        shared_external_imports:
+            detect: true
+            mode: warn
+            exclusions:
+                - fmt
+                - strings
+                - errors
+                - time
+                - context
+            exclusion_patterns:
+                - encoding/*
+        test_files:
+            lint: true
+            exempt_imports:
+                - testing
+                - github.com/stretchr/testify/assert
+                - github.com/stretchr/testify/require
+                - github.com/stretchr/testify/mock
+            location: colocated
+            require_blackbox: true
+        test_coverage:
+            enabled: true
+            threshold: 75
+            package_thresholds:
+                cmd: 40
+                internal/app: 80
+                internal/domain: 90
+                internal/infra: 60
+    error_prompt:
+        enabled: true
+        architectural_goals: |4
+            Domain-Driven Design (DDD) architecture aims to:
+            - Keep business logic pure and isolated in the domain layer
+            - Prevent infrastructure concerns from leaking into business logic
+            - Enable the domain model to evolve independently of technical implementation
+            - Make the business logic testable without external dependencies
+        principles:
+            - Domain layer has ZERO dependencies - it's the purest business logic
+            - Application layer orchestrates domain objects and use cases
+            - Infrastructure layer implements technical details (databases, APIs, messaging)
+            - "Dependencies flow inward: cmd → infra/app → domain (never outward)"
+            - Domain should never import from app or infra layers
+        refactoring_guidance: |4
+            To refactor toward DDD compliance:
 
-        1. **Move business logic to domain layer**: Extract pure business rules, validation, and domain services to internal/domain
-        2. **Define domain interfaces in domain layer**: If domain needs external capabilities (repositories, messaging), define interfaces in domain, implement in infra
-        3. **Use dependency injection**: Pass infrastructure implementations to application layer through constructors, never import directly
-        4. **Extract use cases to app layer**: Orchestration logic that coordinates multiple domain objects belongs in internal/app
-        5. **Keep domain pure**: Domain should only import Go stdlib, never other project packages
+            1. **Move business logic to domain layer**: Extract pure business rules, validation, and domain services to internal/domain
+            2. **Define domain interfaces in domain layer**: If domain needs external capabilities (repositories, messaging), define interfaces in domain, implement in infra
+            3. **Use dependency injection**: Pass infrastructure implementations to application layer through constructors, never import directly
+            4. **Extract use cases to app layer**: Orchestration logic that coordinates multiple domain objects belongs in internal/app
+            5. **Keep domain pure**: Domain should only import Go stdlib, never other project packages
 
-        Example refactoring:
-        - Before: internal/domain/user.go imports internal/infra/database
-        - After: internal/domain/user.go defines UserRepository interface, internal/infra/postgres.go implements it
-structure:
-    required_directories:
-        cmd: Application entry points
-        internal/app: Application services, use cases, orchestration
-        internal/domain: Core business logic, entities, value objects, domain services
-        internal/infra: Infrastructure implementations (DB, external APIs, messaging)
-    allow_other_directories: true
-rules:
-    directories_import:
-        cmd:
-            - internal/app
-            - internal/infra
-        internal/app:
-            - internal/domain
-        internal/domain: []
-        internal/infra:
-            - internal/domain
-    detect_unused: true
-    shared_external_imports:
-        detect: true
-        mode: warn
-        exclusions:
-            - fmt
-            - strings
-            - errors
-            - time
-            - context
-        exclusion_patterns:
-            - encoding/*
-    test_files:
-        lint: true
-        exempt_imports:
-            - testing
-            - github.com/stretchr/testify/assert
-            - github.com/stretchr/testify/require
-            - github.com/stretchr/testify/mock
+            Example refactoring:
+            - Before: internal/domain/user.go imports internal/infra/database
+            - After: internal/domain/user.go defines UserRepository interface, internal/infra/postgres.go implements it
+        coverage_guidance: |4
+            **Test Coverage Philosophy for DDD:**
+
+            Coverage thresholds reflect the criticality of each layer:
+            - **internal/domain (90%)**: The highest bar. Domain logic is pure, side-effect-free, and easiest to test. Comprehensive unit tests for all business rules, validation, and domain services.
+            - **internal/app (80%)**: High coverage for use cases and orchestration. Test application services with mocked domain and infrastructure dependencies.
+            - **internal/infra (60%)**: Moderate coverage. Focus on adapter logic, not external services. Use integration tests for critical paths, mock external APIs.
+            - **cmd (40%)**: Basic coverage for CLI entry points. Ensure flags are parsed correctly and main workflows are wired properly.
+
+            **Why test coverage matters in DDD:**
+            - Domain tests serve as executable specifications of business rules
+            - High domain coverage ensures business logic remains correct during refactoring
+            - Application layer tests verify use case orchestration without infrastructure dependencies
+            - Infrastructure tests validate adapters correctly implement domain interfaces
+
+            **What to test:**
+            - Domain: All business rules, validation logic, domain services, value object creation
+            - Application: Use case orchestration, service coordination, transaction boundaries
+            - Infrastructure: Adapter implementations, data mapping, external API integration logic
+            - CLI: Flag parsing, command routing, basic end-to-end workflows
+        blackbox_testing_guidance: |4
+            **Why Blackbox Testing Matters:**
+
+            Blackbox tests (using 'package foo_test' instead of 'package foo') verify behavior through the public API, making them more resilient to internal refactoring.
+
+            - Tests should verify behavior through the public interface, not internal implementation details
+            - If you can't test adequately through the public API, it may indicate design issues with your component's interface
+            - Blackbox tests encourage better API design and reduce coupling between tests and implementation
+            - When internals change, blackbox tests remain valid as long as the public contract is maintained
+
+            **This is a Go best practice:** The standard library and most Go projects use blackbox tests (package foo_test) for package-level testing.
+
+            **How to convert to blackbox testing:**
+            1. Change package declaration from 'package foo' to 'package foo_test' in test files
+            2. Import your package: import "your-module/path/to/foo"
+            3. Test only through exported (capitalized) functions, types, and methods
+            4. If you can't test adequately through the public API, consider whether your API design needs improvement
+
+# Example overrides:
+#overrides:
+#  structure:
+#    required_directories:
+#      scripts: "Build and deployment scripts"
+#  rules:
+#    directories_import:
+#      scripts: ["pkg"]
+#  error_prompt:
+#    architectural_goals: |
+#      Custom goals for your project...

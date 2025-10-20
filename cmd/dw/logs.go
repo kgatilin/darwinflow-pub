@@ -10,27 +10,29 @@ import (
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
-type logsOptions struct {
-	limit        int
-	sessionLimit int
-	query        string
-	sessionID    string
-	ordered      bool
-	format       string
-	help         bool
+// LogsOptions contains options for the logs command
+type LogsOptions struct {
+	Limit        int
+	SessionLimit int
+	Query        string
+	SessionID    string
+	Ordered      bool
+	Format       string
+	Help         bool
 }
 
-func parseLogsFlags(args []string) (*logsOptions, error) {
+// ParseLogsFlags parses command line flags for the logs command
+func ParseLogsFlags(args []string) (*LogsOptions, error) {
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
-	opts := &logsOptions{}
+	opts := &LogsOptions{}
 
-	fs.IntVar(&opts.limit, "limit", 20, "Number of most recent logs to display")
-	fs.IntVar(&opts.sessionLimit, "session-limit", 0, "Limit by number of sessions instead of logs (0 = use --limit)")
-	fs.StringVar(&opts.query, "query", "", "Arbitrary SQL query to execute")
-	fs.StringVar(&opts.sessionID, "session-id", "", "Filter logs by session ID")
-	fs.BoolVar(&opts.ordered, "ordered", false, "Order by timestamp ASC and session ID (chronological)")
-	fs.StringVar(&opts.format, "format", "text", "Output format: text, csv, or markdown")
-	fs.BoolVar(&opts.help, "help", false, "Show help and database schema")
+	fs.IntVar(&opts.Limit, "limit", 20, "Number of most recent logs to display")
+	fs.IntVar(&opts.SessionLimit, "session-limit", 0, "Limit by number of sessions instead of logs (0 = use --limit)")
+	fs.StringVar(&opts.Query, "query", "", "Arbitrary SQL query to execute")
+	fs.StringVar(&opts.SessionID, "session-id", "", "Filter logs by session ID")
+	fs.BoolVar(&opts.Ordered, "ordered", false, "Order by timestamp ASC and session ID (chronological)")
+	fs.StringVar(&opts.Format, "format", "text", "Output format: text, csv, or markdown")
+	fs.BoolVar(&opts.Help, "help", false, "Show help and database schema")
 
 	fs.Usage = printLogsUsage
 
@@ -42,13 +44,13 @@ func parseLogsFlags(args []string) (*logsOptions, error) {
 }
 
 func handleLogs(args []string) {
-	opts, err := parseLogsFlags(args)
+	opts, err := ParseLogsFlags(args)
 	if err != nil {
 		os.Exit(1)
 	}
 
 	// Show help if requested
-	if opts.help {
+	if opts.Help {
 		printLogsHelp()
 		return
 	}
@@ -74,8 +76,8 @@ func handleLogs(args []string) {
 	ctx := context.Background()
 
 	// Handle arbitrary SQL query
-	if opts.query != "" {
-		if err := executeRawQuery(ctx, service, opts.query); err != nil {
+	if opts.Query != "" {
+		if err := ExecuteRawQuery(ctx, service, opts.Query); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -83,7 +85,7 @@ func handleLogs(args []string) {
 	}
 
 	// Handle standard log listing
-	if err := listLogs(ctx, service, opts); err != nil {
+	if err := ListLogs(ctx, service, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -162,8 +164,9 @@ func printLogsHelp() {
 	fmt.Println()
 }
 
-func listLogs(ctx context.Context, service *app.LogsService, opts *logsOptions) error {
-	records, err := service.ListRecentLogs(ctx, opts.limit, opts.sessionLimit, opts.sessionID, opts.ordered)
+// ListLogs displays logs based on the provided options
+func ListLogs(ctx context.Context, service *app.LogsService, opts *LogsOptions) error {
+	records, err := service.ListRecentLogs(ctx, opts.Limit, opts.SessionLimit, opts.SessionID, opts.Ordered)
 	if err != nil {
 		return err
 	}
@@ -175,26 +178,26 @@ func listLogs(ctx context.Context, service *app.LogsService, opts *logsOptions) 
 	}
 
 	// Handle CSV format
-	if opts.format == "csv" {
+	if opts.Format == "csv" {
 		return app.FormatLogsAsCSV(os.Stdout, records)
 	}
 
 	// Handle Markdown format
-	if opts.format == "markdown" {
+	if opts.Format == "markdown" {
 		return app.FormatLogsAsMarkdown(os.Stdout, records)
 	}
 
 	// Validate format
-	if opts.format != "text" && opts.format != "" {
-		fmt.Fprintf(os.Stderr, "Error: Invalid format '%s'. Valid formats: text, csv, markdown\n", opts.format)
+	if opts.Format != "text" && opts.Format != "" {
+		fmt.Fprintf(os.Stderr, "Error: Invalid format '%s'. Valid formats: text, csv, markdown\n", opts.Format)
 		os.Exit(1)
 	}
 
 	// Display logs in text format
-	if opts.sessionID != "" {
-		fmt.Printf("Showing %d logs for session %s:\n\n", len(records), opts.sessionID)
-	} else if opts.sessionLimit > 0 {
-		fmt.Printf("Showing %d logs from %d most recent sessions:\n\n", len(records), opts.sessionLimit)
+	if opts.SessionID != "" {
+		fmt.Printf("Showing %d logs for session %s:\n\n", len(records), opts.SessionID)
+	} else if opts.SessionLimit > 0 {
+		fmt.Printf("Showing %d logs from %d most recent sessions:\n\n", len(records), opts.SessionLimit)
 	} else {
 		fmt.Printf("Showing %d most recent logs:\n\n", len(records))
 	}
@@ -206,7 +209,8 @@ func listLogs(ctx context.Context, service *app.LogsService, opts *logsOptions) 
 	return nil
 }
 
-func executeRawQuery(ctx context.Context, service *app.LogsService, query string) error {
+// ExecuteRawQuery executes a raw SQL query and displays the results
+func ExecuteRawQuery(ctx context.Context, service *app.LogsService, query string) error {
 	result, err := service.ExecuteRawQuery(ctx, query)
 	if err != nil {
 		return err

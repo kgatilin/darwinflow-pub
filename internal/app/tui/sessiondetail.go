@@ -193,7 +193,7 @@ func (m SessionDetailModel) renderContent() string {
 
 	// Display token count with formatting
 	if m.session.TokenCount > 0 {
-		tokenCountStr := formatTokenCount(m.session.TokenCount)
+		tokenCountStr := FormatTokenCount(m.session.TokenCount)
 		b.WriteString(fmt.Sprintf("  Log Size: %s\n", tokenCountStr))
 	}
 	b.WriteString("\n")
@@ -231,8 +231,8 @@ func max(a, b int) int {
 	return b
 }
 
-// formatTokenCount formats a token count with thousands separator and unit
-func formatTokenCount(count int) string {
+// FormatTokenCount formats a token count with thousands separator and unit
+func FormatTokenCount(count int) string {
 	// Format with thousands separator
 	countStr := fmt.Sprintf("%d", count)
 	if count >= 1000 {

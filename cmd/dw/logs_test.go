@@ -1,153 +1,107 @@
-package main
+package main_test
 
 import (
 	"context"
 	"path/filepath"
 	"testing"
 
+	main "github.com/kgatilin/darwinflow-pub/cmd/dw"
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
-
-func TestRepeatString(t *testing.T) {
-	tests := []struct {
-		name   string
-		s      string
-		count  int
-		want   string
-	}{
-		{
-			name:  "repeat dash 5 times",
-			s:     "-",
-			count: 5,
-			want:  "-----",
-		},
-		{
-			name:  "repeat empty string",
-			s:     "",
-			count: 10,
-			want:  "",
-		},
-		{
-			name:  "repeat zero times",
-			s:     "x",
-			count: 0,
-			want:  "",
-		},
-		{
-			name:  "repeat multi-char string",
-			s:     "ab",
-			count: 3,
-			want:  "ababab",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := repeatString(tt.s, tt.count)
-			if got != tt.want {
-				t.Errorf("repeatString() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
 
 func TestParseLogsFlags(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    []string
-		want    logsOptions
+		want    main.LogsOptions
 		wantErr bool
 	}{
 		{
 			name: "default flags",
 			args: []string{},
-			want: logsOptions{limit: 20, sessionLimit: 0, query: "", sessionID: "", ordered: false, format: "text", help: false},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 0, Query: "", SessionID: "", Ordered: false, Format: "text", Help: false},
 		},
 		{
 			name: "custom limit",
 			args: []string{"--limit", "50"},
-			want: logsOptions{limit: 50, sessionLimit: 0, query: "", sessionID: "", ordered: false, format: "text", help: false},
+			want: main.LogsOptions{Limit: 50, SessionLimit: 0, Query: "", SessionID: "", Ordered: false, Format: "text", Help: false},
 		},
 		{
 			name: "custom session-limit",
 			args: []string{"--session-limit", "3"},
-			want: logsOptions{limit: 20, sessionLimit: 3, query: "", sessionID: "", ordered: false, format: "text", help: false},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 3, Query: "", SessionID: "", Ordered: false, Format: "text", Help: false},
 		},
 		{
 			name: "with query",
 			args: []string{"--query", "SELECT * FROM events"},
-			want: logsOptions{limit: 20, sessionLimit: 0, query: "SELECT * FROM events", sessionID: "", ordered: false, format: "text", help: false},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 0, Query: "SELECT * FROM events", SessionID: "", Ordered: false, Format: "text", Help: false},
 		},
 		{
 			name: "with session-id",
 			args: []string{"--session-id", "abc123"},
-			want: logsOptions{limit: 20, sessionLimit: 0, query: "", sessionID: "abc123", ordered: false, format: "text", help: false},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 0, Query: "", SessionID: "abc123", Ordered: false, Format: "text", Help: false},
 		},
 		{
 			name: "with ordered",
 			args: []string{"--ordered"},
-			want: logsOptions{limit: 20, sessionLimit: 0, query: "", sessionID: "", ordered: true, format: "text", help: false},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 0, Query: "", SessionID: "", Ordered: true, Format: "text", Help: false},
 		},
 		{
 			name: "help flag",
 			args: []string{"--help"},
-			want: logsOptions{limit: 20, sessionLimit: 0, query: "", sessionID: "", ordered: false, format: "text", help: true},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 0, Query: "", SessionID: "", Ordered: false, Format: "text", Help: true},
 		},
 		{
 			name: "multiple flags",
 			args: []string{"--limit", "100", "--query", "SELECT COUNT(*) FROM events"},
-			want: logsOptions{limit: 100, sessionLimit: 0, query: "SELECT COUNT(*) FROM events", sessionID: "", ordered: false, format: "text", help: false},
+			want: main.LogsOptions{Limit: 100, SessionLimit: 0, Query: "SELECT COUNT(*) FROM events", SessionID: "", Ordered: false, Format: "text", Help: false},
 		},
 		{
 			name: "session-id with ordered",
 			args: []string{"--session-id", "xyz789", "--ordered"},
-			want: logsOptions{limit: 20, sessionLimit: 0, query: "", sessionID: "xyz789", ordered: true, format: "text", help: false},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 0, Query: "", SessionID: "xyz789", Ordered: true, Format: "text", Help: false},
 		},
 		{
 			name: "session-limit with format markdown",
 			args: []string{"--session-limit", "5", "--format", "markdown"},
-			want: logsOptions{limit: 20, sessionLimit: 5, query: "", sessionID: "", ordered: false, format: "markdown", help: false},
+			want: main.LogsOptions{Limit: 20, SessionLimit: 5, Query: "", SessionID: "", Ordered: false, Format: "markdown", Help: false},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseLogsFlags(tt.args)
+			got, err := main.ParseLogsFlags(tt.args)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseLogsFlags() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseLogsFlags() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if err == nil {
-				if got.limit != tt.want.limit {
-					t.Errorf("limit = %d, want %d", got.limit, tt.want.limit)
+				if got.Limit != tt.want.Limit {
+					t.Errorf("Limit = %d, want %d", got.Limit, tt.want.Limit)
 				}
-				if got.sessionLimit != tt.want.sessionLimit {
-					t.Errorf("sessionLimit = %d, want %d", got.sessionLimit, tt.want.sessionLimit)
+				if got.SessionLimit != tt.want.SessionLimit {
+					t.Errorf("SessionLimit = %d, want %d", got.SessionLimit, tt.want.SessionLimit)
 				}
-				if got.query != tt.want.query {
-					t.Errorf("query = %q, want %q", got.query, tt.want.query)
+				if got.Query != tt.want.Query {
+					t.Errorf("Query = %q, want %q", got.Query, tt.want.Query)
 				}
-				if got.sessionID != tt.want.sessionID {
-					t.Errorf("sessionID = %q, want %q", got.sessionID, tt.want.sessionID)
+				if got.SessionID != tt.want.SessionID {
+					t.Errorf("SessionID = %q, want %q", got.SessionID, tt.want.SessionID)
 				}
-				if got.ordered != tt.want.ordered {
-					t.Errorf("ordered = %v, want %v", got.ordered, tt.want.ordered)
+				if got.Ordered != tt.want.Ordered {
+					t.Errorf("Ordered = %v, want %v", got.Ordered, tt.want.Ordered)
 				}
-				if got.format != tt.want.format {
-					t.Errorf("format = %q, want %q", got.format, tt.want.format)
+				if got.Format != tt.want.Format {
+					t.Errorf("Format = %q, want %q", got.Format, tt.want.Format)
 				}
-				if got.help != tt.want.help {
-					t.Errorf("help = %v, want %v", got.help, tt.want.help)
+				if got.Help != tt.want.Help {
+					t.Errorf("Help = %v, want %v", got.Help, tt.want.Help)
 				}
 			}
 		})
 	}
 }
-
-// Note: Tests for queryLogs, formatLogRecord, and formatQueryValue have been
-// removed as these functions are now in the app layer (internal/app/logs.go).
-// Tests for those functions should be added to internal/app/logs_test.go.
 
 func TestListLogs_EmptyDB(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -164,12 +118,12 @@ func TestListLogs_EmptyDB(t *testing.T) {
 	}
 	defer store.Close()
 
-	// Test listLogs with empty database - should not error
+	// Test ListLogs with empty database - should not error
 	service := app.NewLogsService(store, store)
-	opts := &logsOptions{limit: 10, sessionLimit: 0}
-	err = listLogs(ctx, service, opts)
+	opts := &main.LogsOptions{Limit: 10, SessionLimit: 0}
+	err = main.ListLogs(ctx, service, opts)
 	if err != nil {
-		t.Errorf("listLogs with empty DB failed: %v", err)
+		t.Errorf("ListLogs with empty DB failed: %v", err)
 	}
 }
 
@@ -188,11 +142,11 @@ func TestExecuteRawQuery_Success(t *testing.T) {
 	}
 	defer store.Close()
 
-	// Test executeRawQuery with valid query
+	// Test ExecuteRawQuery with valid query
 	service := app.NewLogsService(store, store)
-	err = executeRawQuery(ctx, service, "SELECT COUNT(*) FROM events")
+	err = main.ExecuteRawQuery(ctx, service, "SELECT COUNT(*) FROM events")
 	if err != nil {
-		t.Errorf("executeRawQuery failed: %v", err)
+		t.Errorf("ExecuteRawQuery failed: %v", err)
 	}
 }
 
@@ -213,22 +167,8 @@ func TestExecuteRawQuery_InvalidSQL(t *testing.T) {
 
 	// Test with invalid SQL
 	service := app.NewLogsService(store, store)
-	err = executeRawQuery(ctx, service, "INVALID SQL QUERY")
+	err = main.ExecuteRawQuery(ctx, service, "INVALID SQL QUERY")
 	if err == nil {
 		t.Error("Expected error for invalid SQL, got nil")
 	}
-}
-
-// Helper function
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
-}
-
-func containsMiddle(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -1,6 +1,10 @@
-package tui
+package tui_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kgatilin/darwinflow-pub/internal/app/tui"
+)
 
 func TestFormatTokenCount(t *testing.T) {
 	tests := []struct {
@@ -42,9 +46,9 @@ func TestFormatTokenCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := formatTokenCount(tt.count)
+			got := tui.FormatTokenCount(tt.count)
 			if got != tt.want {
-				t.Errorf("formatTokenCount(%d) = %q, want %q", tt.count, got, tt.want)
+				t.Errorf("FormatTokenCount(%d) = %q, want %q", tt.count, got, tt.want)
 			}
 		})
 	}

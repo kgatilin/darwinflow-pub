@@ -103,7 +103,7 @@ Plugins can provide custom CLI tools via the `IToolProvider` capability:
 ### Architecture Documentation
 
 For detailed architecture and API information, see:
-- @docs/arch-generated.md - Complete dependency graph with method-level details and public APIs
+- @docs/arch-index.md - Architecture summary and package details with commands to retrieve full info on packages
 
 ### Current Implementation Status
 
@@ -174,14 +174,13 @@ For detailed architecture and API information, see:
 
 When working on this project:
 1. Understand the 3-layer architecture (see below)
-2. Check @docs/arch-generated.md to see current package dependencies
-3. Check @docs/public-api-generated.md to see what's exported
-4. Follow the architecture guidelines strictly
-5. Write tests for new functionality (aim for 70-80% coverage)
-6. **Update documentation** (README.md and CLAUDE.md) when adding features
-7. Run tests and linter before committing
-8. Regenerate architecture docs if needed (`go-arch-lint docs`)
-9. **Commit after each iteration** - After completing each logical task/iteration, commit all changes with a concise, informative commit message (e.g., "add session refresh feature" rather than long explanations)
+2. Check @docs/arch-index.md to see current packages and dependencies
+3. Follow the architecture guidelines strictly
+4. Write tests for new functionality (aim for 70-80% coverage)
+5. **Update documentation** (README.md and CLAUDE.md) when adding features
+6. Run tests and linter before committing
+7. Regenerate architecture docs if needed (`go-arch-lint docs`)
+8. **Commit after each iteration** - After completing each logical task/iteration, commit all changes with a concise, informative commit message (e.g., "add session refresh feature" rather than long explanations)
 
 **Working with the Plugin System**:
 - New entity types should implement capability interfaces (IExtensible, ITrackable, etc.)

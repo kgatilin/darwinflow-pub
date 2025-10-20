@@ -1,4 +1,4 @@
-package infra
+package infra_test
 
 import (
 	"context"
@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
 func TestSQLiteEventRepository_SaveAnalysis(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	repo, err := NewSQLiteEventRepository(dbPath)
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create repository: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestSQLiteEventRepository_GetUnanalyzedSessionIDs(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	repo, err := NewSQLiteEventRepository(dbPath)
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create repository: %v", err)
 	}
@@ -131,7 +132,7 @@ func TestSQLiteEventRepository_GetAllAnalyses(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	repo, err := NewSQLiteEventRepository(dbPath)
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create repository: %v", err)
 	}
@@ -188,7 +189,7 @@ func TestSQLiteEventRepository_GetAnalysisBySessionID_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	repo, err := NewSQLiteEventRepository(dbPath)
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create repository: %v", err)
 	}

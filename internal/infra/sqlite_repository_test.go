@@ -1,4 +1,4 @@
-package infra
+package infra_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kgatilin/darwinflow-pub/internal/infra"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -15,7 +16,7 @@ func TestSQLiteEventRepository_EmptyDatabase(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create empty database
-	store, err := NewSQLiteEventRepository(dbPath)
+	store, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestSQLiteEventRepository_WithData(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create database with test data
-	store, err := NewSQLiteEventRepository(dbPath)
+	store, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
 	}
@@ -162,7 +163,7 @@ func TestSQLiteEventRepository_ExecuteRawQuery_SelectQuery(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create database with test data
-	store, err := NewSQLiteEventRepository(dbPath)
+	store, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestSQLiteEventRepository_ExecuteRawQuery_InvalidQuery(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create database
-	store, err := NewSQLiteEventRepository(dbPath)
+	store, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
 	}
@@ -246,7 +247,7 @@ func TestSQLiteEventRepository_TimestampFormatting(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create database with test data
-	store, err := NewSQLiteEventRepository(dbPath)
+	store, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
 	}
@@ -307,7 +308,7 @@ func TestSQLiteEventRepository_DatabaseSchema(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create database
-	store, err := NewSQLiteEventRepository(dbPath)
+	store, err := infra.NewSQLiteEventRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
 	}
