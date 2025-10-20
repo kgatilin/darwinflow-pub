@@ -21,10 +21,6 @@ var (
 				PaddingBottom(1).
 				MarginBottom(1).
 				Align(lipgloss.Left)
-
-	viewerContentStyle = lipgloss.NewStyle().
-				Padding(1).
-				Align(lipgloss.Left)
 )
 
 // AnalysisViewerModel displays the full analysis in a scrollable view

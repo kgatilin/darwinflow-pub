@@ -176,16 +176,6 @@ func adaptEntityQuery(domainQuery domain.EntityQuery) pluginsdk.EntityQuery {
 	}
 }
 
-// adaptPluginInfo converts SDK PluginInfo to domain PluginInfo
-func adaptPluginInfo(sdkInfo pluginsdk.PluginInfo) domain.PluginInfo {
-	return domain.PluginInfo{
-		Name:        sdkInfo.Name,
-		Version:     sdkInfo.Version,
-		Description: sdkInfo.Description,
-		IsCore:      sdkInfo.IsCore,
-	}
-}
-
 // adaptEntityTypeInfo converts SDK EntityTypeInfo to domain EntityTypeInfo
 func adaptEntityTypeInfo(sdkInfo pluginsdk.EntityTypeInfo) domain.EntityTypeInfo {
 	return domain.EntityTypeInfo{

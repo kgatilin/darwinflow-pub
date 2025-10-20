@@ -24,10 +24,6 @@ var (
 				Foreground(lipgloss.Color("105")).
 				Align(lipgloss.Left)
 
-	detailContentStyle = lipgloss.NewStyle().
-				MarginLeft(2).
-				Align(lipgloss.Left)
-
 	actionStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("42")).
 			Bold(true)
@@ -214,7 +210,7 @@ func (m SessionDetailModel) renderContent() string {
 			if len(preview) > 300 {
 				preview = preview[:300] + "..."
 			}
-			b.WriteString(fmt.Sprintf("\n     Preview:\n"))
+			b.WriteString("\n     Preview:\n")
 			b.WriteString(previewStyle.Render(preview) + "\n")
 		}
 	} else {

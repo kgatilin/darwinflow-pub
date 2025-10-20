@@ -20,9 +20,6 @@ var (
 			Padding(1).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("196"))
-	successStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("42")).
-			Bold(true)
 )
 
 // AppModel is the main orchestrator for the TUI

@@ -14,13 +14,12 @@ import (
 
 // LogViewerModel displays the session log in markdown format
 type LogViewerModel struct {
-	sessionID    string
-	logMarkdown  string
-	viewport     viewport.Model
-	width        int
-	height       int
-	ready        bool
-	renderError  error
+	sessionID   string
+	logMarkdown string
+	viewport    viewport.Model
+	width       int
+	height      int
+	ready       bool
 }
 
 // NewLogViewerModel creates a new log viewer
