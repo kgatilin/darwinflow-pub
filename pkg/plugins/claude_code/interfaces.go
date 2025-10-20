@@ -90,7 +90,8 @@ type HookInputData struct {
 	ToolInput      map[string]interface{}
 	ToolOutput     interface{}
 	Error          interface{}
-	UserMessage    string
+	UserMessage    string // Legacy field for user messages
+	Prompt         string // Alternative field for user messages (Claude Code uses this)
 }
 
 // HookInputParser parses hook input from stdin

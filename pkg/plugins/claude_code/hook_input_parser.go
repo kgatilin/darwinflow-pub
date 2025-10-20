@@ -32,6 +32,11 @@ func newHookInputParser() HookInputParser {
 	return &hookInputParser{}
 }
 
+// NewHookInputParser creates a new hook input parser (exported for testing)
+func NewHookInputParser() HookInputParser {
+	return newHookInputParser()
+}
+
 // Parse parses hook input from stdin data and returns plugin's HookInputData.
 // Extracts all fields from Claude Code hook input for event conversion.
 func (p *hookInputParser) Parse(data []byte) (*HookInputData, error) {
@@ -52,6 +57,7 @@ func (p *hookInputParser) Parse(data []byte) (*HookInputData, error) {
 		ToolOutput:     input.ToolOutput,
 		Error:          input.Error,
 		UserMessage:    input.UserMessage,
+		Prompt:         input.Prompt,
 	}, nil
 }
 
@@ -120,7 +126,10 @@ func HookInputToEvent(hookData *HookInputData) *pluginsdk.Event {
 	if hookData.Error != nil {
 		event.Payload["error"] = hookData.Error
 	}
-	if hookData.UserMessage != "" {
+	// Check both Prompt and UserMessage fields (Prompt takes precedence as it's the current field name)
+	if hookData.Prompt != "" {
+		event.Payload["message"] = hookData.Prompt
+	} else if hookData.UserMessage != "" {
 		event.Payload["message"] = hookData.UserMessage
 	}
 
