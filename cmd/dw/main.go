@@ -23,21 +23,13 @@ func main() {
 		return
 	}
 
-	// Initialize app (use default DB path, can be overridden by command flags)
+	// Initialize app (includes plugin registration)
+	// Use default DB path, can be overridden by command flags
 	services, err := InitializeApp(app.DefaultDBPath, "", false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing app: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Create registries
-	pluginRegistry := app.NewPluginRegistry(services.Logger)
-	if err := RegisterPlugins(pluginRegistry, services); err != nil {
-		fmt.Fprintf(os.Stderr, "Error registering plugins: %v\n", err)
-		os.Exit(1)
-	}
-
-	commandRegistry := app.NewCommandRegistry(pluginRegistry, services.Logger)
 
 	ctx := context.Background()
 
@@ -58,7 +50,7 @@ func main() {
 	case "claude":
 		// Backward compatibility: "dw claude <command>" -> "dw claude-code <command>"
 		if len(args) > 0 {
-			if err := commandRegistry.ExecuteCommand(ctx, "claude-code", args[0], args[1:]); err != nil {
+			if err := services.CommandRegistry.ExecuteCommand(ctx, "claude-code", args[0], args[1:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error executing claude-code command: %v\n", err)
 				os.Exit(1)
 			}
@@ -71,12 +63,12 @@ func main() {
 		// Try plugin commands: dw <plugin-name> <command> [args]
 		if len(args) > 0 {
 			// Try as: dw <plugin> <command> [args]
-			if err := commandRegistry.ExecuteCommand(ctx, command, args[0], args[1:]); err == nil {
+			if err := services.CommandRegistry.ExecuteCommand(ctx, command, args[0], args[1:]); err == nil {
 				return
 			}
 		}
 		// Try as: dw <command> (single-word plugin command)
-		if err := commandRegistry.ExecuteCommand(ctx, command, "", args); err == nil {
+		if err := services.CommandRegistry.ExecuteCommand(ctx, command, "", args); err == nil {
 			return
 		}
 		// Unknown command

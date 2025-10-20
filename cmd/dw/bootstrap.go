@@ -6,20 +6,22 @@ import (
 	"path/filepath"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
-	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
-// AppServices contains all app-layer services needed by commands
+// AppServices contains all app-layer services needed by commands.
+// Note: This struct only uses app-layer types, no domain or plugin imports.
 type AppServices struct {
+	PluginRegistry  *app.PluginRegistry
+	CommandRegistry *app.CommandRegistry
+	ToolRegistry    *app.ToolRegistry
 	LogsService     *app.LogsService
 	AnalysisService *app.AnalysisService
 	SetupService    *app.SetupService
 	ConfigLoader    app.ConfigLoader
 	Logger          app.Logger
-	Config          *domain.Config
 	DBPath          string
+	WorkingDir      string
 }
 
 // InitializeApp creates all infrastructure and app services
@@ -44,13 +46,13 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	// 4. Load config
+	// 4. Load config (keep internally, cmd doesn't need it)
 	configLoader := infra.NewConfigLoader(logger)
 	config, err := configLoader.LoadConfig(configPath)
 	if err != nil {
-		// Non-fatal - use default config
+		// Non-fatal - load default config via config loader
 		logger.Warn("Failed to load config, using defaults: %v", err)
-		config = domain.DefaultConfig()
+		config, _ = configLoader.LoadConfig("") // Will return default
 	}
 
 	// 5. Create app services
@@ -69,64 +71,69 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		setupService = app.NewSetupService(repo, hookConfigManager)
 	}
 
-	return &AppServices{
-		LogsService:     logsService,
-		AnalysisService: analysisService,
-		SetupService:    setupService,
-		ConfigLoader:    configLoader,
-		Logger:          logger,
-		Config:          config,
-		DBPath:          dbPath,
-	}, nil
-}
+	// 7. Get working directory
+	workingDir, err := os.Getwd()
+	if err != nil {
+		workingDir = "."
+	}
 
-// RegisterPlugins registers all built-in plugins
-func RegisterPlugins(registry *app.PluginRegistry, services *AppServices) error {
-	// Create claude command handler for plugin commands
+	// 8. Create plugin registry
+	pluginRegistry := app.NewPluginRegistry(logger)
+
+	// 9. Create command handler for plugin commands
 	var handler *app.ClaudeCommandHandler
-
-	// Only create handler if we have all required services
-	if services.SetupService != nil {
+	if setupService != nil {
 		transcriptParser := infra.NewTranscriptParser()
 		contextDetector := infra.NewContextDetector()
 		hookInputParser := infra.NewHookInputParserAdapter()
 		eventMapper := &app.EventMapper{}
 
 		loggerService := app.NewLoggerService(
-			// Repository will be accessed through services
-			nil, // Will be set up per-command as needed
+			nil, // Repository accessed through services
 			transcriptParser,
 			contextDetector,
 			infra.NormalizeContent,
 		)
 
 		handler = app.NewClaudeCommandHandler(
-			services.SetupService,
+			setupService,
 			loggerService,
-			services.AnalysisService,
+			analysisService,
 			hookInputParser,
 			eventMapper,
-			services.ConfigLoader,
-			services.Logger,
+			configLoader,
+			logger,
 			os.Stdout,
 		)
 	}
 
-	// Register claude_code plugin
-	claudePlugin := claude_code.NewClaudeCodePlugin(
-		services.AnalysisService,
-		services.LogsService,
-		services.Logger,
-		services.SetupService,
+	// 10. Register built-in plugins (app layer handles plugin imports)
+	if err := app.RegisterBuiltInPlugins(
+		pluginRegistry,
+		analysisService,
+		logsService,
+		logger,
+		setupService,
 		handler,
-		services.DBPath,
-	)
-
-	if err := registry.RegisterPlugin(claudePlugin); err != nil {
-		return fmt.Errorf("failed to register claude-code plugin: %w", err)
+		dbPath,
+	); err != nil {
+		return nil, fmt.Errorf("failed to register built-in plugins: %w", err)
 	}
 
-	// Future: Load external plugins from ~/.darwinflow/plugins/
+	// 11. Create command and tool registries
+	commandRegistry := app.NewCommandRegistry(pluginRegistry, logger)
+	toolRegistry := app.NewToolRegistry(pluginRegistry, logger)
 
-	return nil
+	return &AppServices{
+		PluginRegistry:  pluginRegistry,
+		CommandRegistry: commandRegistry,
+		ToolRegistry:    toolRegistry,
+		LogsService:     logsService,
+		AnalysisService: analysisService,
+		SetupService:    setupService,
+		ConfigLoader:    configLoader,
+		Logger:          logger,
+		DBPath:          dbPath,
+		WorkingDir:      workingDir,
+	}, nil
 }
