@@ -29,6 +29,12 @@ func main() {
 		return
 	}
 
+	// Handle ui command specially - it has its own initialization with custom flags
+	if command == "ui" {
+		uiCommand(args)
+		return
+	}
+
 	// Initialize app (includes plugin registration)
 	// Use default DB path, can be overridden by command flags
 	services, err := InitializeApp(app.DefaultDBPath, "", false)
@@ -45,8 +51,6 @@ func main() {
 		handleLogs(args)
 	case "analyze":
 		analyzeCmd(args)
-	case "ui":
-		uiCommand(args)
 	case "refresh":
 		handleRefresh(args)
 	case "config":
