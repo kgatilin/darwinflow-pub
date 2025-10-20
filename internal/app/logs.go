@@ -346,10 +346,6 @@ func FormatLogsAsMarkdown(w io.Writer, records []*LogRecord) error {
 			duration := record.Timestamp.Sub(session.StartTime)
 			fmt.Fprintf(w, "%s`%s` *(+%s)*\n\n", prefix, record.EventType, duration.Round(time.Millisecond))
 
-			// Event ID
-			fmt.Fprintf(w, "- **Event ID**: `%s`\n", record.ID)
-			fmt.Fprintln(w)
-
 			// Payload - expanded and formatted
 			fmt.Fprintln(w, "**Details**:")
 			fmt.Fprintln(w)
@@ -365,15 +361,6 @@ func FormatLogsAsMarkdown(w io.Writer, records []*LogRecord) error {
 				fmt.Fprintf(w, "```\n%s\n```\n", string(record.Payload))
 			}
 			fmt.Fprintln(w)
-
-			// Content Summary - skip for chat messages to avoid duplication with message field
-			isChatMessage := record.EventType == "chat.message.user" || record.EventType == "chat.message.assistant"
-			if record.Content != "" && !isChatMessage {
-				fmt.Fprintln(w, "**Content Summary**:")
-				fmt.Fprintln(w)
-				fmt.Fprintf(w, "```\n%s\n```\n", record.Content)
-				fmt.Fprintln(w)
-			}
 		}
 
 		fmt.Fprintln(w, "---")
@@ -448,6 +435,11 @@ func sortSessionsByTime(sessions []*SessionGroup) {
 
 // formatMarkdownPayload recursively formats a payload structure as Markdown
 func formatMarkdownPayload(w io.Writer, data interface{}, depth int) error {
+	return formatMarkdownPayloadWithContext(w, data, depth, nil)
+}
+
+// formatMarkdownPayloadWithContext formats payload with awareness of parent context (e.g., tool name)
+func formatMarkdownPayloadWithContext(w io.Writer, data interface{}, depth int, ctx map[string]interface{}) error {
 	indent := ""
 	for i := 0; i < depth; i++ {
 		indent += "  "
@@ -455,33 +447,50 @@ func formatMarkdownPayload(w io.Writer, data interface{}, depth int) error {
 
 	switch v := data.(type) {
 	case map[string]interface{}:
+		// Extract tool name for context-aware formatting
+		toolName := ""
+		if tool, ok := v["tool"].(string); ok {
+			toolName = tool
+		}
+		if ctx != nil {
+			if tool, ok := ctx["tool"].(string); ok {
+				toolName = tool
+			}
+		}
+
 		for key, value := range v {
-			// Skip the context field as it's not very useful in markdown
-			if key == "context" {
+			// Skip metadata and context fields
+			if key == "context" || key == "metadata" {
 				continue
 			}
 
 			switch val := value.(type) {
 			case map[string]interface{}:
 				fmt.Fprintf(w, "%s- **%s**:\n", indent, key)
-				if err := formatMarkdownPayload(w, val, depth+1); err != nil {
+				// Pass context down for nested formatting
+				newCtx := map[string]interface{}{"tool": toolName}
+				if err := formatMarkdownPayloadWithContext(w, val, depth+1, newCtx); err != nil {
 					return err
 				}
 			case []interface{}:
 				fmt.Fprintf(w, "%s- **%s**:\n", indent, key)
-				if err := formatMarkdownPayload(w, val, depth+1); err != nil {
+				if err := formatMarkdownPayloadWithContext(w, val, depth+1, ctx); err != nil {
 					return err
 				}
 			case string:
 				if val == "" {
 					fmt.Fprintf(w, "%s- **%s**: *(empty)*\n", indent, key)
-				} else if key == "message" {
-					// Never truncate message field - show full content
-					fmt.Fprintf(w, "%s- **%s**: `%s`\n", indent, key, val)
-				} else if len(val) > 200 {
-					fmt.Fprintf(w, "%s- **%s**: `%s...`\n", indent, key, val[:200])
 				} else {
-					fmt.Fprintf(w, "%s- **%s**: `%s`\n", indent, key, val)
+					// Smart truncation based on field and tool type
+					truncateLimit := getTruncateLimit(key, toolName)
+					if truncateLimit == -1 {
+						// Never truncate
+						fmt.Fprintf(w, "%s- **%s**: `%s`\n", indent, key, val)
+					} else if len(val) > truncateLimit {
+						fmt.Fprintf(w, "%s- **%s**: `%s...` *(%d chars)*\n", indent, key, val[:truncateLimit], len(val))
+					} else {
+						fmt.Fprintf(w, "%s- **%s**: `%s`\n", indent, key, val)
+					}
 				}
 			case nil:
 				fmt.Fprintf(w, "%s- **%s**: `null`\n", indent, key)
@@ -494,12 +503,12 @@ func formatMarkdownPayload(w io.Writer, data interface{}, depth int) error {
 			switch val := item.(type) {
 			case map[string]interface{}:
 				fmt.Fprintf(w, "%s%d.\n", indent, i+1)
-				if err := formatMarkdownPayload(w, val, depth+1); err != nil {
+				if err := formatMarkdownPayloadWithContext(w, val, depth+1, ctx); err != nil {
 					return err
 				}
 			case []interface{}:
 				fmt.Fprintf(w, "%s%d.\n", indent, i+1)
-				if err := formatMarkdownPayload(w, val, depth+1); err != nil {
+				if err := formatMarkdownPayloadWithContext(w, val, depth+1, ctx); err != nil {
 					return err
 				}
 			default:
@@ -511,4 +520,29 @@ func formatMarkdownPayload(w io.Writer, data interface{}, depth int) error {
 	}
 
 	return nil
+}
+
+// getTruncateLimit returns the truncation limit for a field based on its name and tool type
+// Returns -1 to never truncate, or a positive number for the character limit
+func getTruncateLimit(fieldName, toolName string) int {
+	// Never truncate message fields
+	if fieldName == "message" {
+		return -1
+	}
+
+	// For file content in Write/Edit tools, use very short limit
+	isFileContentField := fieldName == "content" || fieldName == "new_string" || fieldName == "old_string" || fieldName == "new_source"
+	isWriteTool := toolName == "Write" || toolName == "Edit" || toolName == "NotebookEdit"
+
+	if isFileContentField && isWriteTool {
+		return 100 // Very short for file contents
+	}
+
+	// For other long text fields, use moderate limit
+	if isFileContentField || fieldName == "file_path" || fieldName == "path" {
+		return 150
+	}
+
+	// Default limit for all other fields
+	return 200
 }

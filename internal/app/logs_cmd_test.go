@@ -144,11 +144,11 @@ func TestLogsCommandHandler_ListLogsMarkdownFormat(t *testing.T) {
 
 	output := out.String()
 	// Markdown format should have event markers or sections
-	if !strings.Contains(output, "Event ID") {
-		t.Errorf("Markdown output should contain event markers, got: %s", output)
+	if !strings.Contains(output, "Event Timeline") {
+		t.Errorf("Markdown output should contain event timeline section, got: %s", output)
 	}
-	if !strings.Contains(output, "event-1") {
-		t.Errorf("Markdown output should contain event data, got: %s", output)
+	if !strings.Contains(output, "tool.invoked") {
+		t.Errorf("Markdown output should contain event types, got: %s", output)
 	}
 }
 
