@@ -21,7 +21,7 @@ func handleClaudeCommand(args []string) {
 
 	switch subcommand {
 	case "init":
-		handleInit(args[1:])
+		handleClaudeInit(args[1:])
 	case "log":
 		handleLog(args[1:])
 	case "auto-summary":
@@ -46,7 +46,7 @@ func printClaudeUsage() {
 	fmt.Println()
 }
 
-func handleInit(args []string) {
+func handleClaudeInit(args []string) {
 	dbPath := app.DefaultDBPath
 
 	// Ensure database directory exists before creating repository

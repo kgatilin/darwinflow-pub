@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/kgatilin/darwinflow-pub/internal/app"
+	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
 // HookInputParserAdapter adapts infra.ParseHookInput to app.HookInputParser interface
@@ -16,15 +16,15 @@ func NewHookInputParserAdapter() *HookInputParserAdapter {
 }
 
 // Parse parses hook input from stdin data
-func (p *HookInputParserAdapter) Parse(data []byte) (*app.HookInputData, error) {
+func (p *HookInputParserAdapter) Parse(data []byte) (*domain.HookInputData, error) {
 	// Parse using infra function
 	hookInput, err := ParseHookInput(io.NopCloser(bytes.NewReader(data)))
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert to app.HookInputData
-	return &app.HookInputData{
+	// Convert to domain.HookInputData
+	return &domain.HookInputData{
 		SessionID:      hookInput.SessionID,
 		TranscriptPath: hookInput.TranscriptPath,
 		CWD:            hookInput.CWD,

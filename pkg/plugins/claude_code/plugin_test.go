@@ -96,41 +96,8 @@ func TestUpdateEntity_ReadOnly(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for read-only update, got nil")
 	}
-	if err.Error() != "sessions are read-only" {
-		t.Errorf("Expected 'sessions are read-only' error, got: %v", err)
-	}
-}
-
-func TestGetTools(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &app.NoOpLogger{}, nil, nil, "")
-
-	tools := plugin.GetTools()
-
-	if len(tools) == 0 {
-		t.Error("Expected at least one tool")
-	}
-
-	// Check that session-summary tool is included
-	found := false
-	var sessionSummaryTool domain.Tool
-	for _, tool := range tools {
-		if tool.GetName() == "session-summary" {
-			found = true
-			sessionSummaryTool = tool
-			break
-		}
-	}
-
-	if !found {
-		t.Fatal("Expected session-summary tool in tools list")
-	}
-
-	// Test tool metadata
-	if sessionSummaryTool.GetDescription() == "" {
-		t.Error("Tool description should not be empty")
-	}
-	if sessionSummaryTool.GetUsage() == "" {
-		t.Error("Tool usage should not be empty")
+	if err.Error() != "entity is read-only" {
+		t.Errorf("Expected 'entity is read-only' error, got: %v", err)
 	}
 }
 
@@ -139,9 +106,9 @@ func TestGetCommands(t *testing.T) {
 
 	commands := plugin.GetCommands()
 
-	// Verify we get exactly 4 commands
-	if len(commands) != 4 {
-		t.Fatalf("Expected 4 commands, got %d", len(commands))
+	// Verify we get exactly 5 commands (including session-summary)
+	if len(commands) != 5 {
+		t.Fatalf("Expected 5 commands, got %d", len(commands))
 	}
 
 	// Verify expected command names
@@ -150,6 +117,7 @@ func TestGetCommands(t *testing.T) {
 		"log":               false,
 		"auto-summary":      false,
 		"auto-summary-exec": false,
+		"session-summary":   false,
 	}
 
 	for _, cmd := range commands {
@@ -177,7 +145,7 @@ func TestGetCommands(t *testing.T) {
 }
 
 func TestCommandProvider_Interface(t *testing.T) {
-	// Verify that ClaudeCodePlugin implements ICommandProvider
+	// Verify that ClaudeCodePlugin implements SDK ICommandProvider
 	var _ domain.ICommandProvider = (*claude_code.ClaudeCodePlugin)(nil)
 }
 

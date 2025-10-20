@@ -8,7 +8,6 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/app/tui"
-	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
@@ -58,11 +57,10 @@ func uiCommand(args []string) {
 	// Create plugin registry
 	registry := app.NewPluginRegistry(logger)
 
-	// Register claude-code core plugin
+	// Register built-in plugins
 	// Note: setupService and handler are nil because UI doesn't use command execution
-	claudeCodePlugin := claude_code.NewClaudeCodePlugin(analysisService, logsService, logger, nil, nil, *dbPath)
-	if err := registry.RegisterPlugin(claudeCodePlugin); err != nil {
-		fmt.Fprintf(os.Stderr, "Error registering claude-code plugin: %v\n", err)
+	if err := RegisterBuiltInPlugins(registry, analysisService, logsService, logger, nil, nil, *dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error registering built-in plugins: %v\n", err)
 		os.Exit(1)
 	}
 

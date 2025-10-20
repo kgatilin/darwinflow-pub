@@ -44,13 +44,13 @@ go install ./cmd/dw
 
 ```bash
 # Set up Claude Code logging infrastructure
-dw claude init
+dw claude-code init    # Or 'dw claude init' for backward compatibility
 ```
 
 This will:
-- Create the SQLite database at `~/.darwinflow/logs/events.db`
-- Add hooks to your Claude Code settings (typically `~/.claude/settings.json`)
-- Configure automatic event capture for PreToolUse and UserPromptSubmit hooks
+- Create the SQLite database at `.darwinflow/logs/events.db` (project-relative)
+- Add hooks to your Claude Code settings (`.claude/settings.json`)
+- Configure automatic event capture for PreToolUse, UserPromptSubmit, and SessionEnd hooks
 
 ### Start Using Claude Code
 
@@ -108,7 +108,8 @@ cmd → internal/app + internal/infra → internal/domain
 **Current Plugins:**
 - **claude-code** (core): Provides Claude Code sessions with tracking and context
   - Entity: `session` (IExtensible + IHasContext + ITrackable)
-  - Tool: `session-summary` - Display session information and analyses
+  - Commands: `init`, `log` (for hooks)
+  - Tools: `session-summary` (via `dw project session-summary`)
 
 **Architecture Documentation:**
 - See `docs/arch-generated.md` for complete dependency graph
@@ -120,13 +121,14 @@ cmd → internal/app + internal/infra → internal/domain
 
 ```bash
 # Initialize logging infrastructure
-dw claude init
+dw claude-code init                        # Or 'dw claude init' (backward compat)
 
 # Update to latest version (run after upgrading DarwinFlow)
 dw refresh                                 # Update database schema and hooks
 
-# Log an event (typically called by hooks)
+# Log an event (typically called by hooks - backward compat)
 dw claude log <event-type>
+dw claude-code log <event-type>
 
 # View logged events
 dw logs                                    # Show 20 most recent logs
@@ -157,10 +159,10 @@ dw analyze --last --prompt tool_analysis      # Agent-focused tool suggestions (
 dw analyze --last --model sonnet              # Use different model
 dw analyze --last --token-limit 50000         # Use custom token limit
 
-# Run plugin-provided tools
-dw project list                               # List all available plugin tools
+# Run plugin tools
 dw project session-summary --last             # Display summary of last session
 dw project session-summary --session-id <id>  # Display summary of specific session
+dw project list                               # List all available plugin tools
 ```
 
 #### Log Viewing Examples

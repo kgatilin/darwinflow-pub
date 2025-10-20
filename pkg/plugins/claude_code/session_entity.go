@@ -3,7 +3,7 @@ package claude_code
 import (
 	"time"
 
-	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
+	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
 // SessionAnalysisData holds analysis data without depending on internal types
@@ -28,7 +28,7 @@ type SessionEntity struct {
 	analyses       []SessionAnalysisData
 	analysisTypes  []string
 	tokenCount     int
-	context        *pluginsdk.EntityContext // Cached context
+	context        *domain.EntityContext // Cached context
 }
 
 // NewSessionEntity creates a new session entity from session data
@@ -98,16 +98,16 @@ func (s *SessionEntity) GetAllFields() map[string]interface{} {
 
 // IHasContext implementation
 
-func (s *SessionEntity) GetContext() *pluginsdk.EntityContext {
+func (s *SessionEntity) GetContext() *domain.EntityContext {
 	if s.context != nil {
 		return s.context
 	}
 
 	// Build context from session data
-	context := &pluginsdk.EntityContext{
+	context := &domain.EntityContext{
 		RelatedEntities: make(map[string][]string),
 		LinkedFiles:     []string{},
-		RecentActivity:  []pluginsdk.ActivityRecord{},
+		RecentActivity:  []domain.ActivityRecord{},
 		Metadata:        make(map[string]interface{}),
 	}
 

@@ -48,11 +48,19 @@ type EntityContext struct {
 	Metadata map[string]interface{}
 }
 
-// ActivityRecord represents a single activity event
+// ActivityRecord represents a single activity event related to an entity
 type ActivityRecord struct {
-	Timestamp time.Time              `json:"timestamp"`
-	Action    string                 `json:"action"`
-	Details   map[string]interface{} `json:"details"`
+	// Timestamp is when the activity occurred
+	Timestamp time.Time `json:"timestamp"`
+
+	// Type is the kind of activity (e.g., "created", "updated", "analyzed")
+	Type string `json:"type"`
+
+	// Description is a human-readable description of the activity
+	Description string `json:"description"`
+
+	// Actor is who/what performed the activity (user, system, etc.)
+	Actor string `json:"actor"`
 }
 
 // ITrackable is a capability for entities that have status and progress tracking.

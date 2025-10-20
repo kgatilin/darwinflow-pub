@@ -4,17 +4,16 @@ import (
 	"time"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
-	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
-// entityAdapter adapts pluginsdk.IExtensible to domain.IExtensible
+// entityAdapter adapts domain.IExtensible to domain.IExtensible
 // This allows plugins using the SDK to provide entities that work with internal app code
 type entityAdapter struct {
-	inner pluginsdk.IExtensible
+	inner domain.IExtensible
 }
 
 // newEntityAdapter wraps an SDK entity to implement domain interfaces
-func newEntityAdapter(sdkEntity pluginsdk.IExtensible) domain.IExtensible {
+func newEntityAdapter(sdkEntity domain.IExtensible) domain.IExtensible {
 	return &entityAdapter{inner: sdkEntity}
 }
 
@@ -40,7 +39,7 @@ func (e *entityAdapter) GetAllFields() map[string]interface{} {
 
 // Check if entity also implements IHasContext
 func (e *entityAdapter) GetContext() *domain.EntityContext {
-	hasContext, ok := e.inner.(pluginsdk.IHasContext)
+	hasContext, ok := e.inner.(domain.IHasContext)
 	if !ok {
 		return nil
 	}
@@ -61,7 +60,7 @@ func (e *entityAdapter) GetContext() *domain.EntityContext {
 
 // Check if entity also implements ITrackable
 func (e *entityAdapter) GetStatus() string {
-	trackable, ok := e.inner.(pluginsdk.ITrackable)
+	trackable, ok := e.inner.(domain.ITrackable)
 	if !ok {
 		return ""
 	}
@@ -69,7 +68,7 @@ func (e *entityAdapter) GetStatus() string {
 }
 
 func (e *entityAdapter) GetProgress() float64 {
-	trackable, ok := e.inner.(pluginsdk.ITrackable)
+	trackable, ok := e.inner.(domain.ITrackable)
 	if !ok {
 		return 0
 	}
@@ -77,7 +76,7 @@ func (e *entityAdapter) GetProgress() float64 {
 }
 
 func (e *entityAdapter) IsBlocked() bool {
-	trackable, ok := e.inner.(pluginsdk.ITrackable)
+	trackable, ok := e.inner.(domain.ITrackable)
 	if !ok {
 		return false
 	}
@@ -85,74 +84,74 @@ func (e *entityAdapter) IsBlocked() bool {
 }
 
 func (e *entityAdapter) GetBlockReason() string {
-	trackable, ok := e.inner.(pluginsdk.ITrackable)
+	trackable, ok := e.inner.(domain.ITrackable)
 	if !ok {
 		return ""
 	}
 	return trackable.GetBlockReason()
 }
 
-// Check if entity also implements ISchedulable
+// Check if entity also implements ISchedulable (not yet in SDK)
 func (e *entityAdapter) GetStartDate() *time.Time {
-	schedulable, ok := e.inner.(pluginsdk.ISchedulable)
-	if !ok {
-		return nil
-	}
-	return schedulable.GetStartDate()
+	// ISchedulable not yet implemented in SDK
+	// Future: check if entity implements it
+	return nil
 }
 
 func (e *entityAdapter) GetDueDate() *time.Time {
-	schedulable, ok := e.inner.(pluginsdk.ISchedulable)
-	if !ok {
-		return nil
-	}
-	return schedulable.GetDueDate()
+	// ISchedulable not yet implemented in SDK
+	// Future: check if entity implements it
+	return nil
 }
 
 func (e *entityAdapter) IsOverdue() bool {
-	schedulable, ok := e.inner.(pluginsdk.ISchedulable)
-	if !ok {
-		return false
-	}
-	return schedulable.IsOverdue()
+	// ISchedulable not yet implemented in SDK
+	// Future: check if entity implements it
+	return false
 }
 
-// Check if entity also implements IRelatable
+// Check if entity also implements IRelatable (not yet in SDK)
 func (e *entityAdapter) GetRelated(entityType string) []string {
-	relatable, ok := e.inner.(pluginsdk.IRelatable)
-	if !ok {
-		return nil
-	}
-	return relatable.GetRelated(entityType)
+	// IRelatable not yet implemented in SDK
+	// Future: check if entity implements it
+	return nil
 }
 
 func (e *entityAdapter) GetAllRelations() map[string][]string {
-	relatable, ok := e.inner.(pluginsdk.IRelatable)
-	if !ok {
-		return nil
-	}
-	return relatable.GetAllRelations()
+	// IRelatable not yet implemented in SDK
+	// Future: check if entity implements it
+	return nil
 }
 
 // adaptActivityRecords converts SDK activity records to domain activity records
-func adaptActivityRecords(sdkRecords []pluginsdk.ActivityRecord) []domain.ActivityRecord {
+func adaptActivityRecords(sdkRecords []domain.ActivityRecord) []domain.ActivityRecord {
 	if sdkRecords == nil {
 		return nil
 	}
 
 	domainRecords := make([]domain.ActivityRecord, len(sdkRecords))
 	for i, sdkRec := range sdkRecords {
+		// Map SDK fields to domain fields
+		details := make(map[string]interface{})
+		if sdkRec.Description != "" {
+			details["description"] = sdkRec.Description
+		}
+		if sdkRec.Actor != "" {
+			details["actor"] = sdkRec.Actor
+		}
+
 		domainRecords[i] = domain.ActivityRecord{
-			Timestamp: sdkRec.Timestamp,
-			Action:    sdkRec.Action,
-			Details:   sdkRec.Details,
+			Timestamp:   sdkRec.Timestamp,
+			Type:        sdkRec.Type,
+			Description: sdkRec.Description,
+			Actor:       sdkRec.Actor,
 		}
 	}
 	return domainRecords
 }
 
 // adaptEntities wraps SDK entities in domain adapters
-func adaptEntities(sdkEntities []pluginsdk.IExtensible) []domain.IExtensible {
+func adaptEntities(sdkEntities []domain.IExtensible) []domain.IExtensible {
 	if sdkEntities == nil {
 		return nil
 	}
@@ -165,20 +164,20 @@ func adaptEntities(sdkEntities []pluginsdk.IExtensible) []domain.IExtensible {
 }
 
 // adaptEntityQuery converts domain EntityQuery to SDK EntityQuery
-func adaptEntityQuery(domainQuery domain.EntityQuery) pluginsdk.EntityQuery {
-	return pluginsdk.EntityQuery{
-		EntityType:   domainQuery.EntityType,
-		Capabilities: domainQuery.Capabilities,
-		Filters:      domainQuery.Filters,
-		Limit:        domainQuery.Limit,
-		Offset:       domainQuery.Offset,
-		OrderBy:      domainQuery.OrderBy,
-		OrderDesc:    domainQuery.OrderDesc,
+func adaptEntityQuery(domainQuery domain.EntityQuery) domain.EntityQuery {
+	return domain.EntityQuery{
+		EntityType: domainQuery.EntityType,
+		Filters:    domainQuery.Filters,
+		Limit:      domainQuery.Limit,
+		Offset:     domainQuery.Offset,
+		SortBy:     domainQuery.SortBy,
+		SortDesc:   domainQuery.SortDesc,
+		// Note: Capabilities filtering is handled in domain layer
 	}
 }
 
 // adaptPluginInfo converts SDK PluginInfo to domain PluginInfo
-func adaptPluginInfo(sdkInfo pluginsdk.PluginInfo) domain.PluginInfo {
+func adaptPluginInfo(sdkInfo domain.PluginInfo) domain.PluginInfo {
 	return domain.PluginInfo{
 		Name:        sdkInfo.Name,
 		Version:     sdkInfo.Version,
@@ -188,7 +187,7 @@ func adaptPluginInfo(sdkInfo pluginsdk.PluginInfo) domain.PluginInfo {
 }
 
 // adaptEntityTypeInfo converts SDK EntityTypeInfo to domain EntityTypeInfo
-func adaptEntityTypeInfo(sdkInfo pluginsdk.EntityTypeInfo) domain.EntityTypeInfo {
+func adaptEntityTypeInfo(sdkInfo domain.EntityTypeInfo) domain.EntityTypeInfo {
 	return domain.EntityTypeInfo{
 		Type:              sdkInfo.Type,
 		DisplayName:       sdkInfo.DisplayName,
@@ -199,7 +198,7 @@ func adaptEntityTypeInfo(sdkInfo pluginsdk.EntityTypeInfo) domain.EntityTypeInfo
 }
 
 // adaptEntityTypeInfos converts slice of SDK EntityTypeInfo to domain EntityTypeInfo
-func adaptEntityTypeInfos(sdkInfos []pluginsdk.EntityTypeInfo) []domain.EntityTypeInfo {
+func adaptEntityTypeInfos(sdkInfos []domain.EntityTypeInfo) []domain.EntityTypeInfo {
 	if sdkInfos == nil {
 		return nil
 	}

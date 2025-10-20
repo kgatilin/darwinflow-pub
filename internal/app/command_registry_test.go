@@ -15,15 +15,15 @@ type mockCommand struct {
 	name        string
 	description string
 	usage       string
-	executeFunc func(ctx context.Context, args []string) error
+	executeFunc func(ctx context.Context, cmdCtx domain.CommandContext, args []string) error
 }
 
 func (m *mockCommand) GetName() string        { return m.name }
 func (m *mockCommand) GetDescription() string { return m.description }
 func (m *mockCommand) GetUsage() string       { return m.usage }
-func (m *mockCommand) Execute(ctx context.Context, args []string) error {
+func (m *mockCommand) Execute(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
 	if m.executeFunc != nil {
-		return m.executeFunc(ctx, args)
+		return m.executeFunc(ctx, cmdCtx, args)
 	}
 	return nil
 }
@@ -38,20 +38,8 @@ func (m *mockCommandProviderPlugin) GetInfo() domain.PluginInfo {
 	return m.info
 }
 
-func (m *mockCommandProviderPlugin) GetEntityTypes() []domain.EntityTypeInfo {
-	return []domain.EntityTypeInfo{}
-}
-
-func (m *mockCommandProviderPlugin) Query(ctx context.Context, query domain.EntityQuery) ([]domain.IExtensible, error) {
-	return nil, nil
-}
-
-func (m *mockCommandProviderPlugin) GetEntity(ctx context.Context, entityID string) (domain.IExtensible, error) {
-	return nil, domain.ErrNotFound
-}
-
-func (m *mockCommandProviderPlugin) UpdateEntity(ctx context.Context, entityID string, fields map[string]interface{}) (domain.IExtensible, error) {
-	return nil, domain.ErrNotFound
+func (m *mockCommandProviderPlugin) GetCapabilities() []string {
+	return []string{"ICommandProvider"}
 }
 
 func (m *mockCommandProviderPlugin) GetCommands() []domain.Command {
@@ -67,20 +55,8 @@ func (m *mockNonCommandPlugin) GetInfo() domain.PluginInfo {
 	return m.info
 }
 
-func (m *mockNonCommandPlugin) GetEntityTypes() []domain.EntityTypeInfo {
-	return []domain.EntityTypeInfo{}
-}
-
-func (m *mockNonCommandPlugin) Query(ctx context.Context, query domain.EntityQuery) ([]domain.IExtensible, error) {
-	return nil, nil
-}
-
-func (m *mockNonCommandPlugin) GetEntity(ctx context.Context, entityID string) (domain.IExtensible, error) {
-	return nil, domain.ErrNotFound
-}
-
-func (m *mockNonCommandPlugin) UpdateEntity(ctx context.Context, entityID string, fields map[string]interface{}) (domain.IExtensible, error) {
-	return nil, domain.ErrNotFound
+func (m *mockNonCommandPlugin) GetCapabilities() []string {
+	return []string{} // No capabilities
 }
 
 func TestNewCommandRegistry(t *testing.T) {
@@ -271,7 +247,7 @@ func TestCommandRegistry_ExecuteCommand(t *testing.T) {
 			&mockCommand{
 				name:        "test-cmd",
 				description: "Test command",
-				executeFunc: func(ctx context.Context, args []string) error {
+				executeFunc: func(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
 					executed = true
 					executedArgs = args
 					return nil
@@ -286,7 +262,7 @@ func TestCommandRegistry_ExecuteCommand(t *testing.T) {
 	ctx := context.Background()
 	args := []string{"arg1", "arg2"}
 
-	err := registry.ExecuteCommand(ctx, "test-plugin", "test-cmd", args)
+	err := registry.ExecuteCommand(ctx, "test-plugin", "test-cmd", args, nil)
 
 	if err != nil {
 		t.Errorf("ExecuteCommand() unexpected error: %v", err)
@@ -313,7 +289,7 @@ func TestCommandRegistry_ExecuteCommand_Error(t *testing.T) {
 			&mockCommand{
 				name:        "fail-cmd",
 				description: "Failing command",
-				executeFunc: func(ctx context.Context, args []string) error {
+				executeFunc: func(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
 					return expectedErr
 				},
 			},
@@ -324,7 +300,7 @@ func TestCommandRegistry_ExecuteCommand_Error(t *testing.T) {
 	registry := app.NewCommandRegistry(pluginRegistry, logger)
 
 	ctx := context.Background()
-	err := registry.ExecuteCommand(ctx, "test-plugin", "fail-cmd", nil)
+	err := registry.ExecuteCommand(ctx, "test-plugin", "fail-cmd", nil, nil)
 
 	if err != expectedErr {
 		t.Errorf("ExecuteCommand() error = %v, want %v", err, expectedErr)

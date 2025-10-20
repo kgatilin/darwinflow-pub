@@ -59,21 +59,6 @@ type ContextDetector interface {
 // ContentNormalizer defines the interface for normalizing content for search
 type ContentNormalizer func(eventType, payload string) string
 
-// HookInputData represents the data from a hook invocation
-type HookInputData struct {
-	SessionID      string
-	TranscriptPath string
-	CWD            string
-	PermissionMode string
-	HookEventName  string
-	ToolName       string
-	ToolInput      map[string]interface{}
-	ToolOutput     interface{}
-	Error          interface{}
-	UserMessage    string
-	Prompt         string
-}
-
 // LoggerService orchestrates event logging for Claude Code interactions
 type LoggerService struct {
 	repository        domain.EventRepository
@@ -124,7 +109,7 @@ func (s *LoggerService) LogEvent(ctx context.Context, eventType domain.EventType
 // LogFromHookInput orchestrates logging an event from a Claude Code hook
 func (s *LoggerService) LogFromHookInput(
 	ctx context.Context,
-	hookInput HookInputData,
+	hookInput domain.HookInputData,
 	eventType domain.EventType,
 	maxParamLength int,
 ) error {

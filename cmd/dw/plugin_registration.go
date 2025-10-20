@@ -1,15 +1,37 @@
-package app
+package main
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
+// loggerAdapter adapts app.Logger to domain.Logger (SDK interface)
+type loggerAdapter struct {
+	inner app.Logger
+}
+
+func (l *loggerAdapter) Debug(msg string, keysAndValues ...interface{}) {
+	l.inner.Debug(msg, keysAndValues...)
+}
+
+func (l *loggerAdapter) Info(msg string, keysAndValues ...interface{}) {
+	l.inner.Info(msg, keysAndValues...)
+}
+
+func (l *loggerAdapter) Warn(msg string, keysAndValues ...interface{}) {
+	l.inner.Warn(msg, keysAndValues...)
+}
+
+func (l *loggerAdapter) Error(msg string, keysAndValues ...interface{}) {
+	l.inner.Error(msg, keysAndValues...)
+}
+
 // logsServiceAdapter adapts app.LogsService to claude_code.LogsService
 type logsServiceAdapter struct {
-	inner *LogsService
+	inner *app.LogsService
 }
 
 func (a *logsServiceAdapter) ListRecentLogs(ctx context.Context, limit, offset int, sessionID string, ordered bool) ([]*claude_code.LogRecord, error) {
@@ -35,18 +57,18 @@ func (a *logsServiceAdapter) ListRecentLogs(ctx context.Context, limit, offset i
 }
 
 // RegisterBuiltInPlugins registers all built-in plugins with the registry.
-// This function lives in app layer so cmd doesn't need to import plugins.
+// This function lives in cmd layer to avoid app layer importing plugins.
 //
 // Built-in plugins are constructed here with access to internal services,
 // but they implement the SDK Plugin interface and can only return SDK types
 // from their public methods.
 func RegisterBuiltInPlugins(
-	registry *PluginRegistry,
-	analysisService *AnalysisService,
-	logsService *LogsService,
-	logger Logger,
-	setupService *SetupService,
-	handler *ClaudeCommandHandler,
+	registry *app.PluginRegistry,
+	analysisService *app.AnalysisService,
+	logsService *app.LogsService,
+	logger app.Logger,
+	setupService *app.SetupService,
+	handler *app.ClaudeCommandHandler,
 	dbPath string,
 ) error {
 	// Create plugin context (SDK logger adapter)

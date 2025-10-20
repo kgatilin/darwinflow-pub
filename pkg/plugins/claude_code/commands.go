@@ -6,19 +6,20 @@ import (
 	"io"
 	"os"
 
-	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
+	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
 // Ensure plugin implements SDK ICommandProvider
-var _ pluginsdk.ICommandProvider = (*ClaudeCodePlugin)(nil)
+var _ domain.ICommandProvider = (*ClaudeCodePlugin)(nil)
 
 // GetCommands returns the CLI commands provided by this plugin (SDK interface)
-func (p *ClaudeCodePlugin) GetCommands() []pluginsdk.Command {
-	return []pluginsdk.Command{
+func (p *ClaudeCodePlugin) GetCommands() []domain.Command {
+	return []domain.Command{
 		&InitCommand{plugin: p},
 		&LogCommand{plugin: p},
 		&AutoSummaryCommand{plugin: p},
 		&AutoSummaryExecCommand{plugin: p},
+		&SessionSummaryCommand{plugin: p},
 	}
 }
 
@@ -39,7 +40,7 @@ func (c *InitCommand) GetUsage() string {
 	return "init"
 }
 
-func (c *InitCommand) Execute(ctx context.Context, args []string) error {
+func (c *InitCommand) Execute(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
 	if c.plugin.handler == nil {
 		return fmt.Errorf("handler not initialized")
 	}
@@ -65,7 +66,7 @@ func (c *LogCommand) GetUsage() string {
 	return "log <event-type>"
 }
 
-func (c *LogCommand) Execute(ctx context.Context, args []string) error {
+func (c *LogCommand) Execute(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("event type required")
 	}
@@ -84,8 +85,8 @@ func (c *LogCommand) Execute(ctx context.Context, args []string) error {
 		}
 	}
 
-	// Read stdin data
-	stdinData, err := io.ReadAll(os.Stdin)
+	// Read stdin data from command context
+	stdinData, err := io.ReadAll(cmdCtx.GetStdin())
 	if err != nil {
 		// Silently fail - don't disrupt Claude Code
 		return nil
@@ -113,13 +114,13 @@ func (c *AutoSummaryCommand) GetUsage() string {
 	return "auto-summary"
 }
 
-func (c *AutoSummaryCommand) Execute(ctx context.Context, args []string) error {
+func (c *AutoSummaryCommand) Execute(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
 	if c.plugin.handler == nil {
 		return fmt.Errorf("handler not initialized")
 	}
 
-	// Read stdin data
-	stdinData, err := io.ReadAll(os.Stdin)
+	// Read stdin data from command context
+	stdinData, err := io.ReadAll(cmdCtx.GetStdin())
 	if err != nil {
 		// Silently fail - don't disrupt Claude Code
 		return nil
@@ -147,7 +148,7 @@ func (c *AutoSummaryExecCommand) GetUsage() string {
 	return "auto-summary-exec <session-id>"
 }
 
-func (c *AutoSummaryExecCommand) Execute(ctx context.Context, args []string) error {
+func (c *AutoSummaryExecCommand) Execute(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
 	if len(args) < 1 {
 		// No session ID provided
 		return nil
@@ -161,5 +162,87 @@ func (c *AutoSummaryExecCommand) Execute(ctx context.Context, args []string) err
 
 	// Execute (silently - errors shouldn't disrupt background analysis)
 	_ = c.plugin.handler.AutoSummaryExec(ctx, sessionID)
+	return nil
+}
+
+// SessionSummaryCommand provides a quick summary of a session
+type SessionSummaryCommand struct {
+	plugin *ClaudeCodePlugin
+}
+
+func (c *SessionSummaryCommand) GetName() string {
+	return "session-summary"
+}
+
+func (c *SessionSummaryCommand) GetDescription() string {
+	return "Display a summary of a Claude Code session"
+}
+
+func (c *SessionSummaryCommand) GetUsage() string {
+	return "session-summary --session-id <id> | --last"
+}
+
+func (c *SessionSummaryCommand) Execute(ctx context.Context, cmdCtx domain.CommandContext, args []string) error {
+	// Parse flags
+	sessionID := ""
+	last := false
+
+	// Simple flag parsing
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--session-id" && i+1 < len(args) {
+			sessionID = args[i+1]
+			i++
+		} else if args[i] == "--last" {
+			last = true
+		}
+	}
+
+	// Determine which session to summarize
+	var targetSessionID string
+	if last {
+		lastID, err := c.plugin.analysisService.GetLastSession(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get last session: %w", err)
+		}
+		targetSessionID = lastID
+	} else if sessionID != "" {
+		targetSessionID = sessionID
+	} else {
+		return fmt.Errorf("must specify either --session-id or --last")
+	}
+
+	// Get session entity
+	entity, err := c.plugin.buildSessionEntity(ctx, targetSessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Get output writer from command context
+	out := cmdCtx.GetStdout()
+
+	// Display summary
+	fmt.Fprintln(out, "Session Summary")
+	fmt.Fprintln(out, "===============")
+	fmt.Fprintf(out, "Session ID: %s\n", entity.GetID())
+	fmt.Fprintf(out, "Event Count: %d\n", entity.GetField("event_count"))
+	fmt.Fprintf(out, "First Event: %v\n", entity.GetField("first_event"))
+	fmt.Fprintf(out, "Last Event: %v\n", entity.GetField("last_event"))
+	fmt.Fprintf(out, "Token Count: ~%d\n", entity.GetField("token_count"))
+	fmt.Fprintf(out, "Status: %s\n", entity.GetStatus())
+
+	// Display analyses if available
+	analyses := entity.GetAnalyses()
+	if len(analyses) > 0 {
+		fmt.Fprintf(out, "\nAnalyses: %d\n", len(analyses))
+		for i, analysis := range analyses {
+			fmt.Fprintf(out, "  [%d] %s (%s)\n", i+1, analysis.PromptName, analysis.ModelUsed)
+			if analysis.PatternsSummary != "" {
+				fmt.Fprintf(out, "      Summary: %s\n", analysis.PatternsSummary)
+			}
+		}
+	} else {
+		fmt.Fprintln(out, "\nNo analyses available")
+	}
+
 	return nil
 }

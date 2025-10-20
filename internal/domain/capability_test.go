@@ -17,9 +17,10 @@ func TestEntityContext(t *testing.T) {
 		LinkedFiles: []string{"/path/to/file1.go", "/path/to/file2.go"},
 		RecentActivity: []domain.ActivityRecord{
 			{
-				Timestamp: time.Now(),
-				Action:    "created",
-				Details:   map[string]interface{}{"by": "user"},
+				Timestamp:   time.Now(),
+				Type:        "created",
+				Description: "test",
+				Actor:       "user",
 			},
 		},
 		Metadata: map[string]interface{}{
@@ -48,7 +49,7 @@ func TestEntityContext(t *testing.T) {
 	if len(ctx.RecentActivity) != 1 {
 		t.Errorf("Expected 1 activity record, got %d", len(ctx.RecentActivity))
 	}
-	if ctx.RecentActivity[0].Action != "created" {
+	if ctx.RecentActivity[0].Type != "created" {
 		t.Error("Activity action mismatch")
 	}
 
@@ -64,27 +65,24 @@ func TestEntityContext(t *testing.T) {
 func TestActivityRecord(t *testing.T) {
 	now := time.Now()
 	record := domain.ActivityRecord{
-		Timestamp: now,
-		Action:    "updated",
-		Details: map[string]interface{}{
-			"field":     "status",
-			"old_value": "pending",
-			"new_value": "completed",
-		},
+		Timestamp:   now,
+		Type:        "updated",
+		Description: "status changed from pending to completed",
+		Actor:       "user",
 	}
 
 	// Verify fields
 	if record.Timestamp != now {
 		t.Error("Timestamp mismatch")
 	}
-	if record.Action != "updated" {
-		t.Error("Action mismatch")
+	if record.Type != "updated" {
+		t.Error("Type mismatch")
 	}
-	if len(record.Details) != 3 {
-		t.Errorf("Expected 3 details, got %d", len(record.Details))
+	if record.Description == "" {
+		t.Error("Description should not be empty")
 	}
-	if record.Details["field"] != "status" {
-		t.Error("Details field mismatch")
+	if record.Actor != "user" {
+		t.Error("Actor mismatch")
 	}
 }
 
@@ -107,18 +105,19 @@ func TestEntityContext_EmptyFields(t *testing.T) {
 }
 
 func TestActivityRecord_EmptyDetails(t *testing.T) {
-	// Test creating ActivityRecord with empty details
+	// Test creating ActivityRecord with empty description
 	record := domain.ActivityRecord{
-		Timestamp: time.Now(),
-		Action:    "action",
-		Details:   nil,
+		Timestamp:   time.Now(),
+		Type:        "action",
+		Description: "",
+		Actor:       "",
 	}
 
-	if record.Action != "action" {
-		t.Error("Action should be preserved")
+	if record.Type != "action" {
+		t.Error("Type should be preserved")
 	}
-	if record.Details != nil {
-		t.Error("Expected nil Details")
+	if record.Description != "" {
+		t.Error("Description should be empty string")
 	}
 }
 
@@ -169,24 +168,26 @@ func TestEntityContext_AddActivity(t *testing.T) {
 	}
 
 	ctx.RecentActivity = append(ctx.RecentActivity, domain.ActivityRecord{
-		Timestamp: time.Now(),
-		Action:    "created",
-		Details:   map[string]interface{}{"by": "system"},
+		Timestamp:   time.Now(),
+		Type:        "created",
+		Description: "entity created",
+		Actor:       "system",
 	})
 
 	ctx.RecentActivity = append(ctx.RecentActivity, domain.ActivityRecord{
-		Timestamp: time.Now(),
-		Action:    "updated",
-		Details:   map[string]interface{}{"field": "status"},
+		Timestamp:   time.Now(),
+		Type:        "updated",
+		Description: "status field updated",
+		Actor:       "user",
 	})
 
 	if len(ctx.RecentActivity) != 2 {
 		t.Errorf("Expected 2 activity records, got %d", len(ctx.RecentActivity))
 	}
-	if ctx.RecentActivity[0].Action != "created" {
+	if ctx.RecentActivity[0].Type != "created" {
 		t.Error("First activity action mismatch")
 	}
-	if ctx.RecentActivity[1].Action != "updated" {
+	if ctx.RecentActivity[1].Type != "updated" {
 		t.Error("Second activity action mismatch")
 	}
 }

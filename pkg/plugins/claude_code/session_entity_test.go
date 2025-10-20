@@ -4,17 +4,30 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
 	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
+
+// Helper to create test SessionAnalysisData
+func makeTestAnalyses(count int) []claude_code.SessionAnalysisData {
+	analyses := make([]claude_code.SessionAnalysisData, count)
+	for i := 0; i < count; i++ {
+		analyses[i] = claude_code.SessionAnalysisData{
+			ID:              "a" + string(rune('1'+i)),
+			SessionID:       "s1",
+			PromptName:      "test_prompt",
+			ModelUsed:       "claude-3",
+			PatternsSummary: "Test summary",
+			CreatedAt:       time.Now(),
+		}
+	}
+	return analyses
+}
 
 func TestNewSessionEntity(t *testing.T) {
 	now := time.Now()
 	later := now.Add(1 * time.Hour)
 
-	analyses := []*domain.SessionAnalysis{
-		{ID: "a1", SessionID: "s1", PromptName: "test_prompt"},
-	}
+	analyses := makeTestAnalyses(1)
 
 	entity := claude_code.NewSessionEntity("full-session-id", now, later, 10, analyses, 1000)
 
@@ -140,10 +153,7 @@ func TestSessionEntity_ShortID(t *testing.T) {
 
 func TestSessionEntity_GetContext(t *testing.T) {
 	now := time.Now()
-	analyses := []*domain.SessionAnalysis{
-		{ID: "analysis-1", SessionID: "s1", PromptName: "test"},
-		{ID: "analysis-2", SessionID: "s1", PromptName: "summary"},
-	}
+	analyses := makeTestAnalyses(2)
 
 	entity := claude_code.NewSessionEntity("s1", now, now.Add(10*time.Minute), 20, analyses, 1000)
 
@@ -219,9 +229,7 @@ func TestSessionEntity_GetStatus_Active(t *testing.T) {
 }
 
 func TestSessionEntity_GetStatus_Analyzed(t *testing.T) {
-	analyses := []*domain.SessionAnalysis{
-		{ID: "a1", SessionID: "s1"},
-	}
+	analyses := makeTestAnalyses(1)
 
 	entity := claude_code.NewSessionEntity("s1", time.Now(), time.Now(), 10, analyses, 0)
 
@@ -244,9 +252,14 @@ func TestSessionEntity_GetProgress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var analyses []*domain.SessionAnalysis
+			var analyses []claude_code.SessionAnalysisData
 			for i := 0; i < tt.analysisCount; i++ {
-				analyses = append(analyses, &domain.SessionAnalysis{ID: "a" + string(rune('1'+i))})
+				analyses = append(analyses, claude_code.SessionAnalysisData{
+					ID:         "a" + string(rune('1'+i)),
+					SessionID:  "s1",
+					PromptName: "test",
+					CreatedAt:  time.Now(),
+				})
 			}
 
 			entity := claude_code.NewSessionEntity("s1", time.Now(), time.Now(), 10, analyses, 0)
@@ -277,10 +290,7 @@ func TestSessionEntity_GetBlockReason(t *testing.T) {
 }
 
 func TestSessionEntity_GetAnalyses(t *testing.T) {
-	analyses := []*domain.SessionAnalysis{
-		{ID: "a1", SessionID: "s1"},
-		{ID: "a2", SessionID: "s1"},
-	}
+	analyses := makeTestAnalyses(2)
 
 	entity := claude_code.NewSessionEntity("s1", time.Now(), time.Now(), 10, analyses, 0)
 
@@ -306,10 +316,7 @@ func TestSessionEntity_GetAnalyses_Empty(t *testing.T) {
 }
 
 func TestSessionEntity_GetLatestAnalysis(t *testing.T) {
-	analyses := []*domain.SessionAnalysis{
-		{ID: "a1", SessionID: "s1"},
-		{ID: "a2", SessionID: "s1"},
-	}
+	analyses := makeTestAnalyses(2)
 
 	entity := claude_code.NewSessionEntity("s1", time.Now(), time.Now(), 10, analyses, 0)
 
@@ -335,9 +342,9 @@ func TestSessionEntity_GetLatestAnalysis_NoAnalyses(t *testing.T) {
 }
 
 func TestSessionEntity_AnalysisTypes(t *testing.T) {
-	analyses := []*domain.SessionAnalysis{
-		{ID: "a1", SessionID: "s1", PromptName: "tool_analysis"},
-		{ID: "a2", SessionID: "s1", PromptName: "session_summary"},
+	analyses := []claude_code.SessionAnalysisData{
+		{ID: "a1", SessionID: "s1", PromptName: "tool_analysis", CreatedAt: time.Now()},
+		{ID: "a2", SessionID: "s1", PromptName: "session_summary", CreatedAt: time.Now()},
 	}
 
 	entity := claude_code.NewSessionEntity("s1", time.Now(), time.Now(), 10, analyses, 0)
@@ -355,7 +362,7 @@ func TestSessionEntity_AnalysisTypes(t *testing.T) {
 
 func TestSessionEntity_Fields_ConsistentWithGetField(t *testing.T) {
 	now := time.Now()
-	analyses := []*domain.SessionAnalysis{{ID: "a1", SessionID: "s1"}}
+	analyses := makeTestAnalyses(1)
 	entity := claude_code.NewSessionEntity("test-session", now, now, 10, analyses, 500)
 
 	allFields := entity.GetAllFields()

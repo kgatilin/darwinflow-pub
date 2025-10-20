@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
 // ClaudeCommandHandler handles all claude subcommands
@@ -23,7 +25,7 @@ type ClaudeCommandHandler struct {
 
 // HookInputParser defines the interface for parsing hook input from stdin
 type HookInputParser interface {
-	Parse(data []byte) (*HookInputData, error)
+	Parse(data []byte) (*domain.HookInputData, error)
 }
 
 // NewClaudeCommandHandler creates a new ClaudeCommandHandler

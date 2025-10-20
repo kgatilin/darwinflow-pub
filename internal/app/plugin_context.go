@@ -1,10 +1,11 @@
 package app
 
 import (
+	"context"
+	"fmt"
 	"io"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
-	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
 // ProjectContext provides access to app-layer services for plugin tools.
@@ -33,30 +34,71 @@ type pluginContextAdapter struct {
 	logger     Logger
 	dbPath     string
 	workingDir string
+	eventRepo  domain.EventRepository
 }
 
 // NewPluginContext creates a new plugin context adapter
-func NewPluginContext(logger Logger, dbPath, workingDir string) pluginsdk.PluginContext {
+func NewPluginContext(logger Logger, dbPath, workingDir string, eventRepo domain.EventRepository) domain.PluginContext {
 	return &pluginContextAdapter{
 		logger:     logger,
 		dbPath:     dbPath,
 		workingDir: workingDir,
+		eventRepo:  eventRepo,
 	}
 }
 
-func (p *pluginContextAdapter) GetLogger() pluginsdk.Logger {
+func (p *pluginContextAdapter) GetLogger() domain.Logger {
 	return &loggerAdapter{inner: p.logger}
-}
-
-func (p *pluginContextAdapter) GetDBPath() string {
-	return p.dbPath
 }
 
 func (p *pluginContextAdapter) GetWorkingDir() string {
 	return p.workingDir
 }
 
-// loggerAdapter adapts app.Logger to pluginsdk.Logger
+func (p *pluginContextAdapter) EmitEvent(ctx context.Context, event domain.PluginEvent) error {
+	// Convert SDK event to domain event
+	// SDK Event has: Type, Source, Timestamp, Payload (map[string]interface{}), Metadata (map[string]string)
+	// Domain Event has: ID, Timestamp, Type (EventType), SessionID, Payload (interface{}), Content (string)
+
+	// Extract session ID from metadata if present
+	sessionID := ""
+	if event.Metadata != nil {
+		sessionID = event.Metadata["session_id"]
+	}
+
+	// Combine type and source for event type
+	// Use the event.Type directly as it's already in dot notation
+	eventType := domain.EventType(event.Type)
+
+	// Build payload that includes both the event payload and source information
+	payload := map[string]interface{}{
+		"source": event.Source,
+		"data":   event.Payload,
+	}
+	if event.Metadata != nil {
+		payload["metadata"] = event.Metadata
+	}
+
+	// Create normalized content for full-text search
+	// Combine type, source, and payload fields
+	contentParts := []string{string(eventType), event.Source}
+	for _, v := range event.Payload {
+		contentParts = append(contentParts, fmt.Sprintf("%v", v))
+	}
+	content := fmt.Sprintf("%s", contentParts)
+
+	// Create domain event
+	domainEvent := domain.NewEvent(eventType, sessionID, payload, content)
+
+	// Save to repository
+	if err := p.eventRepo.Save(ctx, domainEvent); err != nil {
+		return fmt.Errorf("failed to save event: %w", err)
+	}
+
+	return nil
+}
+
+// loggerAdapter adapts app.Logger to domain.Logger
 type loggerAdapter struct {
 	inner Logger
 }
@@ -85,44 +127,26 @@ type commandContextAdapter struct {
 }
 
 // NewCommandContext creates a new command context adapter
-func NewCommandContext(logger Logger, dbPath, workingDir string, output io.Writer, input io.Reader) pluginsdk.CommandContext {
+func NewCommandContext(logger Logger, dbPath, workingDir string, eventRepo interface{}, output io.Writer, input io.Reader) domain.CommandContext {
 	return &commandContextAdapter{
 		pluginContextAdapter: pluginContextAdapter{
 			logger:     logger,
 			dbPath:     dbPath,
 			workingDir: workingDir,
+			eventRepo:  eventRepo.(domain.EventRepository),
 		},
 		output: output,
 		input:  input,
 	}
 }
 
-func (c *commandContextAdapter) GetOutput() io.Writer {
+func (c *commandContextAdapter) GetStdout() io.Writer {
 	return c.output
 }
 
-func (c *commandContextAdapter) GetInput() io.Reader {
+func (c *commandContextAdapter) GetStdin() io.Reader {
 	return c.input
 }
 
-// toolContextAdapter adapts internal services to SDK ToolContext interface
-type toolContextAdapter struct {
-	pluginContextAdapter
-	output io.Writer
-}
-
-// NewToolContext creates a new tool context adapter
-func NewToolContext(logger Logger, dbPath, workingDir string, output io.Writer) pluginsdk.ToolContext {
-	return &toolContextAdapter{
-		pluginContextAdapter: pluginContextAdapter{
-			logger:     logger,
-			dbPath:     dbPath,
-			workingDir: workingDir,
-		},
-		output: output,
-	}
-}
-
-func (t *toolContextAdapter) GetOutput() io.Writer {
-	return t.output
-}
+// Note: ToolContext removed - tools now use regular context
+// Tools are executed via the Tool interface which receives context.Context and args

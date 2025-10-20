@@ -7,9 +7,9 @@
 ### Key Components
 
 - **CLI Tool (`dw`)**: Main entry point with multiple subcommands
-  - `dw claude init` - Initialize logging infrastructure
+  - `dw claude-code init` (or `dw claude init`) - Initialize logging infrastructure
   - `dw refresh` - Update database schema and hooks to latest version (run after upgrading)
-  - `dw claude log` - Log events (called by hooks)
+  - `dw claude-code log` (or `dw claude log`) - Log events (called by hooks)
   - `dw logs` - View and query logged events
   - `dw ui` - Interactive terminal UI for browsing and analyzing sessions
     - Session list view with analysis status indicators
@@ -26,9 +26,6 @@
     - `--model <model>` - Override model from config
     - `--token-limit <num>` - Override token limit from config
     - `--view` - View existing analysis without re-analyzing
-  - `dw project` - Run project-specific tools provided by plugins
-    - `dw project list` - List all available plugin tools
-    - `dw project <toolname> [args]` - Execute a plugin tool
 - **Event Logging**: Captures tool invocations and user prompts via Claude Code hooks
 - **SQLite Storage**: Fast, file-based event storage with full-text search capability
 - **Database Migration**: Safe schema migrations with automatic duplicate cleanup and version upgrades
@@ -59,9 +56,10 @@
 **Plugin Architecture**:
 - **Plugin Interface** (`internal/domain/plugin.go`): Contract all plugins must implement
 - **PluginRegistry** (`internal/app/plugin_registry.go`): Manages plugin lifecycle and routing
-- **Claude Code Plugin** (`internal/app/plugins/claude_code/`): Core plugin providing "session" entities
+- **Claude Code Plugin** (`pkg/plugins/claude_code/`): Core plugin providing "session" entities
   - Implements IExtensible + IHasContext + ITrackable
   - Wraps existing Claude Code session data
+  - Provides commands (`init`, `log`) and tools (`session-summary`)
   - Read-only (sessions cannot be modified)
 
 **How It Works**:
@@ -77,26 +75,40 @@
 - Cross-project workflow optimization (analyze patterns across all entity types)
 - Extensible for different workflow domains (coding, project management, research, etc.)
 
+**Command System**:
+Plugins provide CLI commands via the `ICommandProvider` capability (defined in `internal/domain/plugin.go`):
+- **Command Interface**: Defines command name, description, usage, and execution
+- **CommandRegistry** (`internal/app/command_registry.go`): Discovers and executes commands from registered plugins
+- **Built-in Commands** (from claude-code plugin):
+  - `dw claude-code init` (or `dw claude init`): Initialize Claude Code logging infrastructure
+  - `dw claude-code log <event-type>` (or `dw claude log`): Log a Claude Code event
+- **Usage**: `dw <plugin-name> <command> [args]` - Plugin commands under plugin namespace
+- **Backward Compatibility**: `dw claude` maps to `dw claude-code` for historical compatibility
+
 **Tool System**:
-Plugins can provide custom CLI tools via the `IToolProvider` capability:
+Plugins can also provide project-specific tools via the `IToolProvider` capability:
 - **Tool Interface** (`internal/domain/plugin.go`): Defines tool name, description, usage, and execution
 - **ToolRegistry** (`internal/app/tool_registry.go`): Discovers and executes tools from registered plugins
 - **ProjectContext**: Tools receive access to event repo, analysis repo, config, and working directory
-- **Built-in Tools**:
-  - `session-summary`: Display summary of Claude Code sessions (from claude-code plugin)
-- **Usage**: `dw project <toolname> [args]` - Clear namespace separation from built-in commands
+- **Built-in Tools** (from claude-code plugin):
+  - `dw project session-summary --last`: Display summary of most recent Claude Code session
+  - `dw project session-summary --session-id <id>`: Display summary of specific session
+- **Usage**: `dw project <toolname> [args]` - Clear namespace separation from plugin commands
 
-**How Tools Work**:
-1. Plugin implements `IToolProvider` interface with `GetTools()` method
-2. ToolRegistry discovers tools from all registered plugins
-3. `dw project <toolname>` routes to appropriate tool
-4. Tool executes with full access to project context (repos, config, etc.)
+**How It Works**:
+1. Plugin implements `ICommandProvider` (for CLI commands) and/or `IToolProvider` (for project tools)
+2. Registries discover commands/tools from all registered plugins
+3. `dw <plugin-name> <command>` routes to plugin commands (e.g., init, log)
+4. `dw project <toolname>` routes to project tools (e.g., session-summary)
+5. Commands/tools execute with appropriate context (I/O, repos, config, etc.)
 
 **Current State**:
 - ✅ Core plugin infrastructure implemented
-- ✅ Claude-code plugin providing sessions
-- ✅ TUI using plugin system
-- ✅ Tool system with plugin-provided CLI commands
+- ✅ Claude-code plugin providing sessions, commands, and tools
+- ✅ TUI using plugin system for entity queries
+- ✅ Command system with plugin-namespaced CLI commands
+- ✅ Tool system with project-scoped tools
+- ⚠️ SDK in `pkg/pluginsdk/` exists but violates DDD architecture (see Phase 2)
 - 🔄 External plugin discovery (planned)
 - 🔄 Subprocess communication protocol (planned)
 
@@ -212,11 +224,15 @@ When working on this project:
 8. **Commit after each iteration** - After completing each logical task/iteration, commit all changes with a concise, informative commit message (e.g., "add session refresh feature" rather than long explanations)
 
 **Working with the Plugin System**:
-- New entity types should implement capability interfaces (IExtensible, ITrackable, etc.)
-- Core plugins live in `internal/app/plugins/` (built-in, ship with tool)
-- External plugins will use `.workflow/plugin.json` discovery (future)
-- Plugin tests should verify capability interface compliance
+- Plugin interfaces are defined in `internal/domain/plugin.go` (Plugin, Command, ICommandProvider, IToolProvider)
+- Capability interfaces are defined in `internal/domain/capability.go` (IExtensible, ITrackable, IHasContext, etc.)
+- Core plugins live in `pkg/plugins/` (e.g., `pkg/plugins/claude_code/`)
+- Plugins implement domain interfaces and use domain types only
+- Plugin tests should verify interface compliance and capability support
 - TUI should render based on capabilities, not entity types
+- Commands are plugin-scoped: `dw <plugin-name> <command>`
+- Tools are project-scoped: `dw project <toolname>`
+- **Architecture Note**: `pkg/pluginsdk/` exists but violates DDD rules (will be addressed in Phase 2)
 
 ---
 

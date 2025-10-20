@@ -8,8 +8,8 @@
 
 - **Module**: (detected from go.mod)
 - **Status**: ✓ 0 violations
-- **Packages**: 10
-- **Files**: 44
+- **Packages**: 14
+- **Files**: 86
 
 ## Architecture Summary
 
@@ -25,22 +25,30 @@
 ### cmd (Application Entry Points)
 
 - **main** (`cmd/dw`)
-  - Files: 8 | Exports: 4
-  - Key exports: LogsOptions, ParseLogsFlags, ListLogs
+  - Files: 9 | Exports: 5
+  - Key exports: AppServices, InitializeApp, LogsOptions
   - **Details**: `go-arch-lint -format=package cmd/dw`
+
+
+### pkg (Public APIs)
+
+- **claude_code** (`pkg/plugins/claude_code`)
+  - Files: 4 | Exports: 55
+  - Key exports: GetCommands, InitCommand, GetName
+  - **Details**: `go-arch-lint -format=package pkg/plugins/claude_code`
+
+- **pluginsdk** (`pkg/pluginsdk`)
+  - Files: 9 | Exports: 25
+  - Key exports: IEntityProvider, IEntityUpdater, ICommandProvider
+  - **Details**: `go-arch-lint -format=package pkg/pluginsdk`
 
 
 ### internal (Isolated Primitives)
 
 - **app** (`internal/app`)
-  - Files: 7 | Exports: 75
+  - Files: 15 | Exports: 108
   - Key exports: NoOpLogger, Debug, Info
   - **Details**: `go-arch-lint -format=package internal/app`
-
-- **claude_code** (`internal/app/plugins/claude_code`)
-  - Files: 3 | Exports: 27
-  - Key exports: ClaudeCodePlugin, NewClaudeCodePlugin, GetInfo
-  - **Details**: `go-arch-lint -format=package internal/app/plugins/claude_code`
 
 - **tui** (`internal/app/tui`)
   - Files: 6 | Exports: 55
@@ -48,12 +56,12 @@
   - **Details**: `go-arch-lint -format=package internal/app/tui`
 
 - **domain** (`internal/domain`)
-  - Files: 7 | Exports: 62
+  - Files: 7 | Exports: 61
   - Key exports: SessionAnalysis, NewSessionAnalysis, NewSessionAnalysisWithType
   - **Details**: `go-arch-lint -format=package internal/domain`
 
 - **infra_test** (`internal/infra`)
-  - Files: 7 | Exports: 61
+  - Files: 8 | Exports: 64
   - Key exports: DefaultConfigFileName, ConfigLoader, NewConfigLoader
   - **Details**: `go-arch-lint -format=package internal/infra`
 
@@ -80,8 +88,8 @@ To get detailed information about specific packages:
 
 ## Statistics
 
-- **Total Files**: 44
-- **Total Packages**: 10
+- **Total Files**: 86
+- **Total Packages**: 14
 - **Violations**: 0
 - **External Dependencies**: 28
 

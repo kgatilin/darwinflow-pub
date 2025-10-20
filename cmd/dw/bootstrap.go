@@ -14,12 +14,12 @@ import (
 type AppServices struct {
 	PluginRegistry  *app.PluginRegistry
 	CommandRegistry *app.CommandRegistry
-	ToolRegistry    *app.ToolRegistry
 	LogsService     *app.LogsService
 	AnalysisService *app.AnalysisService
 	SetupService    *app.SetupService
 	ConfigLoader    app.ConfigLoader
 	Logger          app.Logger
+	EventRepo       interface{} // EventRepository for plugin contexts (type from internal/domain)
 	DBPath          string
 	WorkingDir      string
 }
@@ -107,8 +107,8 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		)
 	}
 
-	// 10. Register built-in plugins (app layer handles plugin imports)
-	if err := app.RegisterBuiltInPlugins(
+	// 10. Register built-in plugins (cmd layer handles plugin imports)
+	if err := RegisterBuiltInPlugins(
 		pluginRegistry,
 		analysisService,
 		logsService,
@@ -120,19 +120,18 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		return nil, fmt.Errorf("failed to register built-in plugins: %w", err)
 	}
 
-	// 11. Create command and tool registries
+	// 11. Create command registry
 	commandRegistry := app.NewCommandRegistry(pluginRegistry, logger)
-	toolRegistry := app.NewToolRegistry(pluginRegistry, logger)
 
 	return &AppServices{
 		PluginRegistry:  pluginRegistry,
 		CommandRegistry: commandRegistry,
-		ToolRegistry:    toolRegistry,
 		LogsService:     logsService,
 		AnalysisService: analysisService,
 		SetupService:    setupService,
 		ConfigLoader:    configLoader,
 		Logger:          logger,
+		EventRepo:       repo,
 		DBPath:          dbPath,
 		WorkingDir:      workingDir,
 	}, nil
