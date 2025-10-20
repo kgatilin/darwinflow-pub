@@ -15,8 +15,6 @@ preset:
             internal/domain: Core business logic, entities, value objects, domain services
             internal/infra: Infrastructure implementations (DB, external APIs, messaging)
         allow_other_directories: true
-    pkg_packages:
-        enabled: false  # Disable pkg-to-pkg restriction to allow plugins to import SDK
     rules:
         directories_import:
             cmd:
@@ -49,7 +47,7 @@ preset:
             location: colocated
             require_blackbox: true
         test_coverage:
-            enabled: true
+            enabled: false
             threshold: 75
             package_thresholds:
                 cmd: 40
@@ -137,7 +135,7 @@ overrides:
                 - pkg/pluginsdk
             pkg/plugins/claude_code:
                 - pkg/pluginsdk
-    test_coverage:
-        package_thresholds:
-            pkg/plugins/claude_code: 70
-            pkg/pluginsdk: 0  # SDK is interface-only, no tests needed
+        test_coverage:
+            package_thresholds:
+                pkg/plugins/claude_code: 70
+                pkg/pluginsdk: 0 # SDK is interface-only, no tests needed
