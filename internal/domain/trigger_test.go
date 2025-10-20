@@ -9,6 +9,7 @@ import (
 func TestTriggerTypes(t *testing.T) {
 	// Test that all trigger type constants are defined
 	triggerTypes := []domain.TriggerType{
+		// Legacy types
 		domain.TriggerPreToolUse,
 		domain.TriggerPostToolUse,
 		domain.TriggerNotification,
@@ -16,6 +17,10 @@ func TestTriggerTypes(t *testing.T) {
 		domain.TriggerStop,
 		domain.TriggerSubagentStop,
 		domain.TriggerPreCompact,
+		// New generic types
+		domain.TriggerBeforeToolUse,
+		domain.TriggerAfterToolUse,
+		domain.TriggerUserInput,
 		domain.TriggerSessionStart,
 		domain.TriggerSessionEnd,
 	}
@@ -42,6 +47,7 @@ func TestTriggerType_Values(t *testing.T) {
 		trigger  domain.TriggerType
 		expected string
 	}{
+		// Legacy trigger types (for backward compatibility)
 		{domain.TriggerPreToolUse, "PreToolUse"},
 		{domain.TriggerPostToolUse, "PostToolUse"},
 		{domain.TriggerNotification, "Notification"},
@@ -49,8 +55,12 @@ func TestTriggerType_Values(t *testing.T) {
 		{domain.TriggerStop, "Stop"},
 		{domain.TriggerSubagentStop, "SubagentStop"},
 		{domain.TriggerPreCompact, "PreCompact"},
-		{domain.TriggerSessionStart, "SessionStart"},
-		{domain.TriggerSessionEnd, "SessionEnd"},
+		// New generic trigger types
+		{domain.TriggerBeforeToolUse, "trigger.tool.before"},
+		{domain.TriggerAfterToolUse, "trigger.tool.after"},
+		{domain.TriggerUserInput, "trigger.user.input"},
+		{domain.TriggerSessionStart, "trigger.session.start"},
+		{domain.TriggerSessionEnd, "trigger.session.end"},
 	}
 
 	for _, tt := range tests {

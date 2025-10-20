@@ -44,6 +44,41 @@ type IEventEmitter interface {
 	// or stdout JSON streams for subprocess plugins.
 }
 
+// IHookProvider - Plugin provides system hooks (optional capability)
+// Plugins can integrate with system lifecycle events through hooks.
+// Hooks are event-triggered scripts that run during specific lifecycle events.
+//
+// Hook Provider Pattern:
+//
+// Plugins implementing IHookProvider declaratively define hooks they need:
+//   - PreToolUse hook: Triggered before any tool execution
+//   - UserPromptSubmit hook: Triggered when user provides input
+//   - SessionEnd hook: Triggered when session ends
+//
+// Example: Claude Code Plugin
+//   - Provides PreToolUse hook to log all tool invocations
+//   - Provides UserPromptSubmit hook to log user messages
+//   - Provides SessionEnd hook to trigger auto-summaries
+//   - During initialization, hooks are installed to Claude Code settings
+//   - When hook triggers, command is executed with event data on stdin
+//
+// Benefits:
+//   - Plugins declaratively define what they need
+//   - System can query plugins for hook requirements
+//   - Multiple plugins can provide hooks (extensible)
+//   - Hook installation logic stays in plugin
+type IHookProvider interface {
+	Plugin
+	// GetHooks returns the hook configurations this plugin provides
+	// Each hook describes a system event the plugin wants to observe or trigger
+	GetHooks() []HookConfiguration
+	// InstallHooks installs the plugin's hooks into the system
+	// workingDir is the directory where hooks should be stored/installed
+	InstallHooks(workingDir string) error
+	// RefreshHooks updates existing hooks (e.g., after plugin upgrade)
+	RefreshHooks(workingDir string) error
+}
+
 // EntityTypeInfo describes an entity type provided by a plugin
 type EntityTypeInfo struct {
 	// Type is the unique identifier for this entity type (e.g., "session", "task")
