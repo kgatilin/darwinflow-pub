@@ -1,4 +1,4 @@
-.PHONY: install test help
+.PHONY: build install test help
 
 INSTALL_PATH := $(shell go env GOPATH)/bin
 
@@ -7,6 +7,9 @@ help: ## Show this help message
 	@echo ''
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
+
+build: ## Build binary to ./dw
+	go build -o dw ./cmd/dw
 
 install: ## Install binary to GOPATH/bin
 	go install ./cmd/dw
