@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
@@ -12,28 +11,28 @@ import (
 // ClaudeCodePlugin provides Claude Code sessions as entities.
 // This is a core plugin that ships with DarwinFlow.
 //
-// NOTE: This plugin is built-in and has access to internal services.
+// NOTE: This plugin is built-in and has access to service interfaces.
 // External plugins would only have access to PluginContext from the SDK.
 type ClaudeCodePlugin struct {
-	// Internal services (only available for built-in plugins)
-	analysisService *app.AnalysisService
-	logsService     *app.LogsService
+	// Service interfaces (injected by app layer for built-in plugins)
+	analysisService AnalysisService
+	logsService     LogsService
 	logger          pluginsdk.Logger // Use SDK logger
-	setupService    *app.SetupService
-	handler         *app.ClaudeCommandHandler
+	setupService    SetupService
+	handler         ClaudeCommandHandler
 	dbPath          string
 }
 
 // NewClaudeCodePlugin creates a new Claude Code plugin
 //
-// For built-in plugins, we can pass internal services directly.
+// For built-in plugins, we inject service implementations.
 // External plugins would receive only PluginContext.
 func NewClaudeCodePlugin(
-	analysisService *app.AnalysisService,
-	logsService *app.LogsService,
+	analysisService AnalysisService,
+	logsService LogsService,
 	logger pluginsdk.Logger,
-	setupService *app.SetupService,
-	handler *app.ClaudeCommandHandler,
+	setupService SetupService,
+	handler ClaudeCommandHandler,
 	dbPath string,
 ) *ClaudeCodePlugin {
 	return &ClaudeCodePlugin{
