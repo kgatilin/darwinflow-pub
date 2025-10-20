@@ -60,14 +60,11 @@ func uiCommand(args []string) {
 	// Create config loader (reuse existing logger)
 	configLoaderForPlugin := infra.NewConfigLoader(logger)
 
-	// Create hook input parser
-	hookInputParser := infra.NewHookInputParserAdapter()
-
 	// Create plugin registry
 	registry := app.NewPluginRegistry(logger)
 
 	// Register built-in plugins
-	if err := RegisterBuiltInPlugins(registry, analysisService, logsService, logger, setupService, configLoaderForPlugin, hookInputParser, *dbPath); err != nil {
+	if err := RegisterBuiltInPlugins(registry, analysisService, logsService, logger, setupService, configLoaderForPlugin, *dbPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Error registering built-in plugins: %v\n", err)
 		os.Exit(1)
 	}

@@ -53,7 +53,7 @@ func newMockCommandContext(jsonInput string) *mockCommandContext {
 
 // TestNewEmitEventCommand verifies the command can be created
 func TestNewEmitEventCommand(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	if cmd == nil {
@@ -75,7 +75,7 @@ func TestNewEmitEventCommand(t *testing.T) {
 
 // TestEmitEventCommand_ValidEvent verifies a valid event is emitted
 func TestEmitEventCommand_ValidEvent(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -122,7 +122,7 @@ func TestEmitEventCommand_ValidEvent(t *testing.T) {
 
 // TestEmitEventCommand_InvalidJSON verifies invalid JSON is silently ignored
 func TestEmitEventCommand_InvalidJSON(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	mockCtx := newMockCommandContext("{invalid json")
@@ -142,7 +142,7 @@ func TestEmitEventCommand_InvalidJSON(t *testing.T) {
 
 // TestEmitEventCommand_MissingSessionID verifies missing session_id is silently ignored
 func TestEmitEventCommand_MissingSessionID(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -174,7 +174,7 @@ func TestEmitEventCommand_MissingSessionID(t *testing.T) {
 
 // TestEmitEventCommand_MissingType verifies missing type is silently ignored
 func TestEmitEventCommand_MissingType(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -205,7 +205,7 @@ func TestEmitEventCommand_MissingType(t *testing.T) {
 
 // TestEmitEventCommand_MissingSource verifies missing source is silently ignored
 func TestEmitEventCommand_MissingSource(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -236,7 +236,7 @@ func TestEmitEventCommand_MissingSource(t *testing.T) {
 
 // TestEmitEventCommand_DefaultTimestamp verifies missing timestamp is set to current time
 func TestEmitEventCommand_DefaultTimestamp(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -276,7 +276,7 @@ func TestEmitEventCommand_DefaultTimestamp(t *testing.T) {
 
 // TestEmitEventCommand_DefaultVersion verifies missing version is set to "1.0"
 func TestEmitEventCommand_DefaultVersion(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -312,7 +312,7 @@ func TestEmitEventCommand_DefaultVersion(t *testing.T) {
 
 // TestEmitEventCommand_ExplicitVersion verifies explicit version is preserved
 func TestEmitEventCommand_ExplicitVersion(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -346,7 +346,7 @@ func TestEmitEventCommand_ExplicitVersion(t *testing.T) {
 
 // TestEmitEventCommand_EmptyStdin verifies empty stdin is silently ignored
 func TestEmitEventCommand_EmptyStdin(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	mockCtx := newMockCommandContext("")
@@ -365,7 +365,7 @@ func TestEmitEventCommand_EmptyStdin(t *testing.T) {
 
 // TestEmitEventCommand_NilMetadata verifies nil metadata is initialized
 func TestEmitEventCommand_NilMetadata(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -392,7 +392,7 @@ func TestEmitEventCommand_NilMetadata(t *testing.T) {
 
 // TestEmitEventCommand_NilPayload verifies nil payload is initialized
 func TestEmitEventCommand_NilPayload(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -425,7 +425,7 @@ func TestEmitEventCommand_NilPayload(t *testing.T) {
 
 // TestEmitEventCommand_EmitError verifies emit errors are silently handled
 func TestEmitEventCommand_EmitError(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -451,7 +451,7 @@ func TestEmitEventCommand_EmitError(t *testing.T) {
 
 // TestEmitEventCommand_StdinReadError verifies stdin read errors are silently handled
 func TestEmitEventCommand_StdinReadError(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	// Create a reader that returns an error
@@ -484,7 +484,7 @@ func (e *errorReader) Read(p []byte) (n int, err error) {
 
 // TestEmitEventCommand_LargePayload verifies large payloads are handled
 func TestEmitEventCommand_LargePayload(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	// Create a large payload
@@ -516,7 +516,7 @@ func TestEmitEventCommand_LargePayload(t *testing.T) {
 
 // TestEmitEventCommand_SpecialCharactersInSessionID verifies special characters in session_id
 func TestEmitEventCommand_SpecialCharactersInSessionID(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -549,7 +549,7 @@ func TestEmitEventCommand_SpecialCharactersInSessionID(t *testing.T) {
 
 // TestEmitEventCommand_MultipleMetadataFields verifies multiple metadata fields are preserved
 func TestEmitEventCommand_MultipleMetadataFields(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -596,7 +596,7 @@ func TestEmitEventCommand_MultipleMetadataFields(t *testing.T) {
 
 // TestEmitEventCommand_ComplexPayload verifies complex nested payloads are handled
 func TestEmitEventCommand_ComplexPayload(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	event := pluginsdk.Event{
@@ -638,7 +638,7 @@ func TestEmitEventCommand_ComplexPayload(t *testing.T) {
 
 // TestEmitEventCommand_CommandImplementsSDKInterface verifies the command implements the SDK interface
 func TestEmitEventCommand_CommandImplementsSDKInterface(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
 	cmd := claude_code.NewEmitEventCommand(plugin)
 
 	// Verify the command implements pluginsdk.Command interface

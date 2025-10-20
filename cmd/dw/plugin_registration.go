@@ -130,22 +130,6 @@ func (a *configLoaderAdapter) LoadConfig(path string) (*claude_code.Config, erro
 	}, nil
 }
 
-// hookInputParserAdapter adapts app.HookInputParser to claude_code.HookInputParser
-type hookInputParserAdapter struct {
-	inner app.HookInputParser
-}
-
-func (a *hookInputParserAdapter) Parse(data []byte) (*claude_code.HookInputData, error) {
-	domainData, err := a.inner.Parse(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &claude_code.HookInputData{
-		SessionID: domainData.SessionID,
-	}, nil
-}
-
 // setupServiceAdapter adapts app.SetupService to claude_code.SetupService
 type setupServiceAdapter struct {
 	inner *app.SetupService
@@ -168,7 +152,6 @@ func RegisterBuiltInPlugins(
 	logger app.Logger,
 	setupService *app.SetupService,
 	configLoader app.ConfigLoader,
-	hookInputParser app.HookInputParser,
 	dbPath string,
 ) error {
 	// Create plugin context (SDK logger adapter)
@@ -179,18 +162,16 @@ func RegisterBuiltInPlugins(
 	analysisAdapter := &analysisServiceAdapter{inner: analysisService}
 	setupAdapter := &setupServiceAdapter{inner: setupService}
 	configAdapter := &configLoaderAdapter{inner: configLoader}
-	hookParserAdapter := &hookInputParserAdapter{inner: hookInputParser}
 
 	// Register claude-code plugin
 	// Note: Built-in plugins can receive internal services during construction,
 	// but their public interface uses only SDK types
 	claudePlugin := claude_code.NewClaudeCodePlugin(
-		analysisAdapter,   // Adapter to claude_code.AnalysisService
-		logsAdapter,       // Adapter to claude_code.LogsService
-		sdkLogger,         // SDK logger
-		setupAdapter,      // Adapter to claude_code.SetupService
-		configAdapter,     // Adapter to claude_code.ConfigLoader
-		hookParserAdapter, // Adapter to claude_code.HookInputParser
+		analysisAdapter, // Adapter to claude_code.AnalysisService
+		logsAdapter,     // Adapter to claude_code.LogsService
+		sdkLogger,       // SDK logger
+		setupAdapter,    // Adapter to claude_code.SetupService
+		configAdapter,   // Adapter to claude_code.ConfigLoader
 		dbPath,
 	)
 

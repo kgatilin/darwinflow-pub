@@ -33,7 +33,6 @@ func NewClaudeCodePlugin(
 	logger pluginsdk.Logger,
 	setupService SetupService,
 	configLoader ConfigLoader,
-	hookInputParser HookInputParser,
 	dbPath string,
 ) *ClaudeCodePlugin {
 	return &ClaudeCodePlugin{
@@ -42,7 +41,7 @@ func NewClaudeCodePlugin(
 		logger:          logger,
 		setupService:    setupService,
 		configLoader:    configLoader,
-		hookInputParser: hookInputParser,
+		hookInputParser: newHookInputParser(), // Plugin creates its own parser
 		dbPath:          dbPath,
 	}
 }

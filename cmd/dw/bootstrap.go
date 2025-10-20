@@ -74,10 +74,7 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 	// 8. Create plugin registry
 	pluginRegistry := app.NewPluginRegistry(logger)
 
-	// 9. Create hook input parser for plugins
-	hookInputParser := infra.NewHookInputParserAdapter()
-
-	// 10. Register built-in plugins (cmd layer handles plugin imports)
+	// 9. Register built-in plugins (cmd layer handles plugin imports)
 	if err := RegisterBuiltInPlugins(
 		pluginRegistry,
 		analysisService,
@@ -85,7 +82,6 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		logger,
 		setupService,
 		configLoader,
-		hookInputParser,
 		dbPath,
 	); err != nil {
 		return nil, fmt.Errorf("failed to register built-in plugins: %w", err)

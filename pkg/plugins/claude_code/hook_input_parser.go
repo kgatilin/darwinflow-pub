@@ -1,11 +1,11 @@
-package infra
+package claude_code
 
 import (
 	"encoding/json"
-	"io"
 )
 
-// HookInput represents the standardized input passed to hooks via stdin from Claude Code
+// HookInput represents the standardized input passed to hooks via stdin from Claude Code.
+// This is a plugin-local struct that captures all Claude Code-specific hook fields.
 type HookInput struct {
 	SessionID      string                 `json:"session_id"`
 	TranscriptPath string                 `json:"transcript_path"`
@@ -20,17 +20,25 @@ type HookInput struct {
 	Prompt         string                 `json:"prompt,omitempty"`           // Alternative field for user message
 }
 
-// ParseHookInput reads and parses hook input from a reader (typically stdin)
-func ParseHookInput(reader io.Reader) (*HookInput, error) {
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
+// hookInputParser implements HookInputParser interface for the plugin.
+// This parser is self-contained and has no framework dependencies.
+type hookInputParser struct{}
 
+// newHookInputParser creates a new hook input parser for the plugin
+func newHookInputParser() HookInputParser {
+	return &hookInputParser{}
+}
+
+// Parse parses hook input from stdin data and returns plugin's HookInputData.
+// Only extracts the SessionID field, which is all the plugin currently needs.
+func (p *hookInputParser) Parse(data []byte) (*HookInputData, error) {
 	var input HookInput
 	if err := json.Unmarshal(data, &input); err != nil {
 		return nil, err
 	}
 
-	return &input, nil
+	// Extract only what the plugin needs (currently just SessionID)
+	return &HookInputData{
+		SessionID: input.SessionID,
+	}, nil
 }
