@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
@@ -64,16 +66,16 @@ func configInitCmd(args []string) {
 		os.Exit(1)
 	}
 
-	// Create and save default config
-	createdPath, err := configLoader.InitializeDefaultConfig("")
-	if err != nil {
+	// Create handler
+	handler := app.NewConfigCommandHandler(configLoader, logger, os.Stdout)
+
+	// Execute
+	ctx := context.Background()
+	if err := handler.Init(ctx, "", *force); err != nil {
 		logger.Error("Failed to create config: %v", err)
 		fmt.Fprintf(os.Stderr, "Failed to create config: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("Created config file: %s\n", createdPath)
-	fmt.Println("\nYou can now customize the prompts in this file for your project.")
 }
 
 func configShowCmd(args []string) {
@@ -98,17 +100,15 @@ func configShowCmd(args []string) {
 	}
 
 	configLoader := infra.NewConfigLoader(logger)
-	config, err := configLoader.LoadConfig("")
-	if err != nil {
+
+	// Create handler
+	handler := app.NewConfigCommandHandler(configLoader, logger, os.Stdout)
+
+	// Execute
+	ctx := context.Background()
+	if err := handler.Show(ctx); err != nil {
 		logger.Error("Failed to load config: %v", err)
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Println("=== DarwinFlow Configuration ===")
-	fmt.Printf("\nPrompts defined: %d\n", len(config.Prompts))
-	for name := range config.Prompts {
-		fmt.Printf("  - %s\n", name)
-	}
-	fmt.Println("\nTo edit prompts, modify .darwinflow.yaml in your project root")
 }

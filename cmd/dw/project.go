@@ -8,6 +8,7 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/app/plugins/claude_code"
+	"github.com/kgatilin/darwinflow-pub/internal/domain"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
 )
 
@@ -86,15 +87,30 @@ func projectCommand(args []string) {
 	// Create tool registry
 	toolRegistry := app.NewToolRegistry(pluginRegistry, logger)
 
+	// Create handler
+	handler := app.NewProjectCommandHandler(toolRegistry, os.Stdout)
+
 	// Handle special commands
+	ctx := context.Background()
 	if toolName == "list" || toolName == "--help" || toolName == "-h" {
-		fmt.Println(toolRegistry.ListTools())
+		if err := handler.ListTools(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "Error listing tools: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 
+	// Create project context
+	projectCtx := &domain.ProjectContext{
+		EventRepo:    repo,
+		AnalysisRepo: repo,
+		Config:       config,
+		CWD:          cwd,
+		DBPath:       *dbPath,
+	}
+
 	// Execute tool
-	ctx := context.Background()
-	if err := toolRegistry.ExecuteToolWithContext(ctx, toolName, toolArgs, repo, repo, config, cwd, *dbPath); err != nil {
+	if err := handler.ExecuteTool(ctx, toolName, toolArgs, projectCtx); err != nil {
 		fmt.Fprintf(os.Stderr, "Error executing tool '%s': %v\n", toolName, err)
 		os.Exit(1)
 	}
@@ -115,5 +131,5 @@ func printProjectUsage() {
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  dw project list")
-	fmt.Println("  dw project summary --session-id abc123")
+	fmt.Println("  dw project session-summary --session-id abc123")
 }

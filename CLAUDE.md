@@ -173,7 +173,7 @@ For detailed architecture and API information, see:
 **Note**: When the user refers to "workflow", they mean these CLAUDE.md instructions.
 
 When working on this project:
-1. Understand the 3-layer architecture (see below)
+1. Understand the DDD layered architecture (see below)
 2. Check @docs/arch-index.md to see current packages and dependencies
 3. Follow the architecture guidelines strictly
 4. Write tests for new functionality (aim for 70-80% coverage)
@@ -195,19 +195,43 @@ When working on this project:
 
 **CRITICAL**: The .goarchlint configuration is IMMUTABLE - AI agents must NOT modify it.
 
-## Architecture (3-layer strict dependency flow)
+## Architecture (DDD Layered Architecture)
+
+This project uses **Domain-Driven Design (DDD)** with strict dependency rules:
 
 ```
-cmd → pkg → internal
+         ┌─────────────┐
+         │     cmd     │  Entry points
+         └──────┬──────┘
+                │
+        ┌───────┴────────┐
+        │                │
+        ▼                ▼
+┌──────────────┐  ┌──────────────┐
+│ internal/app │  │internal/infra│  Application & Infrastructure layers
+└──────┬───────┘  └──────┬───────┘
+       │                 │
+       └────────┬────────┘
+                ▼
+        ┌──────────────┐
+        │internal/domain│  Pure business logic (NO dependencies)
+        └──────────────┘
 ```
 
-**cmd**: Entry points (imports only pkg) | **pkg**: Orchestration & adapters (imports only internal) | **internal**: Domain primitives (NO imports between internal packages)
+**Layer Responsibilities**:
+- **cmd**: Application entry points → can import `internal/app`, `internal/infra`
+- **internal/app**: Use cases, orchestration → can import `internal/domain`
+- **internal/domain**: Pure business logic, entities → imports NOTHING
+- **internal/infra**: Infrastructure (DB, APIs) → can import `internal/domain`
 
-## Core Principles
+**Key Rule**: Domain layer has ZERO dependencies. All dependencies flow inward toward domain.
 
-1. **Dependency Inversion**: Internal packages define interfaces. Adapters bridge them in pkg layer.
-2. **Structural Typing**: Types satisfy interfaces via matching methods (no explicit implements)
-3. **No Slice Covariance**: Create adapters to convert []ConcreteType → []InterfaceType
+## DDD Core Principles
+
+1. **Domain Isolation**: `internal/domain` contains pure business logic with no external dependencies
+2. **Dependency Inversion**: Domain defines interfaces; infrastructure implements them
+3. **Structural Typing**: Go's implicit interfaces - types satisfy interfaces via matching methods
+4. **One-Way Dependencies**: Domain ← App/Infra ← Cmd (never reverse)
 
 ## Documentation Generation (Run Regularly)
 
@@ -243,23 +267,46 @@ This generates `docs/arch-generated.md` with:
 **Do NOT mechanically fix imports.** Violations reveal architectural issues. Process:
 1. **Reflect**: Why does this violation exist? What dependency is wrong?
 2. **Plan**: Which layer should own this logic? What's the right structure?
-3. **Refactor**: Move code to correct layer or add interfaces/adapters in pkg
+3. **Refactor**: Move code to correct layer following DDD principles
 4. **Verify**: Run `go-arch-lint .` - confirm zero violations
 
-Example: `internal/A` imports `internal/B` → Should B's logic move to A? Should both define interfaces with pkg adapter? Architecture enforces intentional design.
+**Common Violation Scenarios**:
+
+- `internal/domain` imports `internal/app` or `internal/infra` → **VIOLATION**
+  - Fix: Define interface in domain, implement in infra, inject via app layer
+
+- `internal/app` imports `internal/infra` → **VIOLATION**
+  - Fix: Use dependency injection through interfaces defined in domain
+
+- `internal/infra` needs to call domain logic → **OK** (infra → domain allowed)
+
+Example: Domain needs database access:
+- ❌ `internal/domain/user.go` imports `internal/infra/sqlite_repository.go`
+- ✅ `internal/domain/user.go` defines `UserRepository` interface
+- ✅ `internal/infra/sqlite_repository.go` implements `UserRepository`
+- ✅ `internal/app/user_service.go` receives injected repository
 
 ## Code Guidelines
 
 **DO**:
-- Add domain logic to internal/ packages
-- Define interfaces in consumer packages
-- Create adapters in pkg/ to bridge internal packages
-- Use black-box tests (`package pkgname_test`) for pkg packages
+- Keep business logic pure in `internal/domain` (no external dependencies)
+- Define repository/service interfaces in `internal/domain`
+- Implement infrastructure in `internal/infra`
+- Orchestrate use cases in `internal/app`
+- Use dependency injection to wire layers together
+- Use black-box tests (`package pkgname_test`) to test through public APIs
 
 **DON'T**:
-- Import between internal/ packages (violation!) or pass []ConcreteType as []InterfaceType
-- Put business logic in pkg/ or cmd/ (belongs in internal/)
+- Import upward (domain importing app/infra is a violation)
+- Import between internal packages at the same level
+- Put business logic in cmd, app, or infra (belongs in domain)
 - Modify .goarchlint (immutable architectural contract)
+
+**Layer-Specific Rules**:
+- **cmd**: Keep thin - just CLI parsing and wiring
+- **internal/app**: Orchestration only - coordinate domain objects
+- **internal/domain**: Pure functions, value objects, domain services
+- **internal/infra**: Technical implementations - DB, external APIs, file I/O
 
 Run `go-arch-lint .` frequently during development. Zero violations required.
 
@@ -277,7 +324,7 @@ Run `go-arch-lint .` frequently during development. Zero violations required.
 
 **File Naming**:
 - Test files: `*_test.go` in same directory as code under test
-- Example: `pkg/claude/logger.go` → `pkg/claude/logger_test.go`
+- Example: `internal/infra/sqlite_store.go` → `internal/infra/sqlite_store_test.go`
 
 ## Test Function Naming
 
@@ -361,7 +408,7 @@ go tool cover -html=coverage.out  # View in browser
 
 **Run specific test**:
 ```bash
-go test -run TestFunctionName ./pkg/claude
+go test -run TestFunctionName ./internal/infra
 ```
 
 ## Testing Best Practices
