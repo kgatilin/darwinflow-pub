@@ -179,7 +179,8 @@ func RegisterBuiltInPlugins(
 		return fmt.Errorf("failed to register claude-code plugin: %w", err)
 	}
 
-	logger.Info("Registered built-in plugin: claude-code")
+	// Note: Plugin registration is logged by PluginRegistry.RegisterPlugin()
+	// which provides detailed info (version, capabilities). No need to log again here.
 
 	// Future: Register other built-in plugins here
 
