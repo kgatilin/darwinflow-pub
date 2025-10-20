@@ -3,10 +3,20 @@ package claude_code
 import (
 	"time"
 
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
-// SessionEntity wraps a Claude Code session and implements capability interfaces.
+// SessionAnalysisData holds analysis data without depending on internal types
+type SessionAnalysisData struct {
+	ID              string
+	SessionID       string
+	PromptName      string
+	ModelUsed       string
+	PatternsSummary string
+	CreatedAt       time.Time
+}
+
+// SessionEntity wraps a Claude Code session and implements SDK capability interfaces.
 // It adapts the existing session data structure to the plugin system.
 type SessionEntity struct {
 	sessionID      string
@@ -15,10 +25,10 @@ type SessionEntity struct {
 	lastEvent      time.Time
 	eventCount     int
 	analysisCount  int
-	analyses       []*domain.SessionAnalysis
+	analyses       []SessionAnalysisData
 	analysisTypes  []string
 	tokenCount     int
-	context        *domain.EntityContext // Cached context
+	context        *pluginsdk.EntityContext // Cached context
 }
 
 // NewSessionEntity creates a new session entity from session data
@@ -26,7 +36,7 @@ func NewSessionEntity(
 	sessionID string,
 	firstEvent, lastEvent time.Time,
 	eventCount int,
-	analyses []*domain.SessionAnalysis,
+	analyses []SessionAnalysisData,
 	tokenCount int,
 ) *SessionEntity {
 	shortID := sessionID
@@ -88,16 +98,16 @@ func (s *SessionEntity) GetAllFields() map[string]interface{} {
 
 // IHasContext implementation
 
-func (s *SessionEntity) GetContext() *domain.EntityContext {
+func (s *SessionEntity) GetContext() *pluginsdk.EntityContext {
 	if s.context != nil {
 		return s.context
 	}
 
 	// Build context from session data
-	context := &domain.EntityContext{
+	context := &pluginsdk.EntityContext{
 		RelatedEntities: make(map[string][]string),
 		LinkedFiles:     []string{},
-		RecentActivity:  []domain.ActivityRecord{},
+		RecentActivity:  []pluginsdk.ActivityRecord{},
 		Metadata:        make(map[string]interface{}),
 	}
 
@@ -148,14 +158,14 @@ func (s *SessionEntity) GetBlockReason() string {
 // Additional helper methods
 
 // GetAnalyses returns all analyses for this session
-func (s *SessionEntity) GetAnalyses() []*domain.SessionAnalysis {
+func (s *SessionEntity) GetAnalyses() []SessionAnalysisData {
 	return s.analyses
 }
 
 // GetLatestAnalysis returns the most recent analysis
-func (s *SessionEntity) GetLatestAnalysis() *domain.SessionAnalysis {
+func (s *SessionEntity) GetLatestAnalysis() *SessionAnalysisData {
 	if len(s.analyses) > 0 {
-		return s.analyses[0]
+		return &s.analyses[0]
 	}
 	return nil
 }

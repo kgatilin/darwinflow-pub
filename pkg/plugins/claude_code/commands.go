@@ -6,15 +6,15 @@ import (
 	"io"
 	"os"
 
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
-// Ensure plugin implements ICommandProvider
-var _ domain.ICommandProvider = (*ClaudeCodePlugin)(nil)
+// Ensure plugin implements SDK ICommandProvider
+var _ pluginsdk.ICommandProvider = (*ClaudeCodePlugin)(nil)
 
-// GetCommands returns the CLI commands provided by this plugin
-func (p *ClaudeCodePlugin) GetCommands() []domain.Command {
-	return []domain.Command{
+// GetCommands returns the CLI commands provided by this plugin (SDK interface)
+func (p *ClaudeCodePlugin) GetCommands() []pluginsdk.Command {
+	return []pluginsdk.Command{
 		&InitCommand{plugin: p},
 		&LogCommand{plugin: p},
 		&AutoSummaryCommand{plugin: p},

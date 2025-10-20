@@ -5,12 +5,15 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
-// GetTools returns the tools provided by the claude-code plugin
-func (p *ClaudeCodePlugin) GetTools() []domain.Tool {
-	return []domain.Tool{
+// Ensure plugin implements SDK IToolProvider
+var _ pluginsdk.IToolProvider = (*ClaudeCodePlugin)(nil)
+
+// GetTools returns the tools provided by the claude-code plugin (SDK interface)
+func (p *ClaudeCodePlugin) GetTools() []pluginsdk.Tool {
+	return []pluginsdk.Tool{
 		&SessionSummaryTool{plugin: p},
 	}
 }
