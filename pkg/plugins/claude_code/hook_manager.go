@@ -8,10 +8,11 @@ import (
 )
 
 // Claude Code trigger types (from Claude Code settings.json)
+// These are the official Claude Code hook names that must be used in .claude/settings.json
 const (
-	TriggerBeforeToolUse = "trigger.tool.before"
-	TriggerUserInput     = "trigger.user.input"
-	TriggerSessionEnd    = "trigger.session.end"
+	TriggerBeforeToolUse = "PreToolUse"
+	TriggerUserInput     = "UserPromptSubmit"
+	TriggerSessionEnd    = "SessionEnd"
 )
 
 // HookConfig represents the hooks configuration for Claude Code
