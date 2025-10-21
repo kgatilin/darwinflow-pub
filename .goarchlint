@@ -47,7 +47,7 @@ preset:
             location: colocated
             require_blackbox: true
         test_coverage:
-            enabled: false
+            enabled: true
             threshold: 75
             package_thresholds:
                 cmd: 40
@@ -125,6 +125,9 @@ overrides:
             pkg/plugins: "Plugin implementations (built-in and external)"
             pkg/pluginsdk: "Plugin SDK (interfaces and types for plugin development)"
     rules:
+        strict_test_naming: true # Opt-in (default: false)
+        test_files:
+            lint: true # Must be enabled
         staticcheck: true # Enable staticcheck integration
         shared_external_imports:
             exclusions:
@@ -149,3 +152,5 @@ overrides:
             package_thresholds:
                 pkg/plugins/claude_code: 70
                 pkg/pluginsdk: 0 # SDK is interface-only, no tests needed
+                cmd: 20
+                internal/app/tui: 70

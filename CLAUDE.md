@@ -14,19 +14,37 @@
 
 ### Plugin Architecture
 
-**SDK is Single Source of Truth** (`pkg/pluginsdk`):
-- All plugin interfaces defined in `pkg/pluginsdk/` (Plugin, IEntityProvider, ICommandProvider, etc.)
-- All entity interfaces defined in `pkg/pluginsdk/entity.go` (IExtensible, ITrackable, IHasContext, etc.)
-- Zero interface duplication - if SDK has it, don't duplicate elsewhere
-- Direct SDK usage (no adaptation layer, zero overhead)
+DarwinFlow uses a plugin-based architecture:
+- **SDK** (`pkg/pluginsdk`) - Public plugin contracts (single source of truth)
+- **Core Plugin** (`pkg/plugins/claude_code`) - Claude Code event capture and analysis
+- **Framework** (`internal/*`) - Plugin-agnostic event processing and storage
 
-**Plugin Types**:
-- Internal plugins: `pkg/plugins/claude_code/` (ships with tool)
-- External plugins: Planned (import `pkg/pluginsdk` only)
+**Key Principle**: Framework is plugin-agnostic. Plugin-specific types belong in plugin packages.
 
-**Key Principle**: Framework is plugin-agnostic. Plugin-specific types (event types, payloads, analysis) belong in plugin packages, not in framework domain.
+**For details**: See `pkg/pluginsdk/CLAUDE.md` and `@docs/plugin-development-guide.md`
 
-**For detailed plugin development**: See @docs/plugin-development-guide.md
+---
+
+## Package Structure
+
+**Foundation Layer**:
+- `pkg/pluginsdk` - Public plugin SDK (zero internal dependencies) → See `pkg/pluginsdk/CLAUDE.md`
+
+**Framework Layer**:
+- `internal/domain` - Framework business logic (plugin-agnostic) → See `internal/domain/CLAUDE.md`
+- `internal/infra` - Infrastructure implementations (DB, config, logging) → See `internal/infra/CLAUDE.md`
+- `internal/app` - Application services and orchestration → See `internal/app/CLAUDE.md`
+- `internal/app/tui` - Terminal user interface (Bubble Tea) → See `internal/app/tui/CLAUDE.md`
+
+**Plugin Layer**:
+- `pkg/plugins/claude_code` - Claude Code plugin implementation → See `pkg/plugins/claude_code/CLAUDE.md`
+
+**Entry Layer**:
+- `cmd/dw` - CLI entry points and bootstrap → See `cmd/dw/CLAUDE.md`
+
+**Architecture Reference**: `@docs/arch-index.md` - Full dependency graph and package details
+
+**Package-Level Docs**: Each package has a `CLAUDE.md` with architectural guidance. Claude will read these automatically when working in those packages.
 
 ---
 
@@ -36,12 +54,13 @@
 
 ### Working on Features
 
-1. Check @docs/arch-index.md for current package structure
-2. Follow architecture guidelines (DDD layers, dependency rules)
-3. Write tests for new functionality (target 70-80% coverage)
-4. Update documentation when adding features
-5. Run tests and linter before committing
-6. Commit after each logical task/iteration
+1. Check `@docs/arch-index.md` for current package structure
+2. Read relevant package `CLAUDE.md` for architectural guidance
+3. Follow DDD layer rules and dependency constraints
+4. Write tests for new functionality (target 70-80% coverage)
+5. Update documentation when adding features
+6. Run tests and linter before committing
+7. Commit after each logical task/iteration
 
 ### Large Tasks - Use Task Tool Delegation
 
@@ -60,71 +79,30 @@ For substantial refactorings or multi-package features:
 - [ ] Run `go-arch-lint docs` (if architecture/API changed)
 - [ ] Commit with concise message
 
-### Plugin Development
-
-**SDK interfaces**: `pkg/pluginsdk/` (Plugin, IEntityProvider, ICommandProvider, IToolProvider, IExtensible, ITrackable, etc.)
-
-**Creating entities**:
-- IExtensible is **required** (GetID, GetType, GetCapabilities, GetField, GetAllFields)
-- ITrackable, IHasContext, ISchedulable, IRelatable are **optional**
-- Declare only capabilities you actually implement
-
-**Plugin-specific types**:
-- Event types, payloads, analysis → `pkg/plugins/yourplugin/`
-- NOT in `internal/domain` (framework must be plugin-agnostic)
-
-**Commands**: `dw <plugin-name> <command>` (plugin-scoped)
-**Tools**: `dw project <toolname>` (project-scoped)
-
-See @docs/plugin-development-guide.md for complete guide.
-
 ---
 
-## Architecture (DDD Layered)
-
-### Layer Structure
-
-```
-         ┌─────────────┐
-         │     cmd     │  Entry points
-         └──────┬──────┘
-                │
-        ┌───────┴────────┐
-        │                │
-        ▼                ▼
-┌──────────────┐  ┌──────────────┐
-│ internal/app │  │internal/infra│  Application & Infrastructure
-└──────┬───────┘  └──────┬───────┘
-       │                 │
-       └────────┬────────┘
-                ▼
-        ┌──────────────┐
-        │internal/domain│  Framework business logic
-        └──────────────┘
-                ▲
-                │
-        ┌──────────────┐
-        │pkg/pluginsdk │  Public plugin contracts (zero internal deps)
-        └──────────────┘
-```
+## Architecture Quick Reference
 
 ### Dependency Rules
 
 - **pkg/pluginsdk**: Imports NOTHING (fully public)
-- **internal/domain**: May import `pkg/pluginsdk` (for contracts)
-- **internal/app**: May import `internal/domain`, `pkg/pluginsdk`
+- **internal/domain**: May import `pkg/pluginsdk` (no other internal packages)
 - **internal/infra**: May import `internal/domain`, `pkg/pluginsdk`
-- **cmd**: May import `internal/app`, `internal/infra`, `pkg/plugins`
+- **internal/app**: May import `internal/domain`, `internal/infra`, `pkg/pluginsdk`
+- **pkg/plugins/***: May import `pkg/pluginsdk` ONLY (no internal packages)
+- **cmd/***: May import `internal/app`, `internal/infra`, `pkg/plugins`
 
 **Key Rule**: SDK is single source of truth. No interface duplication.
 
 ### Core Principles
 
-1. **SDK First**: Public plugin contracts in `pkg/pluginsdk` (single source of truth)
-2. **Zero Duplication**: If SDK has an interface, don't duplicate it
+1. **SDK First**: Public plugin contracts in `pkg/pluginsdk`
+2. **Zero Duplication**: If SDK has it, don't duplicate elsewhere
 3. **Framework Agnostic**: `internal/domain` has zero plugin-specific knowledge
 4. **Plugin-Specific Types**: Event types, payloads, analysis → plugin packages
 5. **Dependency Inversion**: Define interfaces in domain/SDK, implement in infra/plugins
+
+**Details**: See package-level `CLAUDE.md` files for layer-specific guidance.
 
 ---
 
@@ -171,24 +149,6 @@ See @docs/plugin-development-guide.md for complete guide.
 
 ---
 
-## Code Guidelines
-
-**DO**:
-- Define plugin contracts in `pkg/pluginsdk` (single source of truth)
-- Define framework interfaces in `internal/domain`
-- Implement infrastructure in `internal/infra`
-- Work with SDK types directly (zero adaptation)
-- Use black-box tests (`package pkgname_test`)
-
-**DON'T**:
-- Duplicate interfaces between `pkg/pluginsdk` and `internal/domain`
-- Import `internal/*` from `pkg/pluginsdk` (must be fully public)
-- Create adaptation layers (work with SDK types directly)
-- Put plugin-specific types in `internal/domain` (framework is plugin-agnostic)
-- Modify `.goarchlint` (immutable)
-
----
-
 ## Testing
 
 **Coverage Target**: 70-80%
@@ -222,28 +182,35 @@ go tool cover -html=coverage.out            # View in browser
 
 **CRITICAL**: Documentation must be updated when functionality changes.
 
-### When to Update
+### Documentation Types
 
 **README.md** (user-facing):
 - New commands or flags
 - New features
 - Changed behavior
 
-**CLAUDE.md** (development):
+**CLAUDE.md** (this file - development workflow):
 - Workflow changes
 - Architecture changes
 - New patterns or conventions
 
+**Package CLAUDE.md** (package-level architectural guidance):
+- What belongs in this package vs elsewhere
+- Layer-specific patterns and rules
+- Testing strategies
+- **Update with**: `/utility:update_package_docs`
+
 **Generated docs**:
 ```bash
-go-arch-lint docs  # After modifying packages or APIs
+go-arch-lint docs  # Regenerates docs/arch-index.md
 ```
 
-### Checklist
+### Documentation Checklist
 
 - [ ] Code implemented and tested
 - [ ] README.md updated (if user-facing changes)
 - [ ] CLAUDE.md updated (if workflow changes)
+- [ ] Package CLAUDE.md updated (if package responsibilities changed)
 - [ ] Architecture docs regenerated (if needed)
 - [ ] All tests pass
 - [ ] Linter passes (zero violations)
@@ -252,10 +219,9 @@ go-arch-lint docs  # After modifying packages or APIs
 
 ## Key References
 
-- **Architecture Index**: @docs/arch-index.md - Package structure and dependencies
-- **Plugin Development**: @docs/plugin-development-guide.md - Complete plugin guide
-- **SDK Reference**: `pkg/pluginsdk/` - Godoc for all plugin interfaces
-- **Example Plugin**: `pkg/plugins/claude_code/` - Reference implementation
+- **Architecture Index**: `@docs/arch-index.md` - Package structure and dependencies
+- **Plugin Development**: `@docs/plugin-development-guide.md` - Complete plugin guide
+- **Package Documentation**: `<package>/CLAUDE.md` - Package-specific architectural guidance
 - **Linter**: `go-arch-lint .` - Validate architecture compliance
 
 ---

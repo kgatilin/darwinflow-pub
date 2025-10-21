@@ -323,3 +323,80 @@ func TestWriteSettingsPreservesOtherFields(t *testing.T) {
 		t.Error("nested field was not preserved")
 	}
 }
+
+func TestCopyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Copy the file using copyFile function
+	// We need to call it through the InstallDarwinFlowHooks which uses it
+	// or by directly importing and calling it - since copyFile is not exported,
+	// we test it indirectly through InstallDarwinFlowHooks backup creation
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(oldCwd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Create initial settings file
+	mgr, _ := claude_code.NewHookConfigManager()
+	settings := &claude_code.ClaudeSettings{
+		Hooks: make(map[string][]claude_code.HookMatcher),
+		Other: make(map[string]interface{}),
+	}
+	if err := mgr.WriteSettings(settings); err != nil {
+		t.Fatalf("Failed to write settings: %v", err)
+	}
+
+	// InstallDarwinFlowHooks will create a backup using copyFile
+	if err := mgr.InstallDarwinFlowHooks(); err != nil {
+		t.Fatalf("Failed to install hooks: %v", err)
+	}
+
+	// Verify backup was created
+	backupPath := mgr.GetSettingsPath() + ".backup"
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		t.Fatal("Backup file was not created")
+	}
+
+	// Verify backup content exists
+	backupData, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatalf("Failed to read backup file: %v", err)
+	}
+
+	// Backup should not be empty
+	if len(backupData) == 0 {
+		t.Error("Backup file is empty")
+	}
+}
+
+func TestCopyFile_SourceNotExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(oldCwd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Create manager pointing to non-existent settings file
+	mgr, _ := claude_code.NewHookConfigManager()
+
+	// Try to install hooks when settings file doesn't exist
+	// This should succeed (no backup needed, just create new settings)
+	if err := mgr.InstallDarwinFlowHooks(); err != nil {
+		t.Fatalf("Failed to install hooks: %v", err)
+	}
+
+	// Verify settings file was created
+	if _, err := os.Stat(mgr.GetSettingsPath()); os.IsNotExist(err) {
+		t.Fatal("Settings file was not created")
+	}
+}

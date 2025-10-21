@@ -11,9 +11,14 @@ import (
 
 // MockEventRepository for testing
 type MockEventRepository struct {
-	initError error
-	saveError error
-	events    []*domain.Event
+	initError     error
+	saveError     error
+	queryError    error
+	rawQueryError error
+	events        []*domain.Event
+	savedEvents   []*domain.Event
+	queryResult   *domain.QueryResult
+	closed        bool
 }
 
 func (m *MockEventRepository) Initialize(ctx context.Context) error {
@@ -28,10 +33,14 @@ func (m *MockEventRepository) Save(ctx context.Context, event *domain.Event) err
 		return m.saveError
 	}
 	m.events = append(m.events, event)
+	m.savedEvents = append(m.savedEvents, event)
 	return nil
 }
 
 func (m *MockEventRepository) FindByQuery(ctx context.Context, query domain.EventQuery) ([]*domain.Event, error) {
+	if m.queryError != nil {
+		return nil, m.queryError
+	}
 	if query.SessionID != "" {
 		var result []*domain.Event
 		for _, e := range m.events {
@@ -45,7 +54,21 @@ func (m *MockEventRepository) FindByQuery(ctx context.Context, query domain.Even
 }
 
 func (m *MockEventRepository) Close() error {
+	m.closed = true
 	return nil
+}
+
+func (m *MockEventRepository) ExecuteRawQuery(ctx context.Context, query string) (*domain.QueryResult, error) {
+	if m.rawQueryError != nil {
+		return nil, m.rawQueryError
+	}
+	if m.queryResult != nil {
+		return m.queryResult, nil
+	}
+	return &domain.QueryResult{
+		Columns: []string{"id", "event_type"},
+		Rows:    [][]interface{}{{"1", "test"}},
+	}, nil
 }
 
 // MockLogger for testing

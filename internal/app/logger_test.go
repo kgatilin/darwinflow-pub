@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
@@ -185,5 +186,86 @@ func TestLoggerService_ContentNormalizer(t *testing.T) {
 	// Verify normalizer wasn't called during construction
 	if called {
 		t.Error("Normalizer should not be called during construction")
+	}
+}
+
+// Tests from helpers_test.go (TestNoOpLogger)
+func TestNoOpLogger(t *testing.T) {
+	logger := &app.NoOpLogger{}
+
+	// NoOpLogger methods should not panic
+	logger.Debug("test %s", "debug")
+	logger.Info("test %s", "info")
+	logger.Warn("test %s", "warn")
+	logger.Error("test %s", "error")
+
+	// If we get here without panic, test passes
+}
+
+func TestLoggerService_LogEvent(t *testing.T) {
+	ctx := context.Background()
+	repo := &MockEventRepository{}
+	parser := &MockTranscriptParser{}
+	detector := &MockContextDetector{context: "test-ctx"}
+	normalizer := func(eventType, payload string) string {
+		return eventType + ":" + payload
+	}
+
+	service := app.NewLoggerService(repo, parser, detector, normalizer)
+
+	payload := map[string]interface{}{
+		"tool": "Read",
+		"file": "test.go",
+	}
+
+	err := service.LogEvent(ctx, "tool.invoked", payload)
+	if err != nil {
+		t.Fatalf("LogEvent failed: %v", err)
+	}
+
+	if len(repo.savedEvents) != 1 {
+		t.Errorf("Expected 1 saved event, got %d", len(repo.savedEvents))
+	}
+}
+
+func TestLoggerService_LogEvent_InvalidPayload(t *testing.T) {
+	ctx := context.Background()
+	repo := &MockEventRepository{}
+	parser := &MockTranscriptParser{}
+	detector := &MockContextDetector{context: "test-ctx"}
+	normalizer := func(eventType, payload string) string {
+		return payload
+	}
+
+	service := app.NewLoggerService(repo, parser, detector, normalizer)
+
+	// Channel type cannot be marshaled to JSON
+	invalidPayload := map[string]interface{}{
+		"channel": make(chan int),
+	}
+
+	err := service.LogEvent(ctx, "test.event", invalidPayload)
+	if err == nil {
+		t.Error("Expected error when marshaling invalid payload")
+	}
+}
+
+func TestLoggerService_Close(t *testing.T) {
+	repo := &MockEventRepository{}
+	parser := &MockTranscriptParser{}
+	detector := &MockContextDetector{context: "test-ctx"}
+	normalizer := func(eventType, payload string) string {
+		return payload
+	}
+
+	service := app.NewLoggerService(repo, parser, detector, normalizer)
+
+	err := service.Close()
+	if err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	if !repo.closed {
+		t.Error("Expected repository to be closed")
 	}
 }
