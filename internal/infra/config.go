@@ -98,6 +98,11 @@ func (c *ConfigLoader) LoadConfig(configPath string) (*domain.Config, error) {
 		config.Analysis.ClaudeOptions.SystemPromptMode = defaults.Analysis.ClaudeOptions.SystemPromptMode
 	}
 
+	// Apply defaults for logging config if not set
+	if config.Logging.FileLogLevel == "" {
+		config.Logging.FileLogLevel = defaults.Logging.FileLogLevel
+	}
+
 	// Validate model is in whitelist
 	if !domain.ValidateModel(config.Analysis.Model) {
 		if c.logger != nil {

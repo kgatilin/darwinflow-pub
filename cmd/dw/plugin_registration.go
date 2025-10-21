@@ -127,6 +127,9 @@ func (a *configLoaderAdapter) LoadConfig(path string) (*claude_code.Config, erro
 			AutoSummaryEnabled: domainConfig.Analysis.AutoSummaryEnabled,
 			AutoSummaryPrompt:  domainConfig.Analysis.AutoSummaryPrompt,
 		},
+		Logging: claude_code.LoggingConfig{
+			FileLogLevel: domainConfig.Logging.FileLogLevel,
+		},
 	}, nil
 }
 

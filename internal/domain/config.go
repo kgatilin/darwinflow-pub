@@ -8,6 +8,9 @@ type Config struct {
 	// UI contains interactive UI settings
 	UI UIConfig `yaml:"ui" json:"ui"`
 
+	// Logging contains logging settings
+	Logging LoggingConfig `yaml:"logging" json:"logging"`
+
 	// Prompts contains named prompts for different use cases
 	Prompts map[string]string `yaml:"prompts" json:"prompts"`
 }
@@ -60,6 +63,17 @@ type UIConfig struct {
 	AutoRefreshInterval string `yaml:"auto_refresh_interval" json:"auto_refresh_interval"`
 }
 
+// LoggingConfig contains settings for file logging
+type LoggingConfig struct {
+	// FileLogLevel controls what gets logged to .darwinflow/claude-code.log
+	// Valid values: "debug", "info", "error", "off" (default: "error")
+	// - "debug": Log all messages (DEBUG, INFO, ERROR)
+	// - "info": Log INFO and ERROR messages
+	// - "error": Log only ERROR messages
+	// - "off": Disable file logging
+	FileLogLevel string `yaml:"file_log_level" json:"file_log_level"`
+}
+
 // AllowedModels is the whitelist of valid model aliases and full names
 var AllowedModels = map[string]bool{
 	// Aliases (recommended)
@@ -101,6 +115,9 @@ func DefaultConfig() *Config {
 			DefaultOutputDir:    "./analysis-outputs",
 			FilenameTemplate:    "{{.SessionID}}-{{.PromptName}}-{{.Date}}.md",
 			AutoRefreshInterval: "", // Disabled by default
+		},
+		Logging: LoggingConfig{
+			FileLogLevel: "error", // Only log errors by default
 		},
 		Prompts: map[string]string{
 			"session_summary": DefaultSessionSummaryPrompt,

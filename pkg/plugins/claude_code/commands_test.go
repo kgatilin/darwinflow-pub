@@ -16,8 +16,9 @@ import (
 
 // simpleCommandContext is a minimal implementation of pluginsdk.CommandContext for testing
 type simpleCommandContext struct {
-	stdin  io.Reader
-	stdout io.Writer
+	stdin      io.Reader
+	stdout     io.Writer
+	workingDir string
 }
 
 func (m *simpleCommandContext) GetLogger() pluginsdk.Logger {
@@ -25,7 +26,9 @@ func (m *simpleCommandContext) GetLogger() pluginsdk.Logger {
 }
 
 func (m *simpleCommandContext) GetWorkingDir() string {
-	return "/workspace"
+	// No default - tests must explicitly set workingDir
+	// This prevents accidental pollution of production or system paths
+	return m.workingDir
 }
 
 func (m *simpleCommandContext) EmitEvent(ctx context.Context, event pluginsdk.Event) error {
@@ -42,10 +45,11 @@ func (m *simpleCommandContext) GetStdout() io.Writer {
 
 // mockCommandContext implements pluginsdk.CommandContext for testing with event tracking
 type mockCommandContext struct {
-	stdin   io.Reader
-	stdout  io.Writer
-	emitErr error
-	events  []pluginsdk.Event
+	stdin      io.Reader
+	stdout     io.Writer
+	emitErr    error
+	events     []pluginsdk.Event
+	workingDir string
 }
 
 func (m *mockCommandContext) GetLogger() pluginsdk.Logger {
@@ -53,7 +57,9 @@ func (m *mockCommandContext) GetLogger() pluginsdk.Logger {
 }
 
 func (m *mockCommandContext) GetWorkingDir() string {
-	return "/workspace"
+	// No default - tests must explicitly set workingDir
+	// This prevents accidental pollution of production or system paths
+	return m.workingDir
 }
 
 func (m *mockCommandContext) EmitEvent(ctx context.Context, event pluginsdk.Event) error {
@@ -96,6 +102,28 @@ func (m *mockConfigLoader) LoadConfig(path string) (*claude_code.Config, error) 
 		return nil, m.err
 	}
 	return m.config, nil
+}
+
+// newTestEmitEventCommand creates an EmitEventCommand with default test config
+func newTestEmitEventCommand() *claude_code.EmitEventCommand {
+	configLoader := &mockConfigLoader{
+		config: &claude_code.Config{
+			Logging: claude_code.LoggingConfig{
+				FileLogLevel: "debug", // Use debug for tests to capture all logging
+			},
+		},
+	}
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
+	return claude_code.NewEmitEventCommand(plugin)
+}
+
+// newTestCommandContext creates a mockCommandContext with a temp directory for isolated testing
+func newTestCommandContext(t *testing.T, stdin io.Reader, stdout io.Writer) *mockCommandContext {
+	return &mockCommandContext{
+		stdin:      stdin,
+		stdout:     stdout,
+		workingDir: t.TempDir(), // Each test gets its own isolated temp directory
+	}
 }
 
 // TestLogCommand_Execute tests the deprecated LogCommand.Execute
@@ -247,7 +275,14 @@ func TestEmitEventCommand_parseAsHookInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
+			configLoader := &mockConfigLoader{
+				config: &claude_code.Config{
+					Logging: claude_code.LoggingConfig{
+						FileLogLevel: "debug",
+					},
+				},
+			}
+			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
 
 			// Create emit event command
 			emitCmd := claude_code.NewEmitEventCommand(plugin)
@@ -781,8 +816,7 @@ func TestAutoSummaryExecCommand_DefaultPrompt(t *testing.T) {
 
 // TestNewEmitEventCommand verifies the command can be created
 func TestNewEmitEventCommand(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	if cmd == nil {
 		t.Fatal("NewEmitEventCommand returned nil")
@@ -803,8 +837,7 @@ func TestNewEmitEventCommand(t *testing.T) {
 
 // TestEmitEventCommand_ValidEvent verifies a valid event is emitted
 func TestEmitEventCommand_ValidEvent(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:   "tool.invoked",
@@ -850,8 +883,7 @@ func TestEmitEventCommand_ValidEvent(t *testing.T) {
 
 // TestEmitEventCommand_InvalidJSON verifies invalid JSON is silently ignored
 func TestEmitEventCommand_InvalidJSON(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	mockCtx := newMockCommandContext("{invalid json")
 
@@ -870,8 +902,7 @@ func TestEmitEventCommand_InvalidJSON(t *testing.T) {
 
 // TestEmitEventCommand_MissingSessionID verifies missing session_id is silently ignored
 func TestEmitEventCommand_MissingSessionID(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:   "tool.invoked",
@@ -902,8 +933,7 @@ func TestEmitEventCommand_MissingSessionID(t *testing.T) {
 
 // TestEmitEventCommand_MissingType verifies missing type is silently ignored
 func TestEmitEventCommand_MissingType(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		// Type is missing
@@ -933,8 +963,7 @@ func TestEmitEventCommand_MissingType(t *testing.T) {
 
 // TestEmitEventCommand_MissingSource verifies missing source is silently ignored
 func TestEmitEventCommand_MissingSource(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type: "tool.invoked",
@@ -964,8 +993,7 @@ func TestEmitEventCommand_MissingSource(t *testing.T) {
 
 // TestEmitEventCommand_DefaultTimestamp verifies missing timestamp is set to current time
 func TestEmitEventCommand_DefaultTimestamp(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:   "tool.invoked",
@@ -1004,8 +1032,7 @@ func TestEmitEventCommand_DefaultTimestamp(t *testing.T) {
 
 // TestEmitEventCommand_DefaultVersion verifies missing version is set to "1.0"
 func TestEmitEventCommand_DefaultVersion(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:   "tool.invoked",
@@ -1040,8 +1067,7 @@ func TestEmitEventCommand_DefaultVersion(t *testing.T) {
 
 // TestEmitEventCommand_ExplicitVersion verifies explicit version is preserved
 func TestEmitEventCommand_ExplicitVersion(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:    "tool.invoked",
@@ -1074,8 +1100,7 @@ func TestEmitEventCommand_ExplicitVersion(t *testing.T) {
 
 // TestEmitEventCommand_EmptyStdin verifies empty stdin is silently ignored
 func TestEmitEventCommand_EmptyStdin(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	mockCtx := newMockCommandContext("")
 
@@ -1093,8 +1118,7 @@ func TestEmitEventCommand_EmptyStdin(t *testing.T) {
 
 // TestEmitEventCommand_NilMetadata verifies nil metadata is initialized
 func TestEmitEventCommand_NilMetadata(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:     "tool.invoked",
@@ -1120,8 +1144,7 @@ func TestEmitEventCommand_NilMetadata(t *testing.T) {
 
 // TestEmitEventCommand_NilPayload verifies nil payload is initialized
 func TestEmitEventCommand_NilPayload(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:    "tool.invoked",
@@ -1153,8 +1176,7 @@ func TestEmitEventCommand_NilPayload(t *testing.T) {
 
 // TestEmitEventCommand_EmitError verifies emit errors are silently handled
 func TestEmitEventCommand_EmitError(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:    "tool.invoked",
@@ -1179,16 +1201,12 @@ func TestEmitEventCommand_EmitError(t *testing.T) {
 
 // TestEmitEventCommand_StdinReadError verifies stdin read errors are silently handled
 func TestEmitEventCommand_StdinReadError(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	// Create a reader that returns an error
 	errReader := &errorReader{}
-	mockCtx := &mockCommandContext{
-		stdin:   errReader,
-		stdout:  &bytes.Buffer{},
-		events:  []pluginsdk.Event{},
-	}
+	stdout := &bytes.Buffer{}
+	mockCtx := newTestCommandContext(t, errReader, stdout)
 
 	err := cmd.Execute(context.Background(), mockCtx, nil)
 
@@ -1205,8 +1223,7 @@ func TestEmitEventCommand_StdinReadError(t *testing.T) {
 
 // TestEmitEventCommand_LargePayload verifies large payloads are handled
 func TestEmitEventCommand_LargePayload(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	// Create a large payload
 	largePayload := make(map[string]interface{})
@@ -1237,8 +1254,7 @@ func TestEmitEventCommand_LargePayload(t *testing.T) {
 
 // TestEmitEventCommand_SpecialCharactersInSessionID verifies special characters in session_id
 func TestEmitEventCommand_SpecialCharactersInSessionID(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:    "tool.invoked",
@@ -1270,8 +1286,7 @@ func TestEmitEventCommand_SpecialCharactersInSessionID(t *testing.T) {
 
 // TestEmitEventCommand_MultipleMetadataFields verifies multiple metadata fields are preserved
 func TestEmitEventCommand_MultipleMetadataFields(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:   "tool.invoked",
@@ -1317,8 +1332,7 @@ func TestEmitEventCommand_MultipleMetadataFields(t *testing.T) {
 
 // TestEmitEventCommand_ComplexPayload verifies complex nested payloads are handled
 func TestEmitEventCommand_ComplexPayload(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	event := pluginsdk.Event{
 		Type:   "tool.invoked",
@@ -1359,9 +1373,197 @@ func TestEmitEventCommand_ComplexPayload(t *testing.T) {
 
 // TestEmitEventCommand_CommandImplementsSDKInterface verifies the command implements the SDK interface
 func TestEmitEventCommand_CommandImplementsSDKInterface(t *testing.T) {
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
-	cmd := claude_code.NewEmitEventCommand(plugin)
+	cmd := newTestEmitEventCommand()
 
 	// Verify the command implements pluginsdk.Command interface
 	var _ pluginsdk.Command = cmd
+}
+
+// TestEmitEventCommand_FileLogging verifies that errors are logged to .darwinflow/claude-code.log
+func TestEmitEventCommand_FileLogging(t *testing.T) {
+	// Test cases for different error scenarios
+	testCases := []struct {
+		name        string
+		input       string
+		expectLog   bool
+		logContains string
+	}{
+		{
+			name:        "empty stdin",
+			input:       "",
+			expectLog:   true,
+			logContains: "empty stdin",
+		},
+		{
+			name:        "invalid JSON",
+			input:       "{invalid json}",
+			expectLog:   true,
+			logContains: "invalid JSON",
+		},
+		{
+			name:        "missing session_id",
+			input:       `{"type":"test","source":"test"}`,
+			expectLog:   true,
+			logContains: "missing required field: metadata.session_id",
+		},
+		{
+			name:        "successful event",
+			input:       `{"type":"test","source":"test","metadata":{"session_id":"test123"}}`,
+			expectLog:   true,
+			logContains: "successfully emitted event",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Each subtest gets its own isolated temp directory
+			tmpDir := t.TempDir()
+
+			// Create config loader with debug logging to capture all messages
+			configLoader := &mockConfigLoader{
+				config: &claude_code.Config{
+					Logging: claude_code.LoggingConfig{
+						FileLogLevel: "debug",
+					},
+				},
+			}
+
+			// Create plugin and command
+			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
+			cmd := claude_code.NewEmitEventCommand(plugin)
+
+			// Create mock context with temp directory
+			mockCtx := &mockCommandContext{
+				stdin:      strings.NewReader(tc.input),
+				stdout:     &bytes.Buffer{},
+				workingDir: tmpDir,
+			}
+
+			// Execute command
+			err := cmd.Execute(context.Background(), mockCtx, []string{})
+			if err != nil {
+				t.Fatalf("Execute failed: %v", err)
+			}
+
+			// Check if log file was created
+			logPath := tmpDir + "/.darwinflow/claude-code.log"
+			if tc.expectLog {
+				// Read log file
+				logContent, err := os.ReadFile(logPath)
+				if err != nil {
+					t.Fatalf("Failed to read log file: %v", err)
+				}
+
+				// Verify log contains expected message
+				if !strings.Contains(string(logContent), tc.logContains) {
+					t.Errorf("Log does not contain %q. Log content:\n%s", tc.logContains, string(logContent))
+				}
+
+				// Verify log has timestamp
+				if !strings.Contains(string(logContent), "[202") {
+					t.Errorf("Log missing timestamp. Log content:\n%s", string(logContent))
+				}
+			}
+		})
+	}
+}
+
+// TestEmitEventCommand_LogLevelFiltering verifies that log level filtering works correctly
+func TestEmitEventCommand_LogLevelFiltering(t *testing.T) {
+	testCases := []struct {
+		name             string
+		logLevel         string
+		input            string
+		shouldLogDebug   bool
+		shouldLogInfo    bool
+		shouldLogError   bool
+	}{
+		{
+			name:           "log level off - no logging",
+			logLevel:       "off",
+			input:          `{"type":"test","source":"test"}`, // Missing session_id - DEBUG error
+			shouldLogDebug: false,
+			shouldLogInfo:  false,
+			shouldLogError: false,
+		},
+		{
+			name:           "log level error - only errors",
+			logLevel:       "error",
+			input:          `{"type":"test","source":"test"}`, // Missing session_id - DEBUG error
+			shouldLogDebug: false,
+			shouldLogInfo:  false,
+			shouldLogError: false, // This is DEBUG level, not ERROR
+		},
+		{
+			name:           "log level info - info and error",
+			logLevel:       "info",
+			input:          `{"type":"test","source":"test","metadata":{"session_id":"test123"}}`,
+			shouldLogDebug: false,
+			shouldLogInfo:  true,  // Success message is INFO
+			shouldLogError: false, // No actual ERROR occurs with valid input
+		},
+		{
+			name:           "log level debug - all messages",
+			logLevel:       "debug",
+			input:          `{"type":"test","source":"test"}`, // Missing session_id - DEBUG error
+			shouldLogDebug: true,
+			shouldLogInfo:  false, // No successful event, so no INFO
+			shouldLogError: false, // DEBUG messages, not ERROR
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create temp directory for each test
+			tmpDir := t.TempDir()
+
+			// Create config loader with specified log level
+			configLoader := &mockConfigLoader{
+				config: &claude_code.Config{
+					Logging: claude_code.LoggingConfig{
+						FileLogLevel: tc.logLevel,
+					},
+				},
+			}
+
+			// Create plugin and command
+			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
+			cmd := claude_code.NewEmitEventCommand(plugin)
+
+			// Create mock context
+			mockCtx := &mockCommandContext{
+				stdin:      strings.NewReader(tc.input),
+				stdout:     &bytes.Buffer{},
+				workingDir: tmpDir,
+			}
+
+			// Execute command
+			err := cmd.Execute(context.Background(), mockCtx, []string{})
+			if err != nil {
+				t.Fatalf("Execute failed: %v", err)
+			}
+
+			// Check log file
+			logPath := tmpDir + "/.darwinflow/claude-code.log"
+			logContent := ""
+			if data, err := os.ReadFile(logPath); err == nil {
+				logContent = string(data)
+			}
+
+			// Verify logging behavior
+			hasDebug := strings.Contains(logContent, "DEBUG:")
+			hasInfo := strings.Contains(logContent, "INFO:")
+			hasError := strings.Contains(logContent, "ERROR:")
+
+			if hasDebug != tc.shouldLogDebug {
+				t.Errorf("DEBUG logging: got %v, want %v. Log:\n%s", hasDebug, tc.shouldLogDebug, logContent)
+			}
+			if hasInfo != tc.shouldLogInfo {
+				t.Errorf("INFO logging: got %v, want %v. Log:\n%s", hasInfo, tc.shouldLogInfo, logContent)
+			}
+			if hasError != tc.shouldLogError {
+				t.Errorf("ERROR logging: got %v, want %v. Log:\n%s", hasError, tc.shouldLogError, logContent)
+			}
+		})
+	}
 }

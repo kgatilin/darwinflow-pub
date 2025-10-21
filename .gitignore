@@ -28,3 +28,4 @@ go.work
 # Claude Code local settings (only settings files)
 .claude/*.json
 .claude/*.backup
+.darwinflow/claude-code.log

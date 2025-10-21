@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
@@ -14,6 +16,65 @@ import (
 
 // Ensure plugin implements SDK ICommandProvider
 var _ pluginsdk.ICommandProvider = (*ClaudeCodePlugin)(nil)
+
+// logToFile appends a log message to .darwinflow/claude-code.log
+// This is used for debugging hook failures. All errors are swallowed to prevent
+// disrupting Claude Code hooks.
+// configuredLevel should be one of: "debug", "info", "error", "off"
+func logToFile(workingDir, level, message, configuredLevel string) {
+	// Recover from any panics to prevent disrupting hooks
+	defer func() {
+		_ = recover()
+	}()
+
+	// Normalize level strings to lowercase
+	level = strings.ToLower(level)
+	configuredLevel = strings.ToLower(configuredLevel)
+
+	// Check if logging is disabled
+	if configuredLevel == "off" {
+		return
+	}
+
+	// Filter based on configured log level
+	// "error" = only ERROR
+	// "info" = INFO and ERROR
+	// "debug" = DEBUG, INFO, and ERROR
+	switch configuredLevel {
+	case "error":
+		if level != "error" {
+			return
+		}
+	case "info":
+		if level != "info" && level != "error" {
+			return
+		}
+	case "debug":
+		// Log everything
+	default:
+		// Unknown level, default to error-only
+		if level != "error" {
+			return
+		}
+	}
+
+	// Create .darwinflow directory if it doesn't exist
+	logDir := filepath.Join(workingDir, ".darwinflow")
+	_ = os.MkdirAll(logDir, 0755)
+
+	// Open log file in append mode
+	logPath := filepath.Join(logDir, "claude-code.log")
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return // Silently fail
+	}
+	defer f.Close()
+
+	// Write log entry with timestamp
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	logEntry := fmt.Sprintf("[%s] %s: %s\n", timestamp, strings.ToUpper(level), message)
+	_, _ = f.WriteString(logEntry)
+}
 
 // GetCommands returns the CLI commands provided by this plugin (SDK interface)
 func (p *ClaudeCodePlugin) GetCommands() []pluginsdk.Command {
@@ -133,6 +194,19 @@ func (c *EmitEventCommand) GetUsage() string {
 }
 
 func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	// Get working directory for file logging
+	workingDir := cmdCtx.GetWorkingDir()
+
+	// Load config to get log level setting
+	config, err := c.plugin.configLoader.LoadConfig("")
+	logLevel := "error" // Default to error-only if config fails to load
+	if err == nil {
+		logLevel = config.Logging.FileLogLevel
+		if logLevel == "" {
+			logLevel = "error" // Use default if not set
+		}
+	}
+
 	// Add timeout to prevent infinite hangs
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -140,26 +214,34 @@ func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	// Safely recover from panics
 	defer func() {
 		if r := recover(); r != nil {
-			c.plugin.logger.Error("emit-event: panic recovered: %v", r)
+			errMsg := fmt.Sprintf("panic recovered: %v", r)
+			c.plugin.logger.Error("emit-event: %s", errMsg)
+			logToFile(workingDir, "ERROR", errMsg, logLevel)
 		}
 	}()
 
 	// Read stdin
 	stdinData, err := io.ReadAll(cmdCtx.GetStdin())
 	if err != nil {
-		c.plugin.logger.Debug("emit-event: failed to read stdin: %v", err)
+		errMsg := fmt.Sprintf("failed to read stdin: %v", err)
+		c.plugin.logger.Debug("emit-event: %s", errMsg)
+		logToFile(workingDir, "DEBUG", errMsg, logLevel)
 		return nil // Silently fail - don't disrupt Claude Code
 	}
 
 	if len(stdinData) == 0 {
-		c.plugin.logger.Debug("emit-event: empty stdin")
+		errMsg := "empty stdin"
+		c.plugin.logger.Debug("emit-event: %s", errMsg)
+		logToFile(workingDir, "DEBUG", errMsg, logLevel)
 		return nil // Silently fail - don't disrupt Claude Code
 	}
 
 	// Try to parse as SDK Event first
 	var event pluginsdk.Event
 	if err := json.Unmarshal(stdinData, &event); err != nil {
-		c.plugin.logger.Debug("emit-event: invalid JSON: %v", err)
+		errMsg := fmt.Sprintf("invalid JSON: %v", err)
+		c.plugin.logger.Debug("emit-event: %s", errMsg)
+		logToFile(workingDir, "DEBUG", errMsg, logLevel)
 		return nil // Silently fail - don't disrupt Claude Code
 	}
 
@@ -169,26 +251,34 @@ func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 		// Try to parse as HookInput (Claude Code native format)
 		hookData, err := c.parseAsHookInput(stdinData)
 		if err != nil {
-			c.plugin.logger.Debug("emit-event: failed to parse as hook input: %v", err)
+			errMsg := fmt.Sprintf("failed to parse as hook input: %v", err)
+			c.plugin.logger.Debug("emit-event: %s", errMsg)
+			logToFile(workingDir, "DEBUG", errMsg, logLevel)
 			return nil // Silently fail - don't disrupt Claude Code
 		}
 
 		// Convert HookInput to SDK Event
 		event = *HookInputToEvent(hookData)
 		if event.Type == "unknown" {
-			c.plugin.logger.Debug("emit-event: unknown hook event type")
+			errMsg := "unknown hook event type"
+			c.plugin.logger.Debug("emit-event: %s", errMsg)
+			logToFile(workingDir, "DEBUG", errMsg, logLevel)
 			return nil
 		}
 	}
 
 	// Validate required fields
 	if event.Type == "" {
-		c.plugin.logger.Debug("emit-event: missing required field: type")
+		errMsg := "missing required field: type"
+		c.plugin.logger.Debug("emit-event: %s", errMsg)
+		logToFile(workingDir, "DEBUG", errMsg, logLevel)
 		return nil
 	}
 
 	if event.Source == "" {
-		c.plugin.logger.Debug("emit-event: missing required field: source")
+		errMsg := "missing required field: source"
+		c.plugin.logger.Debug("emit-event: %s", errMsg)
+		logToFile(workingDir, "DEBUG", errMsg, logLevel)
 		return nil
 	}
 
@@ -198,7 +288,9 @@ func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 
 	sessionID, ok := event.Metadata["session_id"]
 	if !ok || sessionID == "" {
-		c.plugin.logger.Debug("emit-event: missing required field: metadata.session_id")
+		errMsg := "missing required field: metadata.session_id"
+		c.plugin.logger.Debug("emit-event: %s", errMsg)
+		logToFile(workingDir, "DEBUG", errMsg, logLevel)
 		return nil
 	}
 
@@ -219,9 +311,14 @@ func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 
 	// Emit event via plugin context (silently fail if DB error)
 	if err := cmdCtx.EmitEvent(ctxWithTimeout, event); err != nil {
-		c.plugin.logger.Debug("emit-event: failed to emit event: %v", err)
+		errMsg := fmt.Sprintf("failed to emit event: %v", err)
+		c.plugin.logger.Debug("emit-event: %s", errMsg)
+		logToFile(workingDir, "ERROR", errMsg, logLevel)
 		return nil // Silently fail - don't disrupt Claude Code
 	}
+
+	// Log success
+	logToFile(workingDir, "INFO", fmt.Sprintf("successfully emitted event: type=%s, source=%s, session_id=%s", event.Type, event.Source, sessionID), logLevel)
 
 	return nil
 }

@@ -60,12 +60,18 @@ type ConfigLoader interface {
 // Config represents the application configuration
 type Config struct {
 	Analysis AnalysisConfig `yaml:"analysis"`
+	Logging  LoggingConfig  `yaml:"logging"`
 }
 
 // AnalysisConfig contains analysis-related configuration
 type AnalysisConfig struct {
 	AutoSummaryEnabled bool   `yaml:"auto_summary_enabled"`
 	AutoSummaryPrompt  string `yaml:"auto_summary_prompt"`
+}
+
+// LoggingConfig contains logging-related configuration
+type LoggingConfig struct {
+	FileLogLevel string `yaml:"file_log_level"`
 }
 
 // HookInputData represents data from Claude Code hooks

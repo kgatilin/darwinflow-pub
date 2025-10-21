@@ -9,8 +9,8 @@ analysis:
   enabled_prompts:
     - tool_analysis
     # - session_summary  # Uncomment to also run session summaries
-  auto_summary_enabled: false  # Set to true to enable auto-triggered session summaries
-  auto_summary_prompt: "session_summary"  # Prompt to use for auto-summaries
+  auto_summary_enabled: false # Set to true to enable auto-triggered session summaries
+  auto_summary_prompt: "session_summary" # Prompt to use for auto-summaries
   claude_options:
     allowed_tools: []
     system_prompt_mode: "replace"
@@ -19,7 +19,12 @@ ui:
   default_output_dir: "./analysis-outputs"
   # Available placeholders: {{.SessionID}}, {{.PromptName}}, {{.Date}}, {{.Time}}
   filename_template: "{{.SessionID}}-{{.PromptName}}-{{.Date}}.md"
-  auto_refresh_interval: ""  # e.g., "30s" to auto-refresh, empty to disable
+  auto_refresh_interval: "" # e.g., "30s" to auto-refresh, empty to disable
+
+logging:
+  # Controls what gets logged to .darwinflow/claude-code.log
+  # Options: "debug" (all messages), "info" (info+error), "error" (errors only), "off" (disabled)
+  file_log_level: "debug" # Default: only log errors
 
 prompts:
   session_summary: |+
@@ -62,102 +67,102 @@ prompts:
 
 
   tool_analysis: |+
-        You are Claude Code, an AI agent that assists with software development.
+    You are Claude Code, an AI agent that assists with software development.
 
-        Analyze your own work session below and identify what tools YOU need to make YOUR work FASTER and more efficient.
+    Analyze your own work session below and identify what tools YOU need to make YOUR work FASTER and more efficient.
 
-        ## Your Task
+    ## Your Task
 
-        Review your session and identify where YOU (the agent) were inefficient due to lack of tools. **Your goal is to minimize execution time and tool call count while completing tasks correctly.**
+    Review your session and identify where YOU (the agent) were inefficient due to lack of tools. **Your goal is to minimize execution time and tool call count while completing tasks correctly.**
 
-        Specifically look for:
+    Specifically look for:
 
-        1. **Repetitive Low-Level Operations**: Where you had to perform multiple primitive operations that could be a single tool
-           - Example: Multiple Read calls to gather project context (same files read repeatedly across sessions)
-           - Example: Sequential Grep/Glob operations that could be one complex search
+    1. **Repetitive Low-Level Operations**: Where you had to perform multiple primitive operations that could be a single tool
+       - Example: Multiple Read calls to gather project context (same files read repeatedly across sessions)
+       - Example: Sequential Grep/Glob operations that could be one complex search
 
-        2. **Missing Specialized Agents**: Task types that would benefit from dedicated subagents with specialized capabilities
+    2. **Missing Specialized Agents**: Task types that would benefit from dedicated subagents with specialized capabilities
 
-        3. **Tool Gaps**: Operations you struggled with or had to work around due to missing functionality
+    3. **Tool Gaps**: Operations you struggled with or had to work around due to missing functionality
 
-        4. **Workflow Inefficiencies**: Multi-step sequences you repeat that should be automated
+    4. **Workflow Inefficiencies**: Multi-step sequences you repeat that should be automated
 
-        5. **Performance Bottlenecks**: Analyze the relationship between:
-           - Task complexity (simple vs complex)
-           - Execution time (how long it took)
-           - Tool call count (how many tools you invoked)
-           - Pattern: If you see the same context-gathering reads across sessions, this is a pattern to optimize
+    5. **Performance Bottlenecks**: Analyze the relationship between:
+       - Task complexity (simple vs complex)
+       - Execution time (how long it took)
+       - Tool call count (how many tools you invoked)
+       - Pattern: If you see the same context-gathering reads across sessions, this is a pattern to optimize
 
-        **OPTIMIZATION PRINCIPLE**: Favor creating fewer, more complex tools over using many simple tools. If a pattern requires 10 tool calls, consider whether a single specialized tool could do it in 1-2 calls.
+    **OPTIMIZATION PRINCIPLE**: Favor creating fewer, more complex tools over using many simple tools. If a pattern requires 10 tool calls, consider whether a single specialized tool could do it in 1-2 calls.
 
-        **IMPORTANT**: If the session was already efficient (fast execution, minimal tool calls for the task complexity) and you identify no significant tool gaps, pattern inefficiencies, or repeated manual operations, it's perfectly valid to conclude that no improvements are needed. Simple tasks completed efficiently don't require new tools.
+    **IMPORTANT**: If the session was already efficient (fast execution, minimal tool calls for the task complexity) and you identify no significant tool gaps, pattern inefficiencies, or repeated manual operations, it's perfectly valid to conclude that no improvements are needed. Simple tasks completed efficiently don't require new tools.
 
-        ## Tool Categories to Consider
+    ## Tool Categories to Consider
 
-        - **Specialized Agents**: Subagents with specific expertise (e.g., test generation, refactoring, documentation)
-        - **CLI Tools**: Command-line utilities that could be invoked via Bash to augment your capabilities
-        - **Claude Code Features**: New tools or capabilities that should be built into Claude Code itself
-        - **Workflow Automations**: Multi-step operations that should be single tool calls
+    - **Specialized Agents**: Subagents with specific expertise (e.g., test generation, refactoring, documentation)
+    - **CLI Tools**: Command-line utilities that could be invoked via Bash to augment your capabilities
+    - **Claude Code Features**: New tools or capabilities that should be built into Claude Code itself
+    - **Workflow Automations**: Multi-step operations that should be single tool calls
 
-        ## Output Format
+    ## Output Format
 
-        Write your analysis from YOUR perspective as the agent. Use first person.
+    Write your analysis from YOUR perspective as the agent. Use first person.
 
-        ### If No Improvements Needed
+    ### If No Improvements Needed
 
-        If the session was already efficient, simply state:
+    If the session was already efficient, simply state:
 
-        **Session Assessment: Already Efficient**
+    **Session Assessment: Already Efficient**
 
-        This session was already efficient. The task was [simple/straightforward/well-suited to existing tools], and I completed it without significant inefficiencies. No new tools or workflow improvements are needed.
+    This session was already efficient. The task was [simple/straightforward/well-suited to existing tools], and I completed it without significant inefficiencies. No new tools or workflow improvements are needed.
 
-        ---
+    ---
 
-        ### If Improvements Are Needed
+    ### If Improvements Are Needed
 
-        Use the following format:
+    Use the following format:
 
-        ### What Made Me Inefficient
+    ### What Made Me Inefficient
 
-        Describe specific moments where you were slow or used too many tool calls. Include:
-        - **Repetitive patterns**: Did you perform the same operations multiple times? (e.g., reading the same files for context)
-        - **Tool call bloat**: Where did you use many tools when fewer complex tools would suffice?
-        - **Speed bottlenecks**: What took longer than it should for the task complexity?
+    Describe specific moments where you were slow or used too many tool calls. Include:
+    - **Repetitive patterns**: Did you perform the same operations multiple times? (e.g., reading the same files for context)
+    - **Tool call bloat**: Where did you use many tools when fewer complex tools would suffice?
+    - **Speed bottlenecks**: What took longer than it should for the task complexity?
 
-        Provide concrete examples from the session with tool counts and patterns.
+    Provide concrete examples from the session with tool counts and patterns.
 
-        ### Tools I Need
+    ### Tools I Need
 
-        For each tool you need, state:
+    For each tool you need, state:
 
-        **Tool: [Name]**
-        - **What I Need**: Clear description of the capability
-        - **Why I Need It**: How it would make YOUR work FASTER and reduce tool calls
-          - Current: X tool calls taking Y time
-          - With tool: Z tool calls taking W time
-        - **Type**: [Specialized Agent | CLI Tool | Claude Code Feature | Workflow Automation]
-        - **How I Would Use It**: Concrete example from this session showing how you would invoke it
-        - **Implementation Note**: Brief technical approach
+    **Tool: [Name]**
+    - **What I Need**: Clear description of the capability
+    - **Why I Need It**: How it would make YOUR work FASTER and reduce tool calls
+      - Current: X tool calls taking Y time
+      - With tool: Z tool calls taking W time
+    - **Type**: [Specialized Agent | CLI Tool | Claude Code Feature | Workflow Automation]
+    - **How I Would Use It**: Concrete example from this session showing how you would invoke it
+    - **Implementation Note**: Brief technical approach
 
-        ### Performance Metrics
+    ### Performance Metrics
 
-        For this session, report:
-        - **Total tool calls**: Count of all tool invocations
-        - **Execution time**: Approximate duration (if observable from timestamps)
-        - **Task complexity**: Simple | Medium | Complex
-        - **Performance assessment**: Was the tool count and time appropriate for this task complexity?
+    For this session, report:
+    - **Total tool calls**: Count of all tool invocations
+    - **Execution time**: Approximate duration (if observable from timestamps)
+    - **Task complexity**: Simple | Medium | Complex
+    - **Performance assessment**: Was the tool count and time appropriate for this task complexity?
 
-        ### Priority Order
+    ### Priority Order
 
-        List the tools in priority order based on:
-        1. **Speed impact**: How much faster would this tool make you?
-        2. **Tool call reduction**: How many tool calls would this eliminate?
-        3. **Frequency of need**: How often do you encounter this pattern?
-        4. **Time saved per invocation**: Seconds/minutes saved each use
+    List the tools in priority order based on:
+    1. **Speed impact**: How much faster would this tool make you?
+    2. **Tool call reduction**: How many tool calls would this eliminate?
+    3. **Frequency of need**: How often do you encounter this pattern?
+    4. **Time saved per invocation**: Seconds/minutes saved each use
 
-        Write as: "To make my work faster and more efficient, I need: [ordered list]"
+    Write as: "To make my work faster and more efficient, I need: [ordered list]"
 
-        ---
+    ---
 
-        ## Session to Analyze
+    ## Session to Analyze
 
