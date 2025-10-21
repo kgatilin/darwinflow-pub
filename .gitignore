@@ -25,5 +25,6 @@ go.work
 *.backup
 .agent/
 
-# Claude Code local settings
-.claude/
+# Claude Code local settings (only settings files)
+.claude/*.json
+.claude/*.backup
