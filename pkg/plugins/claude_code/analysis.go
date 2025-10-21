@@ -1,4 +1,4 @@
-package domain
+package claude_code
 
 import (
 	"time"
@@ -7,8 +7,7 @@ import (
 )
 
 // SessionAnalysis represents an AI-generated analysis of a Claude Code session.
-// NOTE: This type exists in domain for backward compatibility with internal code.
-// Analysis is semantically owned by the claude-code plugin.
+// This type is plugin-specific and owned by the claude-code plugin.
 type SessionAnalysis struct {
 	ID              string
 	SessionID       string

@@ -19,16 +19,6 @@ type LogRecord struct {
 	Content   string
 }
 
-// SessionAnalysis represents a session analysis result (SDK-native type)
-type SessionAnalysis struct {
-	ID              string
-	SessionID       string
-	PromptName      string
-	ModelUsed       string
-	PatternsSummary string
-	AnalyzedAt      time.Time
-}
-
 // AnalysisService provides access to session analysis data
 type AnalysisService interface {
 	GetAllSessionIDs(ctx context.Context, limit int) ([]string, error)

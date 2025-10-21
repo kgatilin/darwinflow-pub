@@ -6,6 +6,8 @@ import (
 )
 
 // EventRepository defines the interface for persisting and retrieving events (repository pattern)
+// This is the domain/internal interface - separate from SDK EventRepository
+// The domain uses this for storing events internally with full schema
 type EventRepository interface {
 	// Initialize initializes the repository (creates schema, indexes, etc.)
 	Initialize(ctx context.Context) error
@@ -21,6 +23,8 @@ type EventRepository interface {
 }
 
 // EventQuery defines query parameters for retrieving events (specification pattern)
+// This is the domain/internal query format - separate from SDK EventQuery
+// Maintains domain-specific fields like SessionID
 type EventQuery struct {
 	// Time range
 	StartTime *time.Time
@@ -60,7 +64,9 @@ type RawQueryExecutor interface {
 	ExecuteRawQuery(ctx context.Context, query string) (*QueryResult, error)
 }
 
-// AnalysisRepository defines the interface for persisting and retrieving session analyses
+// AnalysisRepository defines the interface for persisting and retrieving session analyses.
+// NOTE: This interface exists in domain for backward compatibility with internal code.
+// Analysis storage is semantically owned by the claude-code plugin.
 type AnalysisRepository interface {
 	// SaveAnalysis persists a session analysis
 	SaveAnalysis(ctx context.Context, analysis *SessionAnalysis) error
