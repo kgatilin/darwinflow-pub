@@ -42,7 +42,7 @@ func TestPhase3_EmitEventHookIntegration(t *testing.T) {
 	domainEvent := &domain.Event{
 		ID:        "event-1",
 		Timestamp: eventTimestamp,
-		Type:      domain.ToolInvoked,
+		Type:      "claude.tool.invoked",
 		SessionID: sessionID,
 		Payload:   eventPayload,
 		Content:   "",
@@ -69,8 +69,8 @@ func TestPhase3_EmitEventHookIntegration(t *testing.T) {
 	}
 
 	retrieved := storedEvents[0]
-	if retrieved.Type != domain.ToolInvoked {
-		t.Errorf("Event type = %v, want %v", retrieved.Type, domain.ToolInvoked)
+	if retrieved.Type != "claude.tool.invoked" {
+		t.Errorf("Event type = %v, want %v", retrieved.Type, "claude.tool.invoked")
 	}
 	if retrieved.SessionID != "test-session-123" {
 		t.Errorf("Event SessionID = %q, want %q", retrieved.SessionID, "test-session-123")
@@ -113,15 +113,15 @@ func TestPhase3_MultipleEventsOrdering(t *testing.T) {
 
 	// Create multiple events with different timestamps
 	testCases := []struct {
-		eventType domain.EventType
+		eventType string
 		offset    time.Duration
 		tool      string
 	}{
-		{domain.ChatStarted, 0 * time.Second, ""},
-		{domain.ToolInvoked, 1 * time.Second, "Read"},
-		{domain.ToolInvoked, 2 * time.Second, "Write"},
-		{domain.ChatMessageUser, 3 * time.Second, ""},
-		{domain.ToolInvoked, 4 * time.Second, "Bash"},
+		{"claude.chat.started", 0 * time.Second, ""},
+		{"claude.tool.invoked", 1 * time.Second, "Read"},
+		{"claude.tool.invoked", 2 * time.Second, "Write"},
+		{"claude.chat.message.user", 3 * time.Second, ""},
+		{"claude.tool.invoked", 4 * time.Second, "Bash"},
 	}
 
 	// Store all events
@@ -158,7 +158,7 @@ func TestPhase3_MultipleEventsOrdering(t *testing.T) {
 	}
 
 	// Verify all event types are present (order may vary depending on DB sorting)
-	typeMap := make(map[domain.EventType]int)
+	typeMap := make(map[string]int)
 	for _, event := range storedEvents {
 		typeMap[event.Type]++
 	}
@@ -194,7 +194,7 @@ func TestPhase3_EventVersioning(t *testing.T) {
 		event := &domain.Event{
 			ID:        "versioned-event-" + version,
 			Timestamp: time.Now(),
-			Type:      domain.ToolInvoked,
+			Type:      "claude.tool.invoked",
 			SessionID: sessionID,
 			Payload:   map[string]interface{}{"format_version": version},
 			Content:   "",
@@ -266,7 +266,7 @@ func TestPhase3_EventPayloadPersistence(t *testing.T) {
 	event := &domain.Event{
 		ID:        "complex-payload-event",
 		Timestamp: time.Now(),
-		Type:      domain.ToolInvoked,
+		Type:      "claude.tool.invoked",
 		SessionID: "test-session",
 		Payload:   complexPayload,
 		Content:   "",
@@ -337,7 +337,7 @@ func TestPhase3_DomainEventFields(t *testing.T) {
 	sessionID := "field-test"
 
 	domainEvent := &domain.Event{
-		Type:      domain.ToolInvoked,
+		Type:      "claude.tool.invoked",
 		SessionID: sessionID,
 		Timestamp: eventTime,
 		Payload:   eventPayload,
@@ -369,7 +369,7 @@ func TestPhase3_JSONMarshaling(t *testing.T) {
 	}
 
 	originalEvent := &domain.Event{
-		Type:      domain.ToolInvoked,
+		Type:      "claude.tool.invoked",
 		SessionID: "marshal-test",
 		Timestamp: time.Date(2025, 10, 20, 15, 30, 45, 0, time.UTC),
 		Payload:   eventPayload,
@@ -389,8 +389,8 @@ func TestPhase3_JSONMarshaling(t *testing.T) {
 	}
 
 	// Verify fields preserved
-	if restored.Type != domain.ToolInvoked {
-		t.Errorf("Type = %v, want %v", restored.Type, domain.ToolInvoked)
+	if restored.Type != "claude.tool.invoked" {
+		t.Errorf("Type = %v, want %v", restored.Type, "claude.tool.invoked")
 	}
 	if restored.SessionID != "marshal-test" {
 		t.Errorf("SessionID = %q, want %q", restored.SessionID, "marshal-test")
@@ -420,7 +420,7 @@ func TestPhase3_HookMigrationCompatibility(t *testing.T) {
 	oldFormatEvent := &domain.Event{
 		ID:        "old-format-event",
 		Timestamp: time.Now(),
-		Type:      domain.ToolInvoked,
+		Type:      "claude.tool.invoked",
 		SessionID: "legacy-session",
 		Payload:   map[string]interface{}{"tool": "Read"},
 		Content:   "",
@@ -449,7 +449,7 @@ func TestPhase3_HookMigrationCompatibility(t *testing.T) {
 	if retrieved.SessionID != "legacy-session" {
 		t.Errorf("Backward compat: SessionID = %q, want %q", retrieved.SessionID, "legacy-session")
 	}
-	if retrieved.Type != domain.ToolInvoked {
-		t.Errorf("Backward compat: Type = %v, want %v", retrieved.Type, domain.ToolInvoked)
+	if retrieved.Type != "claude.tool.invoked" {
+		t.Errorf("Backward compat: Type = %v, want %v", retrieved.Type, "claude.tool.invoked")
 	}
 }

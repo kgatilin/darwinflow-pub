@@ -11,28 +11,28 @@ import (
 func TestNewEvent(t *testing.T) {
 	tests := []struct {
 		name      string
-		eventType domain.EventType
+		eventType string
 		sessionID string
 		payload   interface{}
 		content   string
 	}{
 		{
 			name:      "creates chat started event",
-			eventType: domain.ChatStarted,
+			eventType: "claude.chat.started",
 			sessionID: "test-session-1",
-			payload:   domain.ChatPayload{Message: "Hello", Context: "greeting"},
+			payload:   map[string]string{"message": "Hello", "context": "greeting"},
 			content:   "Hello greeting",
 		},
 		{
 			name:      "creates tool invoked event",
-			eventType: domain.ToolInvoked,
+			eventType: "claude.tool.invoked",
 			sessionID: "test-session-2",
-			payload:   domain.ToolPayload{Tool: "Read", Parameters: map[string]string{"file": "test.go"}},
+			payload:   map[string]interface{}{"tool": "Read", "parameters": map[string]string{"file": "test.go"}},
 			content:   "Reading test.go",
 		},
 		{
 			name:      "creates event with nil payload",
-			eventType: domain.FileRead,
+			eventType: "claude.file.read",
 			sessionID: "test-session-3",
 			payload:   nil,
 			content:   "file read",
@@ -74,75 +74,75 @@ func TestEvent_MarshalPayload(t *testing.T) {
 	}{
 		{
 			name: "marshals chat payload",
-			payload: domain.ChatPayload{
-				Message: "test message",
-				Context: "test context",
+			payload: map[string]string{
+				"message": "test message",
+				"context": "test context",
 			},
 			wantErr: false,
 			validateFn: func(data []byte) error {
-				var p domain.ChatPayload
+				var p map[string]string
 				if err := json.Unmarshal(data, &p); err != nil {
 					return err
 				}
-				if p.Message != "test message" {
-					t.Errorf("Expected Message = %q, got %q", "test message", p.Message)
+				if p["message"] != "test message" {
+					t.Errorf("Expected message = %q, got %q", "test message", p["message"])
 				}
 				return nil
 			},
 		},
 		{
 			name: "marshals tool payload",
-			payload: domain.ToolPayload{
-				Tool:       "Bash",
-				Parameters: map[string]string{"command": "ls"},
-				DurationMs: 100,
+			payload: map[string]interface{}{
+				"tool":       "Bash",
+				"parameters": map[string]string{"command": "ls"},
+				"duration_ms": 100,
 			},
 			wantErr: false,
 			validateFn: func(data []byte) error {
-				var p domain.ToolPayload
+				var p map[string]interface{}
 				if err := json.Unmarshal(data, &p); err != nil {
 					return err
 				}
-				if p.Tool != "Bash" {
-					t.Errorf("Expected Tool = %q, got %q", "Bash", p.Tool)
+				if p["tool"] != "Bash" {
+					t.Errorf("Expected tool = %q, got %q", "Bash", p["tool"])
 				}
 				return nil
 			},
 		},
 		{
 			name: "marshals file payload",
-			payload: domain.FilePayload{
-				FilePath:   "/test/path.go",
-				Changes:    "added function",
-				DurationMs: 50,
+			payload: map[string]interface{}{
+				"file_path":   "/test/path.go",
+				"changes":     "added function",
+				"duration_ms": 50,
 			},
 			wantErr: false,
 			validateFn: func(data []byte) error {
-				var p domain.FilePayload
+				var p map[string]interface{}
 				if err := json.Unmarshal(data, &p); err != nil {
 					return err
 				}
-				if p.FilePath != "/test/path.go" {
-					t.Errorf("Expected FilePath = %q, got %q", "/test/path.go", p.FilePath)
+				if p["file_path"] != "/test/path.go" {
+					t.Errorf("Expected file_path = %q, got %q", "/test/path.go", p["file_path"])
 				}
 				return nil
 			},
 		},
 		{
 			name: "marshals error payload",
-			payload: domain.ErrorPayload{
-				Error:      "test error",
-				StackTrace: "line 1\nline 2",
-				Context:    "during test",
+			payload: map[string]interface{}{
+				"error":       "test error",
+				"stack_trace": "line 1\nline 2",
+				"context":     "during test",
 			},
 			wantErr: false,
 			validateFn: func(data []byte) error {
-				var p domain.ErrorPayload
+				var p map[string]interface{}
 				if err := json.Unmarshal(data, &p); err != nil {
 					return err
 				}
-				if p.Error != "test error" {
-					t.Errorf("Expected Error = %q, got %q", "test error", p.Error)
+				if p["error"] != "test error" {
+					t.Errorf("Expected error = %q, got %q", "test error", p["error"])
 				}
 				return nil
 			},
@@ -179,7 +179,7 @@ func TestEvent_MarshalPayload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			event := domain.NewEvent(domain.ChatStarted, "test-session", tt.payload, "content")
+			event := domain.NewEvent("claude.chat.started", "test-session", tt.payload, "content")
 
 			data, err := event.MarshalPayload()
 			if (err != nil) != tt.wantErr {
@@ -193,167 +193,5 @@ func TestEvent_MarshalPayload(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestEventTypes(t *testing.T) {
-	// Test that all event type constants are defined
-	eventTypes := []domain.EventType{
-		domain.ChatStarted,
-		domain.ChatMessageUser,
-		domain.ChatMessageAssistant,
-		domain.ToolInvoked,
-		domain.ToolResult,
-		domain.FileRead,
-		domain.FileWritten,
-		domain.ContextChanged,
-		domain.Error,
-	}
-
-	// Verify each type has a non-empty value
-	for _, et := range eventTypes {
-		if string(et) == "" {
-			t.Errorf("Event type %v has empty string value", et)
-		}
-	}
-
-	// Verify types are unique
-	seen := make(map[domain.EventType]bool)
-	for _, et := range eventTypes {
-		if seen[et] {
-			t.Errorf("Duplicate event type: %v", et)
-		}
-		seen[et] = true
-	}
-}
-
-func TestChatPayload(t *testing.T) {
-	payload := domain.ChatPayload{
-		Message: "test message",
-		Context: "test context",
-	}
-
-	// Verify JSON marshaling preserves fields
-	data, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal ChatPayload: %v", err)
-	}
-
-	var unmarshaled domain.ChatPayload
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal ChatPayload: %v", err)
-	}
-
-	if unmarshaled.Message != payload.Message {
-		t.Errorf("Expected Message = %q, got %q", payload.Message, unmarshaled.Message)
-	}
-	if unmarshaled.Context != payload.Context {
-		t.Errorf("Expected Context = %q, got %q", payload.Context, unmarshaled.Context)
-	}
-}
-
-func TestToolPayload(t *testing.T) {
-	payload := domain.ToolPayload{
-		Tool:       "Read",
-		Parameters: map[string]interface{}{"file": "test.go", "offset": 10},
-		Result:     "file contents",
-		DurationMs: 42,
-		Context:    "reading file",
-	}
-
-	// Verify JSON marshaling preserves fields
-	data, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal ToolPayload: %v", err)
-	}
-
-	var unmarshaled domain.ToolPayload
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal ToolPayload: %v", err)
-	}
-
-	if unmarshaled.Tool != payload.Tool {
-		t.Errorf("Expected Tool = %q, got %q", payload.Tool, unmarshaled.Tool)
-	}
-	if unmarshaled.DurationMs != payload.DurationMs {
-		t.Errorf("Expected DurationMs = %d, got %d", payload.DurationMs, unmarshaled.DurationMs)
-	}
-}
-
-func TestFilePayload(t *testing.T) {
-	payload := domain.FilePayload{
-		FilePath:   "/test/file.go",
-		Changes:    "added function Foo",
-		DurationMs: 123,
-		Context:    "writing changes",
-	}
-
-	// Verify JSON marshaling preserves fields
-	data, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal FilePayload: %v", err)
-	}
-
-	var unmarshaled domain.FilePayload
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal FilePayload: %v", err)
-	}
-
-	if unmarshaled.FilePath != payload.FilePath {
-		t.Errorf("Expected FilePath = %q, got %q", payload.FilePath, unmarshaled.FilePath)
-	}
-	if unmarshaled.Changes != payload.Changes {
-		t.Errorf("Expected Changes = %q, got %q", payload.Changes, unmarshaled.Changes)
-	}
-}
-
-func TestErrorPayload(t *testing.T) {
-	payload := domain.ErrorPayload{
-		Error:      "file not found",
-		StackTrace: "line 1\nline 2\nline 3",
-		Context:    "during read operation",
-	}
-
-	// Verify JSON marshaling preserves fields
-	data, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal ErrorPayload: %v", err)
-	}
-
-	var unmarshaled domain.ErrorPayload
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal ErrorPayload: %v", err)
-	}
-
-	if unmarshaled.Error != payload.Error {
-		t.Errorf("Expected Error = %q, got %q", payload.Error, unmarshaled.Error)
-	}
-	if unmarshaled.StackTrace != payload.StackTrace {
-		t.Errorf("Expected StackTrace = %q, got %q", payload.StackTrace, unmarshaled.StackTrace)
-	}
-}
-
-func TestContextPayload(t *testing.T) {
-	payload := domain.ContextPayload{
-		Context:     "new context",
-		Description: "context changed due to user action",
-	}
-
-	// Verify JSON marshaling preserves fields
-	data, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal ContextPayload: %v", err)
-	}
-
-	var unmarshaled domain.ContextPayload
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal ContextPayload: %v", err)
-	}
-
-	if unmarshaled.Context != payload.Context {
-		t.Errorf("Expected Context = %q, got %q", payload.Context, unmarshaled.Context)
-	}
-	if unmarshaled.Description != payload.Description {
-		t.Errorf("Expected Description = %q, got %q", payload.Description, unmarshaled.Description)
 	}
 }

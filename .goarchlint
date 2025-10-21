@@ -134,8 +134,14 @@ overrides:
             internal/app:
                 - internal/domain
                 - pkg/pluginsdk
+            internal/domain:
+                - pkg/pluginsdk  # Domain can import SDK for plugin contracts
+            internal/infra:
+                - internal/domain
+                - pkg/pluginsdk
             pkg/plugins/claude_code:
                 - pkg/pluginsdk
+            pkg/pluginsdk: []  # SDK has zero dependencies - fully public
         test_coverage:
             package_thresholds:
                 pkg/plugins/claude_code: 70

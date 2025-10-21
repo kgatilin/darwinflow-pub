@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
@@ -13,7 +12,7 @@ func TestPluginRegistry_CapabilityBasedRouting(t *testing.T) {
 	logger := &app.NoOpLogger{}
 	registry := app.NewPluginRegistry(logger)
 
-	entityTypes := []domain.EntityTypeInfo{
+	entityTypes := []pluginsdk.EntityTypeInfo{
 		{Type: "task", DisplayName: "Task", Capabilities: []string{"IExtensible"}},
 	}
 
@@ -123,7 +122,7 @@ func TestPluginRegistry_MultipleCapabilities(t *testing.T) {
 	registry := app.NewPluginRegistry(logger)
 
 	// Register plugin with multiple capabilities
-	entityTypes := []domain.EntityTypeInfo{
+	entityTypes := []pluginsdk.EntityTypeInfo{
 		{Type: "session", DisplayName: "Session", Capabilities: []string{"IExtensible"}},
 	}
 
@@ -231,7 +230,7 @@ type MockMultiCapabilityPlugin struct {
 	name         string
 	version      string
 	capabilities []string
-	entityTypes  []domain.EntityTypeInfo
+	entityTypes  []pluginsdk.EntityTypeInfo
 }
 
 func (p *MockMultiCapabilityPlugin) GetInfo() pluginsdk.PluginInfo {

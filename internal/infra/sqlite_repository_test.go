@@ -629,7 +629,7 @@ func TestSQLiteEventRepository_Save(t *testing.T) {
 	defer store.Close()
 
 	// Create an event
-	event := domain.NewEvent(domain.ToolInvoked, "session-save-test", map[string]string{"tool": "Read"}, "Read tool")
+	event := domain.NewEvent("claude.tool.invoked", "session-save-test", map[string]string{"tool": "Read"}, "Read tool")
 
 	// Save it
 	err = store.Save(ctx, event)
@@ -724,7 +724,7 @@ func TestSQLiteEventRepository_FindByQuery_WithEventTypes(t *testing.T) {
 
 	_, err = db.Exec(
 		"INSERT INTO events (id, timestamp, event_type, session_id, payload, content) VALUES (?, ?, ?, ?, ?, ?)",
-		"evt-tool", time.Now().UnixMilli(), "tool.invoked", "type-session", `{}`, "tool",
+		"evt-tool", time.Now().UnixMilli(), "claude.tool.invoked", "type-session", `{}`, "tool",
 	)
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -732,7 +732,7 @@ func TestSQLiteEventRepository_FindByQuery_WithEventTypes(t *testing.T) {
 
 	_, err = db.Exec(
 		"INSERT INTO events (id, timestamp, event_type, session_id, payload, content) VALUES (?, ?, ?, ?, ?, ?)",
-		"evt-chat", time.Now().UnixMilli(), "chat.message.user", "type-session", `{}`, "chat",
+		"evt-chat", time.Now().UnixMilli(), "claude.chat.message.user", "type-session", `{}`, "chat",
 	)
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -741,7 +741,7 @@ func TestSQLiteEventRepository_FindByQuery_WithEventTypes(t *testing.T) {
 	// Query for specific event types
 	query := domain.EventQuery{
 		SessionID:  "type-session",
-		EventTypes: []domain.EventType{domain.ToolInvoked},
+		EventTypes: []string{"claude.tool.invoked"},
 	}
 	events, err := store.FindByQuery(ctx, query)
 	if err != nil {
@@ -752,8 +752,8 @@ func TestSQLiteEventRepository_FindByQuery_WithEventTypes(t *testing.T) {
 		t.Errorf("Expected 1 event of type tool.invoked, got %d", len(events))
 	}
 
-	if len(events) > 0 && events[0].Type != domain.ToolInvoked {
-		t.Errorf("Expected event type tool.invoked, got %s", events[0].Type)
+	if len(events) > 0 && events[0].Type != "claude.tool.invoked" {
+		t.Errorf("Expected event type claude.tool.invoked, got %s", events[0].Type)
 	}
 }
 

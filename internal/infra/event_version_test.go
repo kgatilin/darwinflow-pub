@@ -29,7 +29,7 @@ func TestSQLiteEventRepository_Save_WithVersion(t *testing.T) {
 	event := &domain.Event{
 		ID:        "test-event-1",
 		Timestamp: time.Now(),
-		Type:      domain.ChatStarted,
+		Type:      string(domain.ChatStarted),
 		SessionID: "session-1",
 		Payload:   map[string]interface{}{"msg": "test"},
 		Content:   "test content",
@@ -75,7 +75,7 @@ func TestSQLiteEventRepository_Save_DefaultVersion(t *testing.T) {
 	}
 
 	// Test: Event with default version "1.0"
-	event := domain.NewEvent(domain.ChatStarted, "session-2", map[string]interface{}{"msg": "test"}, "test")
+	event := domain.NewEvent(string(domain.ChatStarted), "session-2", map[string]interface{}{"msg": "test"}, "test")
 
 	if err := repo.Save(ctx, event); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -126,7 +126,7 @@ func TestSQLiteEventRepository_MultipleVersions(t *testing.T) {
 		event := &domain.Event{
 			ID:        tc.id,
 			Timestamp: time.Now(),
-			Type:      domain.ChatStarted,
+			Type:      string(domain.ChatStarted),
 			SessionID: "session-3",
 			Payload:   map[string]interface{}{"version": tc.version},
 			Content:   "test",
@@ -162,7 +162,7 @@ func TestSQLiteEventRepository_MultipleVersions(t *testing.T) {
 }
 
 func TestNewEvent_DefaultVersion(t *testing.T) {
-	event := domain.NewEvent(domain.ChatStarted, "session-4", map[string]interface{}{}, "test")
+	event := domain.NewEvent(string(domain.ChatStarted), "session-4", map[string]interface{}{}, "test")
 
 	if event.Version != "1.0" {
 		t.Errorf("NewEvent() version = %q, want %q", event.Version, "1.0")
@@ -174,7 +174,7 @@ func TestEvent_VersionPreservation(t *testing.T) {
 	event := &domain.Event{
 		ID:        "custom-v-event",
 		Timestamp: time.Now(),
-		Type:      domain.ChatStarted,
+		Type:      string(domain.ChatStarted),
 		SessionID: "test-session",
 		Payload:   map[string]interface{}{},
 		Content:   "test",

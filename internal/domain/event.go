@@ -5,45 +5,50 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
 // EventType represents the type of event captured from Claude Code
-type EventType string
+// NOTE: EventType constants are defined in the claude-code plugin
+// These are re-exported here for backwards compatibility with internal domain code
+type EventType = string
 
+// Re-export event type constants from claude-code plugin
 const (
 	// Chat events
-	ChatStarted          EventType = "chat.started"
-	ChatMessageUser      EventType = "chat.message.user"
-	ChatMessageAssistant EventType = "chat.message.assistant"
+	ChatStarted          = claude_code.ChatStarted
+	ChatMessageUser      = claude_code.ChatMessageUser
+	ChatMessageAssistant = claude_code.ChatMessageAssistant
 
 	// Tool events
-	ToolInvoked EventType = "tool.invoked"
-	ToolResult  EventType = "tool.result"
+	ToolInvoked = claude_code.ToolInvoked
+	ToolResult  = claude_code.ToolResult
 
 	// File events
-	FileRead    EventType = "file.read"
-	FileWritten EventType = "file.written"
+	FileRead    = claude_code.FileRead
+	FileWritten = claude_code.FileWritten
 
 	// Context events
-	ContextChanged EventType = "context.changed"
+	ContextChanged = claude_code.ContextChanged
 
 	// Error events
-	Error EventType = "error"
+	Error = claude_code.Error
 )
 
 // Event represents a single logged interaction from Claude Code (domain entity)
+// This is the internal event storage format used by the framework.
 type Event struct {
 	ID        string
 	Timestamp time.Time
-	Type      EventType
+	Type      string      // Event type (e.g., "claude.tool.invoked")
 	SessionID string      // Claude Code session identifier
-	Payload   interface{}
-	Content   string // Normalized text for full-text search
-	Version   string // Schema version for event (default: "1.0")
+	Payload   interface{} // Plugin-specific payload structure
+	Content   string      // Normalized text for full-text search
+	Version   string      // Schema version for event (default: "1.0")
 }
 
 // NewEvent creates a new event with generated ID and current timestamp (domain service)
-func NewEvent(eventType EventType, sessionID string, payload interface{}, content string) *Event {
+func NewEvent(eventType string, sessionID string, payload interface{}, content string) *Event {
 	return &Event{
 		ID:        uuid.New().String(),
 		Timestamp: time.Now(),
@@ -60,40 +65,19 @@ func (e *Event) MarshalPayload() ([]byte, error) {
 	return json.Marshal(e.Payload)
 }
 
-// Payload types for different events (value objects)
+// Payload types for different events (value objects - re-exported from plugin)
 
 // ChatPayload contains data for chat-related events
-type ChatPayload struct {
-	Message string `json:"message,omitempty"`
-	Context string `json:"context,omitempty"`
-}
+type ChatPayload = claude_code.ChatPayload
 
 // ToolPayload contains data for tool invocation and result events
-type ToolPayload struct {
-	Tool       string      `json:"tool"`
-	Parameters interface{} `json:"parameters,omitempty"` // Can be object, array, or string
-	Result     interface{} `json:"result,omitempty"`     // Can be object, array, or string
-	DurationMs int64       `json:"duration_ms,omitempty"`
-	Context    string      `json:"context,omitempty"`
-}
+type ToolPayload = claude_code.ToolPayload
 
 // FilePayload contains data for file access events
-type FilePayload struct {
-	FilePath   string `json:"file_path"`
-	Changes    string `json:"changes,omitempty"`
-	DurationMs int64  `json:"duration_ms,omitempty"`
-	Context    string `json:"context,omitempty"`
-}
+type FilePayload = claude_code.FilePayload
 
 // ContextPayload contains data for context change events
-type ContextPayload struct {
-	Context     string `json:"context"`
-	Description string `json:"description,omitempty"`
-}
+type ContextPayload = claude_code.ContextPayload
 
 // ErrorPayload contains data for error events
-type ErrorPayload struct {
-	Error      string `json:"error"`
-	StackTrace string `json:"stack_trace,omitempty"`
-	Context    string `json:"context,omitempty"`
-}
+type ErrorPayload = claude_code.ErrorPayload

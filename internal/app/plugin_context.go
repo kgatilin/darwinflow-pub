@@ -59,7 +59,7 @@ func (p *pluginContextAdapter) GetWorkingDir() string {
 func (p *pluginContextAdapter) EmitEvent(ctx context.Context, event pluginsdk.Event) error {
 	// Convert SDK event to domain event
 	// SDK Event has: Type, Source, Timestamp, Payload (map[string]interface{}), Metadata (map[string]string), Version (string)
-	// Domain Event has: ID, Timestamp, Type (EventType), SessionID, Payload (interface{}), Content (string), Version (string)
+	// Domain Event has: ID, Timestamp, Type (string), SessionID, Payload (interface{}), Content (string), Version (string)
 
 	// Extract session ID from metadata if present
 	sessionID := ""
@@ -67,9 +67,8 @@ func (p *pluginContextAdapter) EmitEvent(ctx context.Context, event pluginsdk.Ev
 		sessionID = event.Metadata["session_id"]
 	}
 
-	// Combine type and source for event type
 	// Use the event.Type directly as it's already in dot notation
-	eventType := domain.EventType(event.Type)
+	eventType := event.Type
 
 	// Build payload that includes both the event payload and source information
 	payload := map[string]interface{}{
@@ -82,7 +81,7 @@ func (p *pluginContextAdapter) EmitEvent(ctx context.Context, event pluginsdk.Ev
 
 	// Create normalized content for full-text search
 	// Combine type, source, and payload fields
-	contentParts := []string{string(eventType), event.Source}
+	contentParts := []string{eventType, event.Source}
 	for _, v := range event.Payload {
 		contentParts = append(contentParts, fmt.Sprintf("%v", v))
 	}

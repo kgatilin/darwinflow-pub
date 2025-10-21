@@ -83,9 +83,9 @@ func TestSQLiteEventRepository_GetUnanalyzedSessionIDs(t *testing.T) {
 	session3 := "session-3"
 
 	events := []*domain.Event{
-		domain.NewEvent(domain.ChatStarted, session1, domain.ChatPayload{Message: "test"}, "test"),
-		domain.NewEvent(domain.ChatStarted, session2, domain.ChatPayload{Message: "test"}, "test"),
-		domain.NewEvent(domain.ChatStarted, session3, domain.ChatPayload{Message: "test"}, "test"),
+		domain.NewEvent(string(domain.ChatStarted), session1, domain.ChatPayload{Message: "test"}, "test"),
+		domain.NewEvent(string(domain.ChatStarted), session2, domain.ChatPayload{Message: "test"}, "test"),
+		domain.NewEvent(string(domain.ChatStarted), session3, domain.ChatPayload{Message: "test"}, "test"),
 	}
 
 	for _, event := range events {

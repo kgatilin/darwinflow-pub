@@ -298,7 +298,7 @@ func (r *SQLiteEventRepository) FindByQuery(ctx context.Context, query domain.Ev
 		event := &domain.Event{
 			ID:        id,
 			Timestamp: millisecondsToTime(timestampMs),
-			Type:      domain.EventType(eventType),
+			Type:      eventType,
 			SessionID: sessionID.String,
 			Payload:   payload,
 			Content:   content,

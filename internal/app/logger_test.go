@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
 func TestEventMapper_MapEventType(t *testing.T) {
@@ -13,50 +12,50 @@ func TestEventMapper_MapEventType(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected domain.EventType
+		expected string
 	}{
 		// Chat events
-		{name: "chat.started", input: "chat.started", expected: domain.ChatStarted},
-		{name: "chat.ended", input: "chat.ended", expected: domain.ChatStarted},
-		{name: "chat.end", input: "chat.end", expected: domain.ChatStarted},
+		{name: "chat.started", input: "chat.started", expected: "claude.chat.started"},
+		{name: "chat.ended", input: "chat.ended", expected: "claude.chat.started"},
+		{name: "chat.end", input: "chat.end", expected: "claude.chat.started"},
 
 		// User messages
-		{name: "chat.message.user", input: "chat.message.user", expected: domain.ChatMessageUser},
-		{name: "user.message", input: "user.message", expected: domain.ChatMessageUser},
+		{name: "chat.message.user", input: "chat.message.user", expected: "claude.chat.message.user"},
+		{name: "user.message", input: "user.message", expected: "claude.chat.message.user"},
 
 		// Assistant messages
-		{name: "chat.message.assistant", input: "chat.message.assistant", expected: domain.ChatMessageAssistant},
-		{name: "assistant.message", input: "assistant.message", expected: domain.ChatMessageAssistant},
+		{name: "chat.message.assistant", input: "chat.message.assistant", expected: "claude.chat.message.assistant"},
+		{name: "assistant.message", input: "assistant.message", expected: "claude.chat.message.assistant"},
 
 		// Tool events
-		{name: "tool.invoked", input: "tool.invoked", expected: domain.ToolInvoked},
-		{name: "tool.invoke", input: "tool.invoke", expected: domain.ToolInvoked},
-		{name: "tool.result", input: "tool.result", expected: domain.ToolResult},
+		{name: "tool.invoked", input: "tool.invoked", expected: "claude.tool.invoked"},
+		{name: "tool.invoke", input: "tool.invoke", expected: "claude.tool.invoked"},
+		{name: "tool.result", input: "tool.result", expected: "claude.tool.result"},
 
 		// File events
-		{name: "file.read", input: "file.read", expected: domain.FileRead},
-		{name: "file.written", input: "file.written", expected: domain.FileWritten},
-		{name: "file.write", input: "file.write", expected: domain.FileWritten},
+		{name: "file.read", input: "file.read", expected: "claude.file.read"},
+		{name: "file.written", input: "file.written", expected: "claude.file.written"},
+		{name: "file.write", input: "file.write", expected: "claude.file.written"},
 
 		// Context events
-		{name: "context.changed", input: "context.changed", expected: domain.ContextChanged},
-		{name: "context.change", input: "context.change", expected: domain.ContextChanged},
+		{name: "context.changed", input: "context.changed", expected: "claude.context.changed"},
+		{name: "context.change", input: "context.change", expected: "claude.context.changed"},
 
 		// Error events
-		{name: "error", input: "error", expected: domain.Error},
+		{name: "error", input: "error", expected: "claude.error"},
 
 		// Case insensitive
-		{name: "uppercase CHAT.STARTED", input: "CHAT.STARTED", expected: domain.ChatStarted},
-		{name: "mixed case Chat.Started", input: "Chat.Started", expected: domain.ChatStarted},
+		{name: "uppercase CHAT.STARTED", input: "CHAT.STARTED", expected: "claude.chat.started"},
+		{name: "mixed case Chat.Started", input: "Chat.Started", expected: "claude.chat.started"},
 
 		// Underscore normalization
-		{name: "underscore chat_started", input: "chat_started", expected: domain.ChatStarted},
-		{name: "underscore tool_invoked", input: "tool_invoked", expected: domain.ToolInvoked},
-		{name: "underscore file_read", input: "file_read", expected: domain.FileRead},
+		{name: "underscore chat_started", input: "chat_started", expected: "claude.chat.started"},
+		{name: "underscore tool_invoked", input: "tool_invoked", expected: "claude.tool.invoked"},
+		{name: "underscore file_read", input: "file_read", expected: "claude.file.read"},
 
 		// Unknown event types (returns as-is, normalized)
-		{name: "unknown event", input: "custom.event", expected: domain.EventType("custom.event")},
-		{name: "unknown with underscore", input: "custom_event", expected: domain.EventType("custom.event")},
+		{name: "unknown event", input: "custom.event", expected: "claude.custom.event"},
+		{name: "unknown with underscore", input: "custom_event", expected: "claude.custom.event"},
 	}
 
 	for _, tt := range tests {
@@ -75,12 +74,12 @@ func TestEventMapper_MapEventType_Normalization(t *testing.T) {
 	// Test that normalization converts underscores to dots and lowercases
 	tests := []struct {
 		input    string
-		expected domain.EventType
+		expected string
 	}{
-		{"Chat_Started", domain.ChatStarted},
-		{"TOOL_INVOKED", domain.ToolInvoked},
-		{"File_Read", domain.FileRead},
-		{"Tool_Result", domain.ToolResult},
+		{"Chat_Started", "claude.chat.started"},
+		{"TOOL_INVOKED", "claude.tool.invoked"},
+		{"File_Read", "claude.file.read"},
+		{"Tool_Result", "claude.tool.result"},
 	}
 
 	for _, tt := range tests {

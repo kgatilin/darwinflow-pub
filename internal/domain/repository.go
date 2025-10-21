@@ -26,8 +26,8 @@ type EventQuery struct {
 	StartTime *time.Time
 	EndTime   *time.Time
 
-	// Event type filtering
-	EventTypes []EventType
+	// Event type filtering (plugin-defined event type strings)
+	EventTypes []string
 
 	// Session filtering
 	SessionID string

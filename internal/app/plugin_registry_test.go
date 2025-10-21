@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
-	"github.com/kgatilin/darwinflow-pub/internal/domain"
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
@@ -14,20 +13,20 @@ type MockPlugin struct {
 	name         string
 	version      string
 	capabilities []string
-	entityTypes  []domain.EntityTypeInfo
-	entities     []domain.IExtensible
+	entityTypes  []pluginsdk.EntityTypeInfo
+	entities     []pluginsdk.IExtensible
 	queryError   error
 	getError     error
 	updateError  error
 }
 
-func NewMockPlugin(name string, entityTypes []domain.EntityTypeInfo) *MockPlugin {
+func NewMockPlugin(name string, entityTypes []pluginsdk.EntityTypeInfo) *MockPlugin {
 	return &MockPlugin{
 		name:         name,
 		version:      "1.0.0",
 		capabilities: []string{"IEntityProvider", "IEntityUpdater"},
 		entityTypes:  entityTypes,
-		entities:     []domain.IExtensible{},
+		entities:     []pluginsdk.IExtensible{},
 	}
 }
 
@@ -45,26 +44,14 @@ func (p *MockPlugin) GetCapabilities() []string {
 }
 
 func (p *MockPlugin) GetEntityTypes() []pluginsdk.EntityTypeInfo {
-	result := make([]pluginsdk.EntityTypeInfo, len(p.entityTypes))
-	for i, et := range p.entityTypes {
-		result[i] = pluginsdk.EntityTypeInfo{
-			Type:         et.Type,
-			DisplayName:  et.DisplayName,
-			Capabilities: et.Capabilities,
-		}
-	}
-	return result
+	return p.entityTypes
 }
 
 func (p *MockPlugin) Query(ctx context.Context, query pluginsdk.EntityQuery) ([]pluginsdk.IExtensible, error) {
 	if p.queryError != nil {
 		return nil, p.queryError
 	}
-	sdkEntities := make([]pluginsdk.IExtensible, len(p.entities))
-	for i, e := range p.entities {
-		sdkEntities[i] = e.(pluginsdk.IExtensible)
-	}
-	return sdkEntities, nil
+	return p.entities, nil
 }
 
 func (p *MockPlugin) GetEntity(ctx context.Context, entityID string) (pluginsdk.IExtensible, error) {
@@ -74,7 +61,7 @@ func (p *MockPlugin) GetEntity(ctx context.Context, entityID string) (pluginsdk.
 
 	for _, e := range p.entities {
 		if e.GetID() == entityID {
-			return e.(pluginsdk.IExtensible), nil
+			return e, nil
 		}
 	}
 
@@ -129,7 +116,7 @@ func TestPluginRegistry_RegisterPlugin(t *testing.T) {
 	logger := &app.NoOpLogger{}
 	registry := app.NewPluginRegistry(logger)
 
-	entityTypes := []domain.EntityTypeInfo{
+	entityTypes := []pluginsdk.EntityTypeInfo{
 		{
 			Type:         "task",
 			DisplayName:  "Task",
@@ -159,7 +146,7 @@ func TestPluginRegistry_RegisterPlugin_Duplicate(t *testing.T) {
 	logger := &app.NoOpLogger{}
 	registry := app.NewPluginRegistry(logger)
 
-	entityTypes := []domain.EntityTypeInfo{
+	entityTypes := []pluginsdk.EntityTypeInfo{
 		{Type: "task", DisplayName: "Task", Capabilities: []string{"IExtensible"}},
 	}
 
@@ -181,7 +168,7 @@ func TestPluginRegistry_RegisterPlugin_EntityTypeConflict(t *testing.T) {
 	logger := &app.NoOpLogger{}
 	registry := app.NewPluginRegistry(logger)
 
-	entityTypes := []domain.EntityTypeInfo{
+	entityTypes := []pluginsdk.EntityTypeInfo{
 		{Type: "task", DisplayName: "Task", Capabilities: []string{"IExtensible"}},
 	}
 
@@ -203,7 +190,7 @@ func TestPluginRegistry_GetPluginForEntityType(t *testing.T) {
 	logger := &app.NoOpLogger{}
 	registry := app.NewPluginRegistry(logger)
 
-	entityTypes := []domain.EntityTypeInfo{
+	entityTypes := []pluginsdk.EntityTypeInfo{
 		{Type: "task", DisplayName: "Task", Capabilities: []string{"IExtensible"}},
 	}
 

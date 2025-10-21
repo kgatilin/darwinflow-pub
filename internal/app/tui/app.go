@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
 var (
@@ -348,7 +349,7 @@ func (m *AppModel) View() string {
 
 func (m *AppModel) loadSessions() tea.Msg {
 	// Query all sessions from the plugin registry
-	entities, err := m.pluginRegistry.Query(m.ctx, domain.EntityQuery{
+	entities, err := m.pluginRegistry.Query(m.ctx, pluginsdk.EntityQuery{
 		EntityType: "session",
 	})
 	if err != nil {

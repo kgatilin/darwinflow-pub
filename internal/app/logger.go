@@ -9,38 +9,40 @@ import (
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
-// EventMapper maps string event types to domain.EventType
+// EventMapper maps string event types to normalized event type strings
+// This is used to normalize various event type formats to canonical strings
 type EventMapper struct{}
 
-// MapEventType maps string event types to domain.EventType
-func (m *EventMapper) MapEventType(eventTypeStr string) domain.EventType {
+// MapEventType maps string event types to normalized event type strings
+// The returned string can be any event type identifier defined by plugins
+func (m *EventMapper) MapEventType(eventTypeStr string) string {
 	// Normalize the string
 	normalized := strings.ToLower(strings.ReplaceAll(eventTypeStr, "_", "."))
 
 	switch normalized {
 	case "chat.started":
-		return domain.ChatStarted
+		return "claude.chat.started"
 	case "chat.ended", "chat.end":
-		return domain.ChatStarted // Reuse for now
+		return "claude.chat.started" // Reuse for now
 	case "chat.message.user", "user.message":
-		return domain.ChatMessageUser
+		return "claude.chat.message.user"
 	case "chat.message.assistant", "assistant.message":
-		return domain.ChatMessageAssistant
+		return "claude.chat.message.assistant"
 	case "tool.invoked", "tool.invoke":
-		return domain.ToolInvoked
+		return "claude.tool.invoked"
 	case "tool.result":
-		return domain.ToolResult
+		return "claude.tool.result"
 	case "file.read":
-		return domain.FileRead
+		return "claude.file.read"
 	case "file.written", "file.write":
-		return domain.FileWritten
+		return "claude.file.written"
 	case "context.changed", "context.change":
-		return domain.ContextChanged
+		return "claude.context.changed"
 	case "error":
-		return domain.Error
+		return "claude.error"
 	default:
-		// Default to generic event
-		return domain.EventType(normalized)
+		// Default to generic event with claude. prefix
+		return "claude." + normalized
 	}
 }
 
@@ -86,14 +88,14 @@ func NewLoggerService(
 }
 
 // LogEvent logs a domain event
-func (s *LoggerService) LogEvent(ctx context.Context, eventType domain.EventType, payload interface{}) error {
+func (s *LoggerService) LogEvent(ctx context.Context, eventType string, payload interface{}) error {
 	// Create normalized content for full-text search
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	content := s.contentNormalizer(string(eventType), string(payloadJSON))
+	content := s.contentNormalizer(eventType, string(payloadJSON))
 
 	// Create domain event
 	event := domain.NewEvent(eventType, s.sessionID, payload, content)

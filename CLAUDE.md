@@ -145,40 +145,38 @@ Plugins can also provide project-specific tools via the `IToolProvider` capabili
 4. `dw project <toolname>` routes to project tools (e.g., session-summary)
 5. Commands/tools execute with appropriate context (I/O, repos, config, etc.)
 
-**Adaptation Layer**:
+**SDK as Single Source of Truth**:
 
-Since plugins use SDK types but the core system uses domain types, an adaptation layer handles conversions:
+The plugin SDK (`pkg/pluginsdk`) is the **single source of truth** for all plugin contracts:
 
-**Location**:
-- `cmd/dw/plugin_registration.go` - Adapts internal services for plugins
-- `internal/app/plugin_entity_adapter.go` - Converts SDK entities to domain entities
-- `internal/app/plugin_context.go` - Implements SDK interfaces using domain services
+**Architecture**:
+- `pkg/pluginsdk/` defines all interfaces: Plugin capabilities (IEntityProvider, ICommandProvider) and Entity capabilities (IExtensible, ITrackable, IHasContext)
+- Plugins import `pkg/pluginsdk` exclusively - no `internal/*` imports allowed
+- Internal domain layer may import SDK types when needed (one-way dependency: domain → SDK)
+- Framework layers (`internal/app`, `cmd`) work with SDK types directly
 
-**Conversions**:
-- `pluginsdk.Event` ↔ `domain.Event`
-- `pluginsdk.IExtensible` ↔ `domain.IExtensible`
-- `pluginsdk.EntityQuery` ↔ `domain.EntityQuery`
-- `pluginsdk.EntityContext` ↔ `domain.ActivityRecord`
-
-**Why adaptation?**:
-- SDK must be independent (no internal imports)
-- Domain represents core business logic
-- Plugins shouldn't know about internal implementation
-- External plugins can only access public SDK
+**Why SDK is public**:
+- External plugins need stable, versioned contracts
+- Single source of truth eliminates interface duplication
+- Clean separation: SDK defines "what", internal implementation defines "how"
+- Minimal adaptation needed - framework and plugins speak same language
 
 **Current State**:
-- ✅ SDK in `pkg/pluginsdk/` (public, self-contained)
+- ✅ SDK in `pkg/pluginsdk/` (public, self-contained, single source of truth)
 - ✅ Claude-code plugin uses SDK exclusively
 - ✅ Capability-based routing in PluginRegistry
-- ✅ Adaptation layer for SDK↔domain conversion
 - ✅ Internal plugins ready (pkg/plugins/)
 - ✅ TUI using plugin system for entity queries
 - ✅ Command system with plugin-namespaced CLI commands
 - ✅ Tool system with project-scoped tools
 - ✅ Clean bounded context separation (no plugin logic in framework)
 - ✅ Plugin commands are fully self-contained
-- 🔄 External plugin discovery (planned - Phase 6)
-- 🔄 JSON-RPC for non-Go plugins (planned - Phase 5)
+- 🔄 **Refactoring in progress**: Interface deduplication (Phases 1-7)
+  - Remove duplicate interfaces from `internal/domain`
+  - Eliminate adaptation layer boilerplate
+  - Move plugin-specific types to plugin package
+- 🔄 External plugin discovery (planned)
+- 🔄 JSON-RPC for non-Go plugins (planned)
 
 **Bounded Context Separation**:
 
@@ -200,11 +198,12 @@ For detailed architecture and API information, see:
 - Run `go-arch-lint .` to validate architecture compliance
 
 **Key architectural principles**:
-1. **SDK is public**: `pkg/pluginsdk` defines contracts for all plugins
-2. **Plugins import SDK**: Both internal and external plugins use pkg/pluginsdk
-3. **Domain is internal**: Core business logic in `internal/domain`
-4. **Adaptation at boundaries**: cmd/app layers convert SDK↔domain types
-5. **DDD compliance**: Maintained with go-arch-lint validation
+1. **SDK is single source of truth**: `pkg/pluginsdk` defines all plugin and entity contracts
+2. **Plugins import SDK only**: Both internal and external plugins use pkg/pluginsdk exclusively
+3. **Domain may import SDK**: Framework domain can use SDK types (one-way: domain → SDK)
+4. **No duplicate interfaces**: If SDK has it, domain doesn't duplicate it
+5. **Minimal adaptation**: Framework works with SDK types directly when possible
+6. **DDD compliance**: Maintained with go-arch-lint validation
 
 ### Current Implementation Status
 
@@ -419,19 +418,25 @@ This project uses **Domain-Driven Design (DDD)** with strict dependency rules:
 ```
 
 **Layer Responsibilities**:
-- **cmd**: Application entry points → can import `internal/app`, `internal/infra`
-- **internal/app**: Use cases, orchestration → can import `internal/domain`
-- **internal/domain**: Pure business logic, entities → imports NOTHING
-- **internal/infra**: Infrastructure (DB, APIs) → can import `internal/domain`
+- **cmd**: Application entry points → can import `internal/app`, `internal/infra`, `pkg/pluginsdk`
+- **internal/app**: Use cases, orchestration → can import `internal/domain`, `pkg/pluginsdk`
+- **internal/domain**: Framework business logic → can import `pkg/pluginsdk` for contracts
+- **internal/infra**: Infrastructure (DB, APIs) → can import `internal/domain`, `pkg/pluginsdk`
+- **pkg/pluginsdk**: Public plugin contracts → imports NOTHING internal
 
-**Key Rule**: Domain layer has ZERO dependencies. All dependencies flow inward toward domain.
+**Key Rules**:
+- SDK has zero internal dependencies (fully public)
+- Domain may import SDK for contracts (SDK is the authority on plugin interfaces)
+- All dependencies still flow toward domain (domain is still the core)
+- Plugin SDK is an exception: it's public API, not an external dependency
 
 ## DDD Core Principles
 
-1. **Domain Isolation**: `internal/domain` contains pure business logic with no external dependencies
-2. **Dependency Inversion**: Domain defines interfaces; infrastructure implements them
-3. **Structural Typing**: Go's implicit interfaces - types satisfy interfaces via matching methods
-4. **One-Way Dependencies**: Domain ← App/Infra ← Cmd (never reverse)
+1. **Domain Isolation**: `internal/domain` contains framework business logic with minimal dependencies
+2. **SDK First**: Public plugin contracts live in `pkg/pluginsdk` (single source of truth)
+3. **Dependency Inversion**: Domain/SDK define interfaces; infrastructure implements them
+4. **Structural Typing**: Go's implicit interfaces - types satisfy interfaces via matching methods
+5. **One-Way Dependencies**: Domain ← App/Infra ← Cmd (SDK is public, not a dependency violation)
 
 ## Documentation Generation (Run Regularly)
 
@@ -473,33 +478,47 @@ This generates `docs/arch-generated.md` with:
 **Common Violation Scenarios**:
 
 - `internal/domain` imports `internal/app` or `internal/infra` → **VIOLATION**
-  - Fix: Define interface in domain, implement in infra, inject via app layer
+  - Fix: Define interface in domain or SDK, implement in infra, inject via app layer
 
 - `internal/app` imports `internal/infra` → **VIOLATION**
-  - Fix: Use dependency injection through interfaces defined in domain
+  - Fix: Use dependency injection through interfaces defined in domain or SDK
 
+- `pkg/pluginsdk` imports `internal/*` → **VIOLATION**
+  - Fix: SDK must be fully public with zero internal dependencies
+
+- `internal/domain` imports `pkg/pluginsdk` → **OK** (SDK is public contracts)
 - `internal/infra` needs to call domain logic → **OK** (infra → domain allowed)
 
 Example: Domain needs database access:
 - ❌ `internal/domain/user.go` imports `internal/infra/sqlite_repository.go`
-- ✅ `internal/domain/user.go` defines `UserRepository` interface
+- ✅ `internal/domain/user.go` or `pkg/pluginsdk/repository.go` defines `UserRepository` interface
 - ✅ `internal/infra/sqlite_repository.go` implements `UserRepository`
 - ✅ `internal/app/user_service.go` receives injected repository
+
+Example: Plugin contracts:
+- ✅ `pkg/pluginsdk/capability.go` defines `IEntityProvider` interface
+- ✅ `pkg/plugins/claude_code/plugin.go` implements `IEntityProvider`
+- ✅ `internal/app/plugin_registry.go` works with `pluginsdk.IEntityProvider`
+- ❌ Duplicate interface in both `pkg/pluginsdk` and `internal/domain`
 
 ## Code Guidelines
 
 **DO**:
-- Keep business logic pure in `internal/domain` (no external dependencies)
-- Define repository/service interfaces in `internal/domain`
+- Keep framework business logic in `internal/domain`
+- Define public plugin contracts in `pkg/pluginsdk` (single source of truth)
+- Define framework-internal interfaces in `internal/domain`
 - Implement infrastructure in `internal/infra`
 - Orchestrate use cases in `internal/app`
 - Use dependency injection to wire layers together
 - Use black-box tests (`package pkgname_test`) to test through public APIs
+- Import `pkg/pluginsdk` when working with plugin contracts
 
 **DON'T**:
-- Import upward (domain importing app/infra is a violation)
+- Duplicate interfaces between `pkg/pluginsdk` and `internal/domain`
+- Import `internal/*` from `pkg/pluginsdk` (SDK must be fully public)
+- Import upward (domain importing app/infra is still a violation)
 - Import between internal packages at the same level
-- Put business logic in cmd, app, or infra (belongs in domain)
+- Put business logic in cmd, app, or infra (belongs in domain or plugins)
 - Modify .goarchlint (immutable architectural contract)
 
 **Layer-Specific Rules**:
