@@ -8,7 +8,6 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
-	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
 func TestSQLiteEventRepository_SaveAnalysis(t *testing.T) {
@@ -84,9 +83,9 @@ func TestSQLiteEventRepository_GetUnanalyzedSessionIDs(t *testing.T) {
 	session3 := "session-3"
 
 	events := []*domain.Event{
-		domain.NewEvent(claude_code.ChatStarted, session1, claude_code.ChatPayload{Message: "test"}, "test"),
-		domain.NewEvent(claude_code.ChatStarted, session2, claude_code.ChatPayload{Message: "test"}, "test"),
-		domain.NewEvent(claude_code.ChatStarted, session3, claude_code.ChatPayload{Message: "test"}, "test"),
+		domain.NewEvent("chat.started", session1, map[string]interface{}{"message": "test"}, "test"),
+		domain.NewEvent("chat.started", session2, map[string]interface{}{"message": "test"}, "test"),
+		domain.NewEvent("chat.started", session3, map[string]interface{}{"message": "test"}, "test"),
 	}
 
 	for _, event := range events {

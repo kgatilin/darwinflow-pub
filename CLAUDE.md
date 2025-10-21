@@ -41,11 +41,10 @@
 **DarwinFlow uses a capability-driven plugin system** with a public SDK for extensibility.
 
 **Core Concepts**:
-- **SDK Contract** (`pkg/pluginsdk`): Public API that all plugins (internal and external) import
+- **SDK Contract** (`pkg/pluginsdk`): Public API that all plugins (internal and external) import - single source of truth
 - **Plugin Capabilities**: Interfaces defining what plugins can DO (IEntityProvider, ICommandProvider, IEventEmitter)
 - **Entity Capabilities**: Interfaces defining what entities ARE (IExtensible, IHasContext, ITrackable, etc.)
 - **Plugin Registry**: Central manager that routes queries to appropriate plugins based on capabilities
-- **Adaptation Layer**: Converts between SDK types and internal domain types
 
 **Plugin SDK** (`pkg/pluginsdk/`):
 - Public API accessible to external Go plugins
@@ -69,7 +68,7 @@
 **Plugin Types**:
 - **Internal plugins** (`pkg/plugins/`): Built-in plugins that ship with the tool
   - Import `pkg/pluginsdk` for interfaces
-  - Receive adapted internal services via cmd layer
+  - Receive runtime context via cmd layer
   - Example: `pkg/plugins/claude_code`
 - **External plugins** (planned): User-created plugins
   - Import `pkg/pluginsdk` (public API)
@@ -81,9 +80,8 @@
 2. Plugin declares capabilities via `GetCapabilities()` method
 3. CLI routes commands to PluginRegistry
 4. Registry uses capability-based routing to find correct plugin
-5. Adaptation layer converts SDK types ↔ domain types
-6. TUI/commands work with entities through SDK interfaces
-7. All plugins use same SDK contract (internal and external)
+5. TUI/commands work with entities through SDK interfaces (zero overhead)
+6. All plugins use same SDK contract (internal and external)
 
 **Example Plugin**:
 ```go
@@ -165,16 +163,15 @@ The plugin SDK (`pkg/pluginsdk`) is the **single source of truth** for all plugi
 - ✅ SDK in `pkg/pluginsdk/` (public, self-contained, single source of truth)
 - ✅ Claude-code plugin uses SDK exclusively
 - ✅ Capability-based routing in PluginRegistry
+- ✅ Zero interface duplication (refactoring complete)
+- ✅ No adaptation layer (direct SDK usage, zero runtime overhead)
+- ✅ Plugin-specific types in plugin packages (claude_code.EventType, etc.)
 - ✅ Internal plugins ready (pkg/plugins/)
 - ✅ TUI using plugin system for entity queries
 - ✅ Command system with plugin-namespaced CLI commands
 - ✅ Tool system with project-scoped tools
 - ✅ Clean bounded context separation (no plugin logic in framework)
 - ✅ Plugin commands are fully self-contained
-- 🔄 **Refactoring in progress**: Interface deduplication (Phases 1-7)
-  - Remove duplicate interfaces from `internal/domain`
-  - Eliminate adaptation layer boilerplate
-  - Move plugin-specific types to plugin package
 - 🔄 External plugin discovery (planned)
 - 🔄 JSON-RPC for non-Go plugins (planned)
 

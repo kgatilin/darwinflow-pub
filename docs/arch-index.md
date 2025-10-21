@@ -9,7 +9,7 @@
 - **Module**: (detected from go.mod)
 - **Status**: ✓ 0 violations
 - **Packages**: 13
-- **Files**: 83
+- **Files**: 86
 
 ## Architecture Summary
 
@@ -27,7 +27,7 @@ Package-level dependencies (local dependencies only):
 - **cmd/dw** → internal/app, internal/app/tui, internal/infra, pkg/plugins/claude_code
 - **internal/app** → internal/domain, pkg/pluginsdk
 - **internal/app/tui** → internal/app, internal/domain, pkg/pluginsdk
-- **internal/domain** → pkg/plugins/claude_code
+- **internal/domain** → *(no local dependencies)*
 - **internal/infra** → internal/domain
 - **pkg/plugins/claude_code** → pkg/pluginsdk
 - **pkg/pluginsdk** → *(no local dependencies)*
@@ -45,12 +45,12 @@ Package-level dependencies (local dependencies only):
 ### pkg (Public APIs)
 
 - **claude_code** (`pkg/plugins/claude_code`)
-  - Files: 8 | Exports: 98
-  - Key exports: GetCommands, InitCommand, GetName
+  - Files: 10 | Exports: 102
+  - Key exports: SessionAnalysis, NewSessionAnalysis, NewSessionAnalysisWithType
   - **Details**: `go-arch-lint -format=package pkg/plugins/claude_code`
 
 - **pluginsdk** (`pkg/pluginsdk`)
-  - Files: 7 | Exports: 27
+  - Files: 8 | Exports: 31
   - Key exports: IEntityProvider, IEntityUpdater, ICommandProvider
   - **Details**: `go-arch-lint -format=package pkg/pluginsdk`
 
@@ -68,7 +68,7 @@ Package-level dependencies (local dependencies only):
   - **Details**: `go-arch-lint -format=package internal/app/tui`
 
 - **domain** (`internal/domain`)
-  - Files: 6 | Exports: 57
+  - Files: 6 | Exports: 43
   - Key exports: SessionAnalysis, NewSessionAnalysis, NewSessionAnalysisWithType
   - **Details**: `go-arch-lint -format=package internal/domain`
 
@@ -100,7 +100,7 @@ To get detailed information about specific packages:
 
 ## Statistics
 
-- **Total Files**: 83
+- **Total Files**: 86
 - **Total Packages**: 13
 - **Violations**: 0
 - **External Dependencies**: 29

@@ -35,6 +35,7 @@ preset:
                 - errors
                 - time
                 - context
+                - github.com/google/uuid
             exclusion_patterns:
                 - encoding/*
         test_files:
