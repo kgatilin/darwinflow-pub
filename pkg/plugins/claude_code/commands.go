@@ -105,6 +105,34 @@ func (c *InitCommand) GetUsage() string {
 	return "init"
 }
 
+func (c *InitCommand) GetHelp() string {
+	return `Initializes Claude Code logging infrastructure for DarwinFlow.
+
+This command sets up the necessary hooks in .claude/settings.json to
+automatically capture Claude Code events and log them to DarwinFlow.
+
+Examples:
+  # Normal initialization
+  dw claude-code init
+
+  # Force reinstall hooks (reinstall even if they already exist)
+  dw claude-code init --force
+
+Flags:
+  --force    Reinstall hooks even if they already exist
+
+What this does:
+  - Creates .darwinflow/logs/ directory
+  - Initializes SQLite events database
+  - Installs hooks in .claude/settings.json
+  - Sets up automatic event logging
+
+Notes:
+  - Safe to run multiple times
+  - Restarts Claude Code to activate hooks
+  - Events are logged to .darwinflow/logs/events.db`
+}
+
 func (c *InitCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	out := cmdCtx.GetStdout()
 
@@ -191,6 +219,59 @@ func (c *EmitEventCommand) GetDescription() string {
 
 func (c *EmitEventCommand) GetUsage() string {
 	return "emit-event"
+}
+
+func (c *EmitEventCommand) GetHelp() string {
+	return `Emit an event via plugin context (reads JSON from stdin).
+
+This command reads a structured event from stdin and emits it through the
+DarwinFlow event system. Supports both Claude Code hook format and SDK event
+format. All errors are logged but never propagated - this ensures hook
+execution is never disrupted.
+
+Input Formats:
+
+1. Claude Code Hook Format (HookInput):
+   {
+     "session_id": "abc123",
+     "hook_event_name": "PreToolUse",
+     "tool_name": "Read",
+     "tool_input": {...},
+     "cwd": "/workspace"
+   }
+
+2. SDK Event Format:
+   {
+     "type": "tool.invoked",
+     "source": "claude-code",
+     "timestamp": "2025-10-20T10:30:00Z",
+     "payload": {"tool": "Read", "parameters": {...}},
+     "metadata": {"session_id": "abc123", "cwd": "/workspace"},
+     "version": "1.0"
+   }
+
+Examples:
+  # Emit via SDK format
+  echo '{"type":"tool.invoked","source":"claude-code","metadata":{"session_id":"abc123"}}' | dw claude-code emit-event
+
+  # Emit via hook format
+  echo '{"session_id":"abc123","hook_event_name":"PostToolUse"}' | dw claude-code emit-event
+
+Required Fields:
+  HookInput:
+    - session_id
+    - hook_event_name
+
+  SDK Event:
+    - type
+    - source
+    - metadata.session_id
+
+Notes:
+  - Auto-detects input format (Hook vs SDK)
+  - Safe to call from Claude Code hooks
+  - Failures are logged, not propagated
+  - Empty stdin is silently ignored`
 }
 
 func (c *EmitEventCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -348,6 +429,41 @@ func (c *LogCommand) GetUsage() string {
 	return "log <event-type>"
 }
 
+func (c *LogCommand) GetHelp() string {
+	return `DEPRECATED: Log a Claude Code event (use emit-event instead).
+
+This command is deprecated and kept only for backward compatibility with
+older Claude Code hook configurations. All new integrations should use the
+emit-event command instead.
+
+Migration Path:
+  Old (deprecated):
+    dw claude-code log PreToolUse
+
+  New (recommended):
+    echo '{"type":"tool.invoked","source":"claude-code","metadata":{"session_id":"abc123"}}' | \
+    dw claude-code emit-event
+
+Why Deprecate:
+  - emit-event supports both hook format and SDK event format
+  - emit-event is more flexible and standardized
+  - emit-event provides better error logging
+
+Removal:
+  - Scheduled for removal in v2.0
+  - No timeline for v2.0 release
+
+Current Behavior:
+  - Silently succeeds (for backward compatibility)
+  - Does not actually log events
+  - Check your logs for warnings
+
+Notes:
+  - This command is deprecated
+  - Use 'emit-event' for new integrations
+  - Existing hooks will continue to work`
+}
+
 func (c *LogCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	// DEPRECATED: This command is kept for backward compatibility
 	// Silently fail - don't disrupt Claude Code hooks
@@ -371,6 +487,47 @@ func (c *AutoSummaryCommand) GetDescription() string {
 
 func (c *AutoSummaryCommand) GetUsage() string {
 	return "auto-summary"
+}
+
+func (c *AutoSummaryCommand) GetHelp() string {
+	return `Auto-trigger session summary when a Claude Code session ends.
+
+This command is called automatically by the SessionEnd hook when a Claude Code
+session terminates. It spawns a background process to generate a summary
+without blocking the session exit.
+
+Purpose:
+  - Automatically analyzes completed sessions
+  - Generates summaries using configured AI prompt
+  - Enables pattern detection and workflow analysis
+  - Non-blocking (background execution)
+
+How It Works:
+  1. SessionEnd hook triggers this command
+  2. Extracts session ID from hook data
+  3. Spawns background process: dw claude-code auto-summary-exec <session-id>
+  4. Returns immediately (doesn't block session exit)
+  5. Background process performs analysis
+
+Configuration:
+  Enable in .darwinflow/config.json:
+    {
+      "analysis": {
+        "auto_summary_enabled": true,
+        "auto_summary_prompt": "session_summary"
+      }
+    }
+
+Environment:
+  - Auto-summary is enabled by default
+  - Can be disabled via config
+  - Uses default "session_summary" prompt if not configured
+
+Notes:
+  - Typically called from Claude Code SessionEnd hook
+  - Do not call manually - use session-summary instead
+  - Background process runs asynchronously
+  - Session exit is never blocked by analysis`
 }
 
 func (c *AutoSummaryCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -470,6 +627,46 @@ func (c *AutoSummaryExecCommand) GetUsage() string {
 	return "auto-summary-exec <session-id>"
 }
 
+func (c *AutoSummaryExecCommand) GetHelp() string {
+	return `INTERNAL: Execute session summary analysis in background.
+
+This command is internal and not intended for direct use. It is spawned
+as a background process by the auto-summary command to perform the actual
+session analysis asynchronously.
+
+Usage:
+  INTERNAL - Called by auto-summary command only
+  Do not invoke directly
+
+Arguments:
+  <session-id>    The ID of the session to analyze (required)
+
+How It Works:
+  1. Receives session ID from auto-summary command
+  2. Loads DarwinFlow configuration
+  3. Retrieves configured analysis prompt
+  4. Runs analysis service on the session
+  5. Stores results in database
+  6. Exits silently
+
+Error Handling:
+  - All errors are silently ignored
+  - Logs errors internally
+  - Never propagates failures (background execution)
+  - Session data is not affected by analysis failures
+
+Configuration:
+  Uses these config settings:
+    analysis.auto_summary_prompt    - Analysis prompt name to use
+
+Notes:
+  - INTERNAL COMMAND - Not for manual use
+  - Run as background process (spawned by auto-summary)
+  - Best-effort execution (errors ignored)
+  - Safe to call concurrently for different sessions
+  - Cannot be interrupted once started`
+}
+
 func (c *AutoSummaryExecCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	if len(args) < 1 {
 		// No session ID provided
@@ -512,6 +709,51 @@ func (c *SessionSummaryCommand) GetDescription() string {
 
 func (c *SessionSummaryCommand) GetUsage() string {
 	return "session-summary --session-id <id> | --last"
+}
+
+func (c *SessionSummaryCommand) GetHelp() string {
+	return `Display a summary of a Claude Code session with analysis results.
+
+This command retrieves and displays comprehensive information about a specific
+Claude Code session, including event count, timing, token usage, and any
+available analysis results from AI prompts.
+
+Examples:
+  # View last session
+  dw claude-code session-summary --last
+
+  # View specific session
+  dw claude-code session-summary --session-id abc123def456
+
+  # View last session (shorthand)
+  dw claude-code session-summary --last
+
+Flags:
+  --session-id <id>    Display summary for specific session ID
+  --last               Display summary for most recent session
+  (must specify one)
+
+Output Fields:
+  Session ID          - Unique session identifier
+  Event Count         - Number of events in session
+  First Event         - Timestamp of first event
+  Last Event          - Timestamp of last event
+  Token Count         - Approximate total tokens used
+  Status              - Session status (active, completed, etc.)
+  Analyses            - List of analysis results with prompts
+
+Analysis Section:
+  - Shows all available analyses for the session
+  - Lists prompt name and model used
+  - Displays summary text if available
+  - Multiple analyses can exist per session
+
+Notes:
+  - Requires either --session-id or --last
+  - Shows most recent analysis results
+  - Works with sessions that have no analysis
+  - Use dw logs to see raw events
+  - Use dw analyze to run new analysis`
 }
 
 func (c *SessionSummaryCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {

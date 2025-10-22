@@ -221,7 +221,7 @@ func TestCreateCommandExecution(t *testing.T) {
 		stdout:     stdout,
 	}
 
-	args := []string{"create", "Test Task", "--priority", "high"}
+	args := []string{"Test Task", "--priority", "high"}
 	err = createCmd.Execute(context.Background(), mockCmdCtx, args)
 	if err != nil {
 		t.Fatalf("create command failed: %v", err)
@@ -358,7 +358,7 @@ func TestListCommand(t *testing.T) {
 	}
 
 	// Execute list command when no tasks exist
-	args := []string{"list"}
+	args := []string{}
 	err = listCmd.Execute(context.Background(), mockCmdCtx, args)
 	if err != nil {
 		t.Fatalf("list command failed: %v", err)
@@ -423,7 +423,7 @@ func TestUpdateCommand(t *testing.T) {
 	}
 
 	// Execute update command
-	args := []string{"update", taskID, "--status", "done"}
+	args := []string{taskID, "--status", "done"}
 	err = updateCmd.Execute(context.Background(), mockCmdCtx, args)
 	if err != nil {
 		t.Fatalf("update command failed: %v", err)
@@ -465,7 +465,7 @@ func TestInitCommand(t *testing.T) {
 	}
 
 	// Execute init command
-	args := []string{"init"}
+	args := []string{}
 	err = initCmd.Execute(context.Background(), mockCmdCtx, args)
 	if err != nil {
 		t.Fatalf("init command failed: %v", err)
@@ -582,6 +582,10 @@ func (t *TestCreateCommand) GetDescription() string {
 
 func (t *TestCreateCommand) GetUsage() string {
 	return "create <title>"
+}
+
+func (t *TestCreateCommand) GetHelp() string {
+	return ""
 }
 
 func (t *TestCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {

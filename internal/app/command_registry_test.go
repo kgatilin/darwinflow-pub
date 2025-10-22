@@ -21,6 +21,7 @@ type mockCommand struct {
 func (m *mockCommand) GetName() string        { return m.name }
 func (m *mockCommand) GetDescription() string { return m.description }
 func (m *mockCommand) GetUsage() string       { return m.usage }
+func (m *mockCommand) GetHelp() string        { return "" }
 func (m *mockCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	if m.executeFunc != nil {
 		return m.executeFunc(ctx, cmdCtx, args)

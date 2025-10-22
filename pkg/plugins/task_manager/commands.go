@@ -29,6 +29,22 @@ func (c *InitCommand) GetUsage() string {
 	return "dw task-manager init"
 }
 
+func (c *InitCommand) GetHelp() string {
+	return `Creates the task directory at .darwinflow/tasks/
+
+This command sets up the necessary directory structure for task management.
+Tasks are stored as JSON files in this directory, and the file watcher
+monitors this location for changes to emit real-time events.
+
+Examples:
+  dw task-manager init
+
+Notes:
+  - Safe to run multiple times (idempotent)
+  - Creates .darwinflow/tasks/ if it doesn't exist
+  - Required before creating tasks`
+}
+
 func (c *InitCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	// Create tasks directory
 	tasksDir := filepath.Join(cmdCtx.GetWorkingDir(), ".darwinflow", "tasks")
@@ -55,6 +71,41 @@ func (c *CreateCommand) GetDescription() string {
 
 func (c *CreateCommand) GetUsage() string {
 	return "dw task-manager create <title> [--description <desc>] [--priority <priority>]"
+}
+
+func (c *CreateCommand) GetHelp() string {
+	return `Creates a new task with the specified title and optional metadata.
+
+The task is saved as a JSON file in .darwinflow/tasks/ with a unique ID
+based on the current timestamp. When the file is created, an event is
+emitted if the file watcher is running.
+
+Arguments:
+  <title>              Task title (required)
+
+Flags:
+  --description <desc> Task description (optional)
+  --priority <level>   Priority level: low, medium, high (default: medium)
+
+Examples:
+  # Simple task
+  dw task-manager create "Fix bug in parser"
+
+  # Task with description
+  dw task-manager create "Implement feature X" --description "Add support for Y"
+
+  # Task with priority
+  dw task-manager create "Critical fix" --priority high
+
+  # Task with all options
+  dw task-manager create "Complete refactoring" \
+    --description "Refactor authentication module" \
+    --priority high
+
+Notes:
+  - Task ID is auto-generated as task-<timestamp>
+  - Tasks are created with status "todo"
+  - Titles with spaces should be quoted`
 }
 
 func (c *CreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -136,6 +187,39 @@ func (c *ListCommand) GetUsage() string {
 	return "dw task-manager list [--status <status>]"
 }
 
+func (c *ListCommand) GetHelp() string {
+	return `Lists all tasks from the .darwinflow/tasks/ directory.
+
+Tasks are displayed in a formatted table showing ID, title, status,
+and priority. You can filter tasks by status using the --status flag.
+
+Flags:
+  --status <status>    Filter by status: todo, in-progress, done
+
+Examples:
+  # List all tasks
+  dw task-manager list
+
+  # List only pending tasks
+  dw task-manager list --status todo
+
+  # List completed tasks
+  dw task-manager list --status done
+
+  # List in-progress tasks
+  dw task-manager list --status in-progress
+
+Output format:
+  ID                   Title                          Status          Priority
+  ---------------------------------------------------------------------------
+  task-123             Example task                   todo            high
+
+Notes:
+  - IDs are truncated to 20 characters for display
+  - Titles are truncated to 30 characters
+  - Tasks are read directly from JSON files`
+}
+
 func (c *ListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	// Parse optional status filter
 	var statusFilter string
@@ -202,19 +286,56 @@ func (c *UpdateCommand) GetDescription() string {
 }
 
 func (c *UpdateCommand) GetUsage() string {
-	return "dw task-manager update <id> --status <status>"
+	return "dw task-manager update <id> [--status <status>] [--title <title>] [--description <desc>] [--priority <priority>]"
+}
+
+func (c *UpdateCommand) GetHelp() string {
+	return `Updates an existing task's properties.
+
+You can update any combination of task fields: status, title, description,
+or priority. At least one field must be specified to update.
+
+Arguments:
+  <id>                 Task ID (required, can be abbreviated)
+
+Flags:
+  --status <status>    New status: todo, in-progress, done
+  --title <title>      New task title
+  --description <desc> New task description
+  --priority <level>   New priority: low, medium, high
+
+Examples:
+  # Update task status
+  dw task-manager update task-123 --status done
+
+  # Update multiple fields
+  dw task-manager update task-123 --status in-progress --priority high
+
+  # Update title and description
+  dw task-manager update task-123 \
+    --title "New title" \
+    --description "Updated description"
+
+  # Use abbreviated ID
+  dw task-manager update task-123 --status done
+
+Notes:
+  - Task ID can be the full ID or abbreviated (must be unique)
+  - At least one update flag is required
+  - Updates are written back to the JSON file
+  - Updated_at timestamp is automatically set`
 }
 
 func (c *UpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
-	if len(args) < 2 {
+	if len(args) < 1 {
 		return fmt.Errorf("usage: %s", c.GetUsage())
 	}
 
-	taskID := args[1]
+	taskID := args[0]
 	updates := make(map[string]interface{})
 
 	// Parse optional flags
-	for i := 2; i < len(args); i++ {
+	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--status":
 			if i+1 < len(args) {

@@ -148,8 +148,43 @@ func (r *CommandRegistry) ExecuteCommand(ctx context.Context, pluginName, comman
 		return err
 	}
 
+	// Check for --help or -h flag
+	if containsHelp(args) {
+		r.printCommandHelp(pluginName, cmd, cmdCtx)
+		return nil
+	}
+
 	r.logger.Debug("Executing command: %s %s", pluginName, commandName)
 	return cmd.Execute(ctx, cmdCtx, args)
+}
+
+// containsHelp checks if args contains --help or -h
+func containsHelp(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+// printCommandHelp displays help for a command
+func (r *CommandRegistry) printCommandHelp(pluginName string, cmd pluginsdk.Command, cmdCtx pluginsdk.CommandContext) {
+	output := cmdCtx.GetStdout()
+
+	// Command header
+	fmt.Fprintf(output, "Command: dw %s %s\n\n", pluginName, cmd.GetName())
+
+	// Description
+	fmt.Fprintf(output, "Description:\n  %s\n\n", cmd.GetDescription())
+
+	// Usage
+	fmt.Fprintf(output, "Usage:\n  %s\n\n", cmd.GetUsage())
+
+	// Detailed help (if provided)
+	if help := cmd.GetHelp(); help != "" {
+		fmt.Fprintf(output, "%s\n", help)
+	}
 }
 
 // ListCommands returns formatted list of all plugin commands
