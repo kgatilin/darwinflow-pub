@@ -169,8 +169,8 @@ func (c *RPCClient) Call(ctx context.Context, method string, params interface{})
 		}
 	}
 
-	// Generate request ID
-	requestID := c.nextRequestID.Add(1)
+	// Generate request ID (use string for JSON-RPC compatibility)
+	requestID := fmt.Sprintf("%d", c.nextRequestID.Add(1))
 
 	// Create request
 	req := &pluginsdk.RPCRequest{
@@ -183,17 +183,19 @@ func (c *RPCClient) Call(ctx context.Context, method string, params interface{})
 	// Create response channel
 	responseChan := make(chan *pluginsdk.RPCResponse, 1)
 
-	// Determine timeout
-	timeout := DefaultRPCTimeout
-	if deadline, ok := ctx.Deadline(); ok {
-		timeout = time.Until(deadline)
+	// Determine timeout - use context deadline if available, otherwise default
+	var timeoutChan <-chan time.Time
+	_, hasDeadline := ctx.Deadline()
+	if !hasDeadline {
+		// No context deadline, use default timeout
+		timeoutChan = time.After(DefaultRPCTimeout)
 	}
 
 	// Register pending request
 	c.requestsMu.Lock()
 	c.pendingRequests[requestID] = &rpcPendingRequest{
 		responseChan: responseChan,
-		timeout:      time.After(timeout),
+		timeout:      timeoutChan,
 	}
 	c.requestsMu.Unlock()
 
@@ -205,25 +207,44 @@ func (c *RPCClient) Call(ctx context.Context, method string, params interface{})
 		return nil, err
 	}
 
-	// Wait for response or timeout
-	select {
-	case resp := <-responseChan:
-		if resp.Error != nil {
-			return nil, fmt.Errorf("rpc error %d: %s", resp.Error.Code, resp.Error.Message)
+	// Wait for response, timeout, or cancellation
+	if hasDeadline {
+		// Context has deadline - only wait for ctx.Done or response
+		select {
+		case resp := <-responseChan:
+			if resp.Error != nil {
+				return nil, fmt.Errorf("rpc error %d: %s", resp.Error.Code, resp.Error.Message)
+			}
+			return resp.Result, nil
+		case <-ctx.Done():
+			c.requestsMu.Lock()
+			delete(c.pendingRequests, requestID)
+			c.requestsMu.Unlock()
+			return nil, ctx.Err()
+		case <-c.done:
+			return nil, fmt.Errorf("rpc client stopped: %w", c.getError())
 		}
-		return resp.Result, nil
-	case <-time.After(timeout):
-		c.requestsMu.Lock()
-		delete(c.pendingRequests, requestID)
-		c.requestsMu.Unlock()
-		return nil, fmt.Errorf("rpc call timed out after %v", timeout)
-	case <-ctx.Done():
-		c.requestsMu.Lock()
-		delete(c.pendingRequests, requestID)
-		c.requestsMu.Unlock()
-		return nil, ctx.Err()
-	case <-c.done:
-		return nil, fmt.Errorf("rpc client stopped: %w", c.getError())
+	} else {
+		// No context deadline - use default timeout
+		select {
+		case resp := <-responseChan:
+			if resp.Error != nil {
+				return nil, fmt.Errorf("rpc error %d: %s", resp.Error.Code, resp.Error.Message)
+			}
+			return resp.Result, nil
+		case <-timeoutChan:
+			c.requestsMu.Lock()
+			delete(c.pendingRequests, requestID)
+			c.requestsMu.Unlock()
+			return nil, fmt.Errorf("rpc call timed out after %v", DefaultRPCTimeout)
+		case <-ctx.Done():
+			c.requestsMu.Lock()
+			delete(c.pendingRequests, requestID)
+			c.requestsMu.Unlock()
+			return nil, ctx.Err()
+		case <-c.done:
+			return nil, fmt.Errorf("rpc client stopped: %w", c.getError())
+		}
 	}
 }
 
