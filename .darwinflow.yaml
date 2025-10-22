@@ -24,7 +24,7 @@ ui:
 logging:
   # Controls what gets logged to .darwinflow/claude-code.log
   # Options: "debug" (all messages), "info" (info+error), "error" (errors only), "off" (disabled)
-  file_log_level: "debug" # Default: only log errors
+  file_log_level: "error" # Default: only log errors
 
 prompts:
   session_summary: |+
