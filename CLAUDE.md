@@ -79,6 +79,45 @@ For substantial refactorings or multi-package features:
 - [ ] Run `go-arch-lint docs` (if architecture/API changed)
 - [ ] Commit with concise message
 
+### Roadmap Tracking
+
+**Purpose**: Track active work items, enable task switching, prevent losing context.
+
+**Files**:
+- `.agent/roadmap.md` - Active work items with status and next steps
+- `.agent/roadmap_done.md` - Completed items archive
+- `.agent/details/<item-name>.md` - Detailed implementation docs with checklists
+
+**Workflow**:
+
+1. **Starting new work**:
+   - Add item to `.agent/roadmap.md` with status and description
+   - Create `.agent/details/<item-name>.md` from template
+   - Add detailed requirements, implementation checklist, technical notes
+
+2. **During work**:
+   - Update checklist in details doc as you progress
+   - Add progress log entries with what was done/learned
+   - Update "Next Steps" in roadmap.md when switching tasks
+
+3. **Switching tasks**:
+   - Leave clear notes in roadmap.md about current state
+   - Update status (In Progress → On Hold if needed)
+   - Can work on refactoring, tests, or small features and return
+
+4. **Completing work**:
+   - Mark all checklist items complete in details doc
+   - Move item from `roadmap.md` to `roadmap_done.md` with completion date
+   - Update CLAUDE.md/README.md if needed
+
+**Template**: See `.agent/details/template.md` for detailed doc structure
+
+**Benefits**:
+- Quick context recovery when returning to work
+- Track multiple parallel efforts (features, refactoring, tests)
+- Historical record of completed work
+- Prevents "what was I doing?" moments
+
 ---
 
 ## Architecture Quick Reference
