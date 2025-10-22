@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
@@ -125,20 +126,40 @@ func (p *TaskManagerPlugin) Query(ctx context.Context, query pluginsdk.EntityQue
 
 // GetEntity retrieves a single entity by ID (SDK interface)
 func (p *TaskManagerPlugin) GetEntity(ctx context.Context, entityID string) (pluginsdk.IExtensible, error) {
+	// Try exact match first
 	filePath := filepath.Join(p.tasksDir, entityID+".json")
 	task, err := p.loadTaskFromFile(filePath)
 	if err != nil {
-		return nil, pluginsdk.ErrNotFound
+		// Try prefix match (abbreviated ID)
+		matchedFile, matchErr := p.findTaskByPrefix(entityID)
+		if matchErr != nil {
+			return nil, pluginsdk.ErrNotFound
+		}
+		task, err = p.loadTaskFromFile(matchedFile)
+		if err != nil {
+			return nil, pluginsdk.ErrNotFound
+		}
 	}
 	return task, nil
 }
 
 // UpdateEntity updates an entity's fields (SDK interface)
 func (p *TaskManagerPlugin) UpdateEntity(ctx context.Context, entityID string, fields map[string]interface{}) (pluginsdk.IExtensible, error) {
+	// Try exact match first
 	filePath := filepath.Join(p.tasksDir, entityID+".json")
 	task, err := p.loadTaskFromFile(filePath)
 	if err != nil {
-		return nil, pluginsdk.ErrNotFound
+		// Try prefix match (abbreviated ID)
+		matchedFile, matchErr := p.findTaskByPrefix(entityID)
+		if matchErr != nil {
+			// Return the specific error from findTaskByPrefix
+			return nil, fmt.Errorf("%w: %v", pluginsdk.ErrNotFound, matchErr)
+		}
+		filePath = matchedFile
+		task, err = p.loadTaskFromFile(filePath)
+		if err != nil {
+			return nil, pluginsdk.ErrNotFound
+		}
 	}
 
 	// Update fields
@@ -223,6 +244,43 @@ func (p *TaskManagerPlugin) saveTaskToFile(filePath string, task *TaskEntity) er
 	}
 
 	return os.WriteFile(filePath, data, 0644)
+}
+
+// findTaskByPrefix finds a task file that matches the given ID prefix
+// Returns the full file path if exactly one match is found
+// Returns error if no matches or multiple matches (ambiguous)
+func (p *TaskManagerPlugin) findTaskByPrefix(prefix string) (string, error) {
+	entries, err := os.ReadDir(p.tasksDir)
+	if err != nil {
+		return "", err
+	}
+
+	var matches []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		filename := entry.Name()
+		// Extract ID from filename (remove .json extension)
+		if !strings.HasSuffix(filename, ".json") {
+			continue
+		}
+		taskID := strings.TrimSuffix(filename, ".json")
+
+		// Check if ID starts with the prefix
+		if strings.HasPrefix(taskID, prefix) {
+			matches = append(matches, filepath.Join(p.tasksDir, filename))
+		}
+	}
+
+	if len(matches) == 0 {
+		return "", fmt.Errorf("no tasks found matching prefix: %s", prefix)
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("ambiguous task ID prefix: %s matches %d tasks", prefix, len(matches))
+	}
+
+	return matches[0], nil
 }
 
 // matchesFilters checks if an entity matches the given filters
