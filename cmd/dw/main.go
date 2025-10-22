@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 )
@@ -86,8 +87,22 @@ func main() {
 		cmdCtx := app.NewCommandContext(services.Logger, services.DBPath, services.WorkingDir, services.EventRepo, os.Stdout, os.Stdin)
 		if len(args) > 0 {
 			// Try as: dw <plugin> <command> [args]
-			if err := services.CommandRegistry.ExecuteCommand(ctx, command, args[0], args[1:], cmdCtx); err == nil {
+			err := services.CommandRegistry.ExecuteCommand(ctx, command, args[0], args[1:], cmdCtx)
+			if err == nil {
 				return
+			}
+			// If command execution failed, check if it's because plugin/command doesn't exist
+			// or if it's an actual execution error
+			if isPluginOrCommandNotFound(err) {
+				// Try single-word fallback
+				if err := services.CommandRegistry.ExecuteCommand(ctx, command, "", args, cmdCtx); err == nil {
+					return
+				}
+			} else {
+				// Command exists but failed - show error and help
+				fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
+				printCommandHelp(services, command, args[0])
+				os.Exit(1)
 			}
 		}
 		// Try as: dw <command> (single-word plugin command)
@@ -228,4 +243,37 @@ func printPluginHelp(services *AppServices, pluginName string) bool {
 	fmt.Println()
 
 	return true
+}
+
+// printCommandHelp shows help for a specific command, or plugin help if command not found
+func printCommandHelp(services *AppServices, pluginName, commandName string) {
+	// Try to get the specific command
+	cmd, err := services.CommandRegistry.GetCommand(pluginName, commandName)
+	if err == nil && cmd != nil {
+		// Show command-specific help
+		fmt.Printf("Command: dw %s %s\n\n", pluginName, commandName)
+		fmt.Printf("Description:\n  %s\n\n", cmd.GetDescription())
+		fmt.Printf("Usage:\n  %s\n\n", cmd.GetUsage())
+		if help := cmd.GetHelp(); help != "" {
+			fmt.Printf("%s\n", help)
+		}
+		return
+	}
+
+	// Command not found, show plugin help instead
+	if !printPluginHelp(services, pluginName) {
+		// Plugin doesn't exist either
+		fmt.Fprintf(os.Stderr, "Plugin '%s' not found\n", pluginName)
+	}
+}
+
+// isPluginOrCommandNotFound checks if error indicates missing plugin/command
+func isPluginOrCommandNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "plugin not found") ||
+		strings.Contains(errMsg, "command not found") ||
+		strings.Contains(errMsg, "does not provide commands")
 }
