@@ -133,7 +133,7 @@ func (c *ConfigLoader) LoadConfig(configPath string) (*domain.Config, error) {
 	}
 
 	if c.logger != nil {
-		c.logger.Info("Config loaded successfully with %d prompt(s), enabled: %v, model: %s",
+		c.logger.Debug("Config loaded successfully with %d prompt(s), enabled: %v, model: %s",
 			len(config.Prompts), config.Analysis.EnabledPrompts, config.Analysis.Model)
 	}
 	return &config, nil

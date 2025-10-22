@@ -55,6 +55,12 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		config, _ = configLoader.LoadConfig("") // Will return default
 	}
 
+	// 4b. Apply console log level from config (unless debugMode overrides)
+	if !debugMode {
+		logLevel, _ := infra.ParseLogLevel(config.Logging.ConsoleLogLevel)
+		logger.SetLevel(logLevel)
+	}
+
 	// 5. Create app services
 	logsService := app.NewLogsService(repo, repo)
 	llmExecutor := app.NewClaudeCLIExecutorWithConfig(logger, config)

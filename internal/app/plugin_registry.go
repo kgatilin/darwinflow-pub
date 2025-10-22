@@ -105,7 +105,7 @@ func (r *PluginRegistry) RegisterPlugin(plugin pluginsdk.Plugin) error {
 
 	// Register plugin
 	r.plugins[info.Name] = plugin
-	r.logger.Info("Registered plugin: %s (version %s) with capabilities: %v", info.Name, info.Version, capabilities)
+	r.logger.Debug("Registered plugin: %s (version %s) with capabilities: %v", info.Name, info.Version, capabilities)
 
 	return nil
 }

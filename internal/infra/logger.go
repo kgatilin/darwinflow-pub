@@ -105,3 +105,25 @@ func (l *Logger) Warn(format string, args ...interface{}) {
 func (l *Logger) Error(format string, args ...interface{}) {
 	l.log(LogLevelError, format, args...)
 }
+
+// ParseLogLevel converts a string log level to LogLevel
+// Valid values: "debug", "info", "warn", "error", "off"
+// Returns LogLevelError + true if invalid/off
+func ParseLogLevel(level string) (LogLevel, bool) {
+	switch level {
+	case "debug":
+		return LogLevelDebug, false
+	case "info":
+		return LogLevelInfo, false
+	case "warn":
+		return LogLevelWarn, false
+	case "error":
+		return LogLevelError, false
+	case "off", "":
+		// "off" means set to a level higher than Error so nothing logs
+		return LogLevelError + 1, true
+	default:
+		// Invalid - default to error level
+		return LogLevelError, false
+	}
+}

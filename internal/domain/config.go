@@ -65,6 +65,15 @@ type UIConfig struct {
 
 // LoggingConfig contains settings for file logging
 type LoggingConfig struct {
+	// ConsoleLogLevel controls what gets logged to stdout/stderr
+	// Valid values: "debug", "info", "warn", "error", "off" (default: "off")
+	// - "debug": Log all messages (DEBUG, INFO, WARN, ERROR)
+	// - "info": Log INFO, WARN, and ERROR messages
+	// - "warn": Log WARN and ERROR messages
+	// - "error": Log only ERROR messages
+	// - "off": No console logging (clean output)
+	ConsoleLogLevel string `yaml:"console_log_level" json:"console_log_level"`
+
 	// FileLogLevel controls what gets logged to .darwinflow/claude-code.log
 	// Valid values: "debug", "info", "error", "off" (default: "error")
 	// - "debug": Log all messages (DEBUG, INFO, ERROR)
@@ -117,7 +126,8 @@ func DefaultConfig() *Config {
 			AutoRefreshInterval: "", // Disabled by default
 		},
 		Logging: LoggingConfig{
-			FileLogLevel: "error", // Only log errors by default
+			ConsoleLogLevel: "off",   // Clean output by default
+			FileLogLevel:    "error", // Only log errors by default
 		},
 		Prompts: map[string]string{
 			"session_summary": DefaultSessionSummaryPrompt,
