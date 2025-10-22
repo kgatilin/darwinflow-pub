@@ -14,7 +14,11 @@ func TestNewHookConfigManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldCwd)
+	defer func() {
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -41,7 +45,11 @@ func TestReadSettings_FileNotExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldCwd)
+	defer func() {
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -69,7 +77,11 @@ func TestWriteSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldCwd)
+	defer func() {
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -241,7 +253,11 @@ func TestInstallDarwinFlowHooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldCwd)
+	defer func() {
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -280,7 +296,11 @@ func TestWriteSettingsPreservesOtherFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldCwd)
+	defer func() {
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -335,7 +355,11 @@ func TestCopyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldCwd)
+	defer func() {
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -380,7 +404,11 @@ func TestCopyFile_SourceNotExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldCwd)
+	defer func() {
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)

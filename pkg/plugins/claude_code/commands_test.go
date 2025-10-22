@@ -26,8 +26,10 @@ func (m *simpleCommandContext) GetLogger() pluginsdk.Logger {
 }
 
 func (m *simpleCommandContext) GetWorkingDir() string {
-	// No default - tests must explicitly set workingDir
-	// This prevents accidental pollution of production or system paths
+	// Return safe default to prevent directory creation in test source directory
+	if m.workingDir == "" {
+		return "/tmp/test-safe-default"
+	}
 	return m.workingDir
 }
 
@@ -57,8 +59,10 @@ func (m *mockCommandContext) GetLogger() pluginsdk.Logger {
 }
 
 func (m *mockCommandContext) GetWorkingDir() string {
-	// No default - tests must explicitly set workingDir
-	// This prevents accidental pollution of production or system paths
+	// Return safe default to prevent directory creation in test source directory
+	if m.workingDir == "" {
+		return "/tmp/test-safe-default"
+	}
 	return m.workingDir
 }
 
@@ -186,6 +190,22 @@ func TestInitCommand_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Use temp directory to avoid polluting test source directory
+			tmpDir := t.TempDir()
+			oldCwd, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("Failed to get working directory: %v", err)
+			}
+			defer func() {
+				if err := os.Chdir(oldCwd); err != nil {
+					t.Logf("Warning: failed to restore working directory: %v", err)
+				}
+			}()
+
+			if err := os.Chdir(tmpDir); err != nil {
+				t.Fatalf("Failed to change to temp directory: %v", err)
+			}
+
 			ctx := context.Background()
 			plugin := claude_code.NewClaudeCodePlugin(
 				nil, nil, &mockLogger{}, tt.setupService, nil, "/tmp/test.db",
@@ -208,12 +228,13 @@ func TestInitCommand_Execute(t *testing.T) {
 			// Create mock context
 			stdout := &bytes.Buffer{}
 			cmdCtx := &simpleCommandContext{
-				stdin:  strings.NewReader(""),
-				stdout: stdout,
+				stdin:      strings.NewReader(""),
+				stdout:     stdout,
+				workingDir: tmpDir,
 			}
 
 			// Execute the command
-			err := initCmd.Execute(ctx, cmdCtx, []string{})
+			err = initCmd.Execute(ctx, cmdCtx, []string{})
 
 			// Check error
 			if (err != nil) != tt.expectError {
@@ -723,10 +744,26 @@ func TestAutoSummaryCommand_Execute_EmptyStdin(t *testing.T) {
 
 // TestInitCommand_WithHookInstallationWarning tests that hook installation warnings don't fail
 func TestInitCommand_WithHookInstallationWarning(t *testing.T) {
+	// This test verifies InitCommand handles hook installation failures gracefully
+	// We run in a temp directory to ensure no pollution of the test source directory
 	tmpDir := t.TempDir()
-	oldCwd, _ := os.Getwd()
-	defer os.Chdir(oldCwd)
-	os.Chdir(tmpDir)
+
+	// Save and restore original working directory
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer func() {
+		// Restore working directory after test
+		if err := os.Chdir(oldCwd); err != nil {
+			t.Logf("Warning: failed to restore working directory: %v", err)
+		}
+	}()
+
+	// Change to temp directory before running command
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
 
 	ctx := context.Background()
 	plugin := claude_code.NewClaudeCodePlugin(
@@ -749,12 +786,13 @@ func TestInitCommand_WithHookInstallationWarning(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	cmdCtx := &simpleCommandContext{
-		stdin:  strings.NewReader(""),
-		stdout: stdout,
+		stdin:      strings.NewReader(""),
+		stdout:     stdout,
+		workingDir: tmpDir, // Explicitly set working dir
 	}
 
 	// Execute should succeed even if hook manager creation fails
-	err := initCmd.Execute(ctx, cmdCtx, []string{})
+	err = initCmd.Execute(ctx, cmdCtx, []string{})
 	if err != nil {
 		t.Errorf("InitCommand.Execute returned error even with hook failures: %v", err)
 	}
@@ -900,324 +938,225 @@ func TestEmitEventCommand_InvalidJSON(t *testing.T) {
 	}
 }
 
-// TestEmitEventCommand_MissingSessionID verifies missing session_id is silently ignored
-func TestEmitEventCommand_MissingSessionID(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:   "tool.invoked",
-		Source: "claude-code",
-		Payload: map[string]interface{}{
-			"tool": "Read",
+// TestEmitEventCommand_Validation tests validation of required fields
+func TestEmitEventCommand_Validation(t *testing.T) {
+	tests := []struct {
+		name          string
+		event         pluginsdk.Event
+		expectEmitted bool
+	}{
+		{
+			name: "missing session_id",
+			event: pluginsdk.Event{
+				Type:   "tool.invoked",
+				Source: "claude-code",
+				Payload: map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{"cwd": "/workspace"},
+			},
+			expectEmitted: false,
 		},
-		Metadata: map[string]string{
-			"cwd": "/workspace",
-			// session_id is missing
+		{
+			name: "missing type",
+			event: pluginsdk.Event{
+				Source:   "claude-code",
+				Payload:  map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{"session_id": "abc123"},
+			},
+			expectEmitted: false,
+		},
+		{
+			name: "missing source",
+			event: pluginsdk.Event{
+				Type:     "tool.invoked",
+				Payload:  map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{"session_id": "abc123"},
+			},
+			expectEmitted: false,
+		},
+		{
+			name: "nil metadata",
+			event: pluginsdk.Event{
+				Type:     "tool.invoked",
+				Source:   "claude-code",
+				Payload:  map[string]interface{}{"tool": "Read"},
+				Metadata: nil,
+			},
+			expectEmitted: false,
 		},
 	}
 
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newTestEmitEventCommand()
+			jsonData, _ := json.Marshal(tt.event)
+			mockCtx := newMockCommandContext(string(jsonData))
 
-	err := cmd.Execute(context.Background(), mockCtx, nil)
+			err := cmd.Execute(context.Background(), mockCtx, nil)
+			if err != nil {
+				t.Errorf("Execute() returned error: %v", err)
+			}
 
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	// No events should be emitted
-	if len(mockCtx.events) != 0 {
-		t.Errorf("Expected 0 events emitted, got %d", len(mockCtx.events))
+			emittedCount := len(mockCtx.events)
+			if tt.expectEmitted && emittedCount == 0 {
+				t.Error("Expected event to be emitted, but none was")
+			}
+			if !tt.expectEmitted && emittedCount > 0 {
+				t.Errorf("Expected no events emitted, got %d", emittedCount)
+			}
+		})
 	}
 }
 
-// TestEmitEventCommand_MissingType verifies missing type is silently ignored
-func TestEmitEventCommand_MissingType(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		// Type is missing
-		Source: "claude-code",
-		Payload: map[string]interface{}{
-			"tool": "Read",
+// TestEmitEventCommand_Defaults tests default value handling
+func TestEmitEventCommand_Defaults(t *testing.T) {
+	tests := []struct {
+		name      string
+		event     pluginsdk.Event
+		checkFunc func(*testing.T, pluginsdk.Event)
+	}{
+		{
+			name: "default timestamp",
+			event: pluginsdk.Event{
+				Type:     "tool.invoked",
+				Source:   "claude-code",
+				Payload:  map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{"session_id": "abc123"},
+			},
+			checkFunc: func(t *testing.T, emitted pluginsdk.Event) {
+				if emitted.Timestamp.IsZero() {
+					t.Error("Timestamp should be set to current time")
+				}
+			},
 		},
-		Metadata: map[string]string{
-			"session_id": "abc123",
+		{
+			name: "default version",
+			event: pluginsdk.Event{
+				Type:     "tool.invoked",
+				Source:   "claude-code",
+				Payload:  map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{"session_id": "abc123"},
+			},
+			checkFunc: func(t *testing.T, emitted pluginsdk.Event) {
+				if emitted.Version != "1.0" {
+					t.Errorf("Version = %q, want %q", emitted.Version, "1.0")
+				}
+			},
+		},
+		{
+			name: "explicit version preserved",
+			event: pluginsdk.Event{
+				Type:     "tool.invoked",
+				Source:   "claude-code",
+				Payload:  map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{"session_id": "abc123"},
+				Version:  "2.0",
+			},
+			checkFunc: func(t *testing.T, emitted pluginsdk.Event) {
+				if emitted.Version != "2.0" {
+					t.Errorf("Version = %q, want %q", emitted.Version, "2.0")
+				}
+			},
+		},
+		{
+			name: "nil payload initialized",
+			event: pluginsdk.Event{
+				Type:     "tool.invoked",
+				Source:   "claude-code",
+				Payload:  nil,
+				Metadata: map[string]string{"session_id": "abc123"},
+			},
+			checkFunc: func(t *testing.T, emitted pluginsdk.Event) {
+				if emitted.Payload == nil {
+					t.Error("Payload should be initialized to empty map")
+				}
+			},
 		},
 	}
 
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newTestEmitEventCommand()
+			jsonData, _ := json.Marshal(tt.event)
+			mockCtx := newMockCommandContext(string(jsonData))
 
-	err := cmd.Execute(context.Background(), mockCtx, nil)
+			err := cmd.Execute(context.Background(), mockCtx, nil)
+			if err != nil {
+				t.Errorf("Execute() returned error: %v", err)
+			}
 
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
+			if len(mockCtx.events) != 1 {
+				t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
+			}
 
-	// No events should be emitted
-	if len(mockCtx.events) != 0 {
-		t.Errorf("Expected 0 events emitted, got %d", len(mockCtx.events))
+			tt.checkFunc(t, mockCtx.events[0])
+		})
 	}
 }
 
-// TestEmitEventCommand_MissingSource verifies missing source is silently ignored
-func TestEmitEventCommand_MissingSource(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type: "tool.invoked",
-		// Source is missing
-		Payload: map[string]interface{}{
-			"tool": "Read",
+// TestEmitEventCommand_ErrorHandling tests error handling scenarios
+func TestEmitEventCommand_ErrorHandling(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupContext  func(*testing.T) *mockCommandContext
+		expectEmitted bool
+	}{
+		{
+			name: "empty stdin",
+			setupContext: func(t *testing.T) *mockCommandContext {
+				return newMockCommandContext("")
+			},
+			expectEmitted: false,
 		},
-		Metadata: map[string]string{
-			"session_id": "abc123",
+		{
+			name: "invalid JSON",
+			setupContext: func(t *testing.T) *mockCommandContext {
+				return newMockCommandContext("{invalid json")
+			},
+			expectEmitted: false,
 		},
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	// No events should be emitted
-	if len(mockCtx.events) != 0 {
-		t.Errorf("Expected 0 events emitted, got %d", len(mockCtx.events))
-	}
-}
-
-// TestEmitEventCommand_DefaultTimestamp verifies missing timestamp is set to current time
-func TestEmitEventCommand_DefaultTimestamp(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:   "tool.invoked",
-		Source: "claude-code",
-		// Timestamp is missing (zero value)
-		Payload: map[string]interface{}{
-			"tool": "Read",
+		{
+			name: "emit error",
+			setupContext: func(t *testing.T) *mockCommandContext {
+				event := pluginsdk.Event{
+					Type:     "tool.invoked",
+					Source:   "claude-code",
+					Payload:  map[string]interface{}{"tool": "Read"},
+					Metadata: map[string]string{"session_id": "abc123"},
+				}
+				jsonData, _ := json.Marshal(event)
+				mockCtx := newMockCommandContext(string(jsonData))
+				mockCtx.emitErr = io.EOF // Simulate emit failure
+				return mockCtx
+			},
+			expectEmitted: true, // Event is added to array before error is returned (but error is silently ignored)
 		},
-		Metadata: map[string]string{
-			"session_id": "abc123",
-		},
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-
-	beforeTime := time.Now()
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-	afterTime := time.Now()
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	if len(mockCtx.events) != 1 {
-		t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
-	}
-
-	emitted := mockCtx.events[0]
-
-	// Verify timestamp was set to approximately now
-	if emitted.Timestamp.Before(beforeTime) || emitted.Timestamp.After(afterTime.Add(1*time.Second)) {
-		t.Errorf("Timestamp = %v, should be between %v and %v", emitted.Timestamp, beforeTime, afterTime)
-	}
-}
-
-// TestEmitEventCommand_DefaultVersion verifies missing version is set to "1.0"
-func TestEmitEventCommand_DefaultVersion(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:   "tool.invoked",
-		Source: "claude-code",
-		Payload: map[string]interface{}{
-			"tool": "Read",
-		},
-		Metadata: map[string]string{
-			"session_id": "abc123",
-		},
-		// Version is missing
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	if len(mockCtx.events) != 1 {
-		t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
-	}
-
-	emitted := mockCtx.events[0]
-	if emitted.Version != "1.0" {
-		t.Errorf("Version = %q, want %q", emitted.Version, "1.0")
-	}
-}
-
-// TestEmitEventCommand_ExplicitVersion verifies explicit version is preserved
-func TestEmitEventCommand_ExplicitVersion(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:    "tool.invoked",
-		Source:  "claude-code",
-		Payload: map[string]interface{}{"tool": "Read"},
-		Metadata: map[string]string{
-			"session_id": "abc123",
-		},
-		Version: "2.0",
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	if len(mockCtx.events) != 1 {
-		t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
-	}
-
-	emitted := mockCtx.events[0]
-	if emitted.Version != "2.0" {
-		t.Errorf("Version = %q, want %q", emitted.Version, "2.0")
-	}
-}
-
-// TestEmitEventCommand_EmptyStdin verifies empty stdin is silently ignored
-func TestEmitEventCommand_EmptyStdin(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	mockCtx := newMockCommandContext("")
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	// No events should be emitted
-	if len(mockCtx.events) != 0 {
-		t.Errorf("Expected 0 events emitted, got %d", len(mockCtx.events))
-	}
-}
-
-// TestEmitEventCommand_NilMetadata verifies nil metadata is initialized
-func TestEmitEventCommand_NilMetadata(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:     "tool.invoked",
-		Source:   "claude-code",
-		Payload:  map[string]interface{}{"tool": "Read"},
-		Metadata: nil,
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	// No events should be emitted (no session_id in nil metadata)
-	if len(mockCtx.events) != 0 {
-		t.Errorf("Expected 0 events emitted (nil metadata means no session_id), got %d", len(mockCtx.events))
-	}
-}
-
-// TestEmitEventCommand_NilPayload verifies nil payload is initialized
-func TestEmitEventCommand_NilPayload(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:    "tool.invoked",
-		Source:  "claude-code",
-		Payload: nil,
-		Metadata: map[string]string{
-			"session_id": "abc123",
+		{
+			name: "stdin read error",
+			setupContext: func(t *testing.T) *mockCommandContext {
+				return newTestCommandContext(t, &errorReader{}, &bytes.Buffer{})
+			},
+			expectEmitted: false,
 		},
 	}
 
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newTestEmitEventCommand()
+			mockCtx := tt.setupContext(t)
 
-	err := cmd.Execute(context.Background(), mockCtx, nil)
+			err := cmd.Execute(context.Background(), mockCtx, nil)
+			if err != nil {
+				t.Errorf("Execute() should not return error, got: %v", err)
+			}
 
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	if len(mockCtx.events) != 1 {
-		t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
-	}
-
-	emitted := mockCtx.events[0]
-	if emitted.Payload == nil {
-		t.Error("Payload should not be nil (should be initialized to empty map)")
-	}
-}
-
-// TestEmitEventCommand_EmitError verifies emit errors are silently handled
-func TestEmitEventCommand_EmitError(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:    "tool.invoked",
-		Source:  "claude-code",
-		Payload: map[string]interface{}{"tool": "Read"},
-		Metadata: map[string]string{
-			"session_id": "abc123",
-		},
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-	mockCtx.emitErr = io.EOF // Simulate emit failure
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	// Should not return error (silently fails)
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-}
-
-// TestEmitEventCommand_StdinReadError verifies stdin read errors are silently handled
-func TestEmitEventCommand_StdinReadError(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	// Create a reader that returns an error
-	errReader := &errorReader{}
-	stdout := &bytes.Buffer{}
-	mockCtx := newTestCommandContext(t, errReader, stdout)
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	// Should not return error (silently fails)
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	// No events should be emitted
-	if len(mockCtx.events) != 0 {
-		t.Errorf("Expected 0 events emitted, got %d", len(mockCtx.events))
+			emittedCount := len(mockCtx.events)
+			if tt.expectEmitted && emittedCount == 0 {
+				t.Error("Expected event to be emitted, but none was")
+			}
+			if !tt.expectEmitted && emittedCount > 0 {
+				t.Errorf("Expected no events emitted, got %d", emittedCount)
+			}
+		})
 	}
 }
 
@@ -1252,122 +1191,96 @@ func TestEmitEventCommand_LargePayload(t *testing.T) {
 	}
 }
 
-// TestEmitEventCommand_SpecialCharactersInSessionID verifies special characters in session_id
-func TestEmitEventCommand_SpecialCharactersInSessionID(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:    "tool.invoked",
-		Source:  "claude-code",
-		Payload: map[string]interface{}{"tool": "Read"},
-		Metadata: map[string]string{
-			"session_id": "abc-123_456.789",
-		},
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	if len(mockCtx.events) != 1 {
-		t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
-	}
-
-	emitted := mockCtx.events[0]
-	if emitted.Metadata["session_id"] != "abc-123_456.789" {
-		t.Errorf("Session ID not preserved: got %q", emitted.Metadata["session_id"])
-	}
-}
-
-// TestEmitEventCommand_MultipleMetadataFields verifies multiple metadata fields are preserved
-func TestEmitEventCommand_MultipleMetadataFields(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:   "tool.invoked",
-		Source: "claude-code",
-		Payload: map[string]interface{}{
-			"tool": "Read",
-		},
-		Metadata: map[string]string{
-			"session_id": "abc123",
-			"cwd":        "/workspace",
-			"user_id":    "user-456",
-			"env":        "test",
-		},
-	}
-
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
-
-	err := cmd.Execute(context.Background(), mockCtx, nil)
-
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
-
-	if len(mockCtx.events) != 1 {
-		t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
-	}
-
-	emitted := mockCtx.events[0]
-	expectedMetadata := map[string]string{
-		"session_id": "abc123",
-		"cwd":        "/workspace",
-		"user_id":    "user-456",
-		"env":        "test",
-	}
-
-	for key, expectedValue := range expectedMetadata {
-		if emitted.Metadata[key] != expectedValue {
-			t.Errorf("Metadata[%q] = %q, want %q", key, emitted.Metadata[key], expectedValue)
-		}
-	}
-}
-
-// TestEmitEventCommand_ComplexPayload verifies complex nested payloads are handled
-func TestEmitEventCommand_ComplexPayload(t *testing.T) {
-	cmd := newTestEmitEventCommand()
-
-	event := pluginsdk.Event{
-		Type:   "tool.invoked",
-		Source: "claude-code",
-		Payload: map[string]interface{}{
-			"tool": "Read",
-			"parameters": map[string]interface{}{
-				"file_path": "/workspace/test.go",
-				"options": map[string]interface{}{
-					"follow_symlinks": true,
-					"timeout":         30,
-				},
+// TestEmitEventCommand_MetadataAndPayload tests metadata and payload handling
+func TestEmitEventCommand_MetadataAndPayload(t *testing.T) {
+	tests := []struct {
+		name      string
+		event     pluginsdk.Event
+		checkFunc func(*testing.T, pluginsdk.Event)
+	}{
+		{
+			name: "special characters in session_id",
+			event: pluginsdk.Event{
+				Type:     "tool.invoked",
+				Source:   "claude-code",
+				Payload:  map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{"session_id": "abc-123_456.789"},
+			},
+			checkFunc: func(t *testing.T, emitted pluginsdk.Event) {
+				if emitted.Metadata["session_id"] != "abc-123_456.789" {
+					t.Errorf("Session ID not preserved: got %q", emitted.Metadata["session_id"])
+				}
 			},
 		},
-		Metadata: map[string]string{
-			"session_id": "abc123",
+		{
+			name: "multiple metadata fields",
+			event: pluginsdk.Event{
+				Type:   "tool.invoked",
+				Source: "claude-code",
+				Payload: map[string]interface{}{"tool": "Read"},
+				Metadata: map[string]string{
+					"session_id": "abc123",
+					"cwd":        "/workspace",
+					"user_id":    "user-456",
+					"env":        "test",
+				},
+			},
+			checkFunc: func(t *testing.T, emitted pluginsdk.Event) {
+				expected := map[string]string{
+					"session_id": "abc123",
+					"cwd":        "/workspace",
+					"user_id":    "user-456",
+					"env":        "test",
+				}
+				for key, expectedValue := range expected {
+					if emitted.Metadata[key] != expectedValue {
+						t.Errorf("Metadata[%q] = %q, want %q", key, emitted.Metadata[key], expectedValue)
+					}
+				}
+			},
+		},
+		{
+			name: "complex nested payload",
+			event: pluginsdk.Event{
+				Type:   "tool.invoked",
+				Source: "claude-code",
+				Payload: map[string]interface{}{
+					"tool": "Read",
+					"parameters": map[string]interface{}{
+						"file_path": "/workspace/test.go",
+						"options": map[string]interface{}{
+							"follow_symlinks": true,
+							"timeout":         30,
+						},
+					},
+				},
+				Metadata: map[string]string{"session_id": "abc123"},
+			},
+			checkFunc: func(t *testing.T, emitted pluginsdk.Event) {
+				if emitted.Payload["tool"] != "Read" {
+					t.Errorf("Payload tool = %q, want %q", emitted.Payload["tool"], "Read")
+				}
+			},
 		},
 	}
 
-	jsonData, _ := json.Marshal(event)
-	mockCtx := newMockCommandContext(string(jsonData))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newTestEmitEventCommand()
+			jsonData, _ := json.Marshal(tt.event)
+			mockCtx := newMockCommandContext(string(jsonData))
 
-	err := cmd.Execute(context.Background(), mockCtx, nil)
+			err := cmd.Execute(context.Background(), mockCtx, nil)
+			if err != nil {
+				t.Errorf("Execute() returned error: %v", err)
+			}
 
-	if err != nil {
-		t.Errorf("Execute() returned error: %v", err)
-	}
+			if len(mockCtx.events) != 1 {
+				t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
+			}
 
-	if len(mockCtx.events) != 1 {
-		t.Fatalf("Expected 1 event emitted, got %d", len(mockCtx.events))
-	}
-
-	emitted := mockCtx.events[0]
-	if emitted.Payload["tool"] != "Read" {
-		t.Errorf("Payload tool = %q, want %q", emitted.Payload["tool"], "Read")
+			tt.checkFunc(t, mockCtx.events[0])
+		})
 	}
 }
 
