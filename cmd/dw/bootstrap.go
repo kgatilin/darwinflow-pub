@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -92,6 +93,42 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		workingDir,
 	); err != nil {
 		return nil, fmt.Errorf("failed to register built-in plugins: %w", err)
+	}
+
+	// 10. Load external plugins from .darwinflow/plugins.yaml
+	// dbPath is .darwinflow/logs/events.db, so we need to go up two levels to .darwinflow
+	pluginsConfigPath := filepath.Join(filepath.Dir(filepath.Dir(dbPath)), "plugins.yaml")
+	if _, err := os.Stat(pluginsConfigPath); err == nil {
+		loader := infra.NewPluginLoader(logger)
+		externalPlugins, err := loader.LoadFromConfig(pluginsConfigPath)
+		if err != nil {
+			logger.Warn("Failed to load plugins from config: %v", err)
+		} else {
+			// Initialize and register each plugin
+			ctx := context.Background()
+			successCount := 0
+			for _, plugin := range externalPlugins {
+				// Initialize the plugin (required for SubprocessPlugin to get info)
+				if initializer, ok := plugin.(interface {
+					Initialize(context.Context, string, map[string]interface{}) error
+				}); ok {
+					if err := initializer.Initialize(ctx, workingDir, nil); err != nil {
+						logger.Warn("Failed to initialize external plugin: %v", err)
+						continue
+					}
+				}
+
+				// Register the plugin
+				if err := pluginRegistry.RegisterPlugin(plugin); err != nil {
+					logger.Warn("Failed to register external plugin: %v", err)
+				} else {
+					successCount++
+				}
+			}
+			if successCount > 0 {
+				logger.Info("Loaded %d external plugin(s) from config", successCount)
+			}
+		}
 	}
 
 	// 11. Create command registry

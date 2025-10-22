@@ -56,6 +56,9 @@ func main() {
 		handleRefresh(args)
 	case "config":
 		configCmd(args)
+	case "plugin":
+		pluginCmd(args)
+		return
 	case "claude":
 		// Backward compatibility: "dw claude <command>" -> "dw claude-code <command>"
 		if len(args) > 0 {
@@ -141,12 +144,14 @@ func printBasicUsage() {
 	fmt.Println("  dw ui                Interactive UI for browsing and analyzing sessions")
 	fmt.Println("  dw config            Manage DarwinFlow configuration")
 	fmt.Println("  dw refresh           Update database schema and hooks to latest version")
+	fmt.Println("  dw plugin            Manage plugins (list, reload)")
 	fmt.Println("  dw help              Show this help message")
 	fmt.Println()
 	fmt.Println("For command-specific help:")
 	fmt.Println("  dw logs --help       Show logs command help and database schema")
 	fmt.Println("  dw analyze --help    Show analyze command options")
 	fmt.Println("  dw config --help     Show config command options")
+	fmt.Println("  dw plugin --help     Show plugin command options")
 	fmt.Println()
 }
 
@@ -164,6 +169,7 @@ func printFullUsage(services *AppServices) {
 	fmt.Println("  dw ui                Interactive UI for browsing and analyzing sessions")
 	fmt.Println("  dw config            Manage DarwinFlow configuration")
 	fmt.Println("  dw refresh           Update database schema and hooks to latest version")
+	fmt.Println("  dw plugin            Manage plugins (list, reload)")
 	fmt.Println("  dw help              Show this help message")
 	fmt.Println()
 
@@ -200,6 +206,7 @@ func printFullUsage(services *AppServices) {
 	fmt.Println("  dw logs --help       Show logs command help and database schema")
 	fmt.Println("  dw analyze --help    Show analyze command options")
 	fmt.Println("  dw config --help     Show config command options")
+	fmt.Println("  dw plugin --help     Show plugin command options")
 	fmt.Println()
 	fmt.Println("Environment Variables:")
 	fmt.Println("  DW_CONTEXT           Set the current context (e.g., project/myapp)")
