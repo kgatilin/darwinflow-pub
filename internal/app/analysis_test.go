@@ -2,10 +2,12 @@ package app_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
 // MockLLMExecutor is a mock implementation for testing (deprecated - use MockLLM instead)
@@ -870,3 +872,211 @@ func TestNewClaudeCLIExecutor_WithNilLogger(t *testing.T) {
 		t.Error("Expected non-nil executor even with nil logger")
 	}
 }
+
+// MockAnalysisView is a mock implementation of pluginsdk.AnalysisView for testing
+type MockAnalysisView struct {
+	ID       string
+	Type     string
+	Events   []pluginsdk.Event
+	Metadata map[string]interface{}
+}
+
+func (m *MockAnalysisView) GetID() string {
+	return m.ID
+}
+
+func (m *MockAnalysisView) GetType() string {
+	return m.Type
+}
+
+func (m *MockAnalysisView) GetEvents() []pluginsdk.Event {
+	return m.Events
+}
+
+func (m *MockAnalysisView) FormatForAnalysis() string {
+	return "# Test Analysis\n\nFormatted view content for analysis.\n"
+}
+
+func (m *MockAnalysisView) GetMetadata() map[string]interface{} {
+	return m.Metadata
+}
+
+func TestAnalysisService_AnalyzeView_Success(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{
+		Response:   "This is the analysis result.",
+		ModelValue: "claude-3",
+	}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	view := &MockAnalysisView{
+		ID:     "session-123",
+		Type:   "session",
+		Events: []pluginsdk.Event{},
+		Metadata: map[string]interface{}{
+			"event_count": 0,
+		},
+	}
+
+	analysis, err := service.AnalyzeView(ctx, view, "tool_analysis")
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if analysis == nil {
+		t.Fatal("Expected non-nil analysis result")
+	}
+
+	if analysis.SessionID != "session-123" {
+		t.Errorf("Expected session ID 'session-123', got '%s'", analysis.SessionID)
+	}
+
+	if !contains(analysis.AnalysisResult, "This is the analysis result") {
+		t.Errorf("Expected analysis result to contain expected text, got: %s", analysis.AnalysisResult)
+	}
+
+	// Check model is set (could be default or from config)
+	if analysis.ModelUsed == "" {
+		t.Errorf("Expected non-empty model")
+	}
+
+	// Verify LLM was called
+	if mockLLM.QueryCalls != 1 {
+		t.Errorf("Expected 1 LLM call, got %d", mockLLM.QueryCalls)
+	}
+
+	// Verify analysis was saved
+	if len(mockAnalysisRepo.SavedAnalyses) != 1 {
+		t.Errorf("Expected 1 saved analysis, got %d", len(mockAnalysisRepo.SavedAnalyses))
+	}
+}
+
+func TestAnalysisService_AnalyzeView_NilView(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{Response: "analysis"}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	_, err := service.AnalyzeView(ctx, nil, "tool_analysis")
+
+	if err == nil {
+		t.Error("Expected error for nil view")
+	}
+
+	if !contains(err.Error(), "view is nil") {
+		t.Errorf("Expected 'view is nil' error, got: %v", err)
+	}
+}
+
+func TestAnalysisService_AnalyzeView_LLMError(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{
+		Error: fmt.Errorf("LLM service error"),
+	}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	view := &MockAnalysisView{
+		ID:   "session-123",
+		Type: "session",
+	}
+
+	_, err := service.AnalyzeView(ctx, view, "tool_analysis")
+
+	if err == nil {
+		t.Error("Expected error when LLM fails")
+	}
+
+	if !contains(err.Error(), "LLM") {
+		t.Errorf("Expected error mentioning LLM, got: %v", err)
+	}
+
+	// Verify no analysis was saved
+	if len(mockAnalysisRepo.SavedAnalyses) != 0 {
+		t.Errorf("Expected 0 saved analyses after error, got %d", len(mockAnalysisRepo.SavedAnalyses))
+	}
+}
+
+func TestAnalysisService_AnalyzeView_WithCustomPrompt(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{
+		Response:   "Custom analysis result",
+		ModelValue: "claude-3",
+	}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+	config.Prompts["custom_prompt"] = "Custom prompt template: "
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	view := &MockAnalysisView{
+		ID:   "session-456",
+		Type: "session",
+	}
+
+	analysis, err := service.AnalyzeView(ctx, view, "custom_prompt")
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if analysis.PromptName != "custom_prompt" {
+		t.Errorf("Expected prompt name 'custom_prompt', got '%s'", analysis.PromptName)
+	}
+
+	if !contains(analysis.AnalysisResult, "Custom analysis result") {
+		t.Errorf("Expected custom analysis result in output")
+	}
+}
+
+// NoOpTestLogger is a no-op logger for testing
+type NoOpTestLogger struct{}
+
+func (l *NoOpTestLogger) Debug(format string, args ...interface{}) {}
+func (l *NoOpTestLogger) Info(format string, args ...interface{})  {}
+func (l *NoOpTestLogger) Warn(format string, args ...interface{})  {}
+func (l *NoOpTestLogger) Error(format string, args ...interface{}) {}

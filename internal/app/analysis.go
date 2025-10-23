@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
 // NoOpLogger is a logger that does nothing (for backward compatibility)
@@ -138,6 +139,65 @@ func (s *AnalysisService) AnalyzeSessionWithPrompt(ctx context.Context, sessionI
 	}
 
 	s.logger.Info("Analysis completed successfully")
+	return analysis, nil
+}
+
+// AnalyzeView analyzes any view using the provided prompt.
+// This method provides a view-based interface for analysis that's plugin-agnostic.
+// For now, it returns a SessionAnalysis for backward compatibility (Phase 4 will change this).
+func (s *AnalysisService) AnalyzeView(ctx context.Context, view pluginsdk.AnalysisView, promptName string) (*domain.SessionAnalysis, error) {
+	if view == nil {
+		return nil, fmt.Errorf("view is nil")
+	}
+
+	// Get the formatted view content
+	s.logger.Debug("Formatting view %s (%s) for analysis", view.GetID(), view.GetType())
+	formattedContent := view.FormatForAnalysis()
+
+	// Get analysis prompt from config
+	promptTemplate, exists := s.config.Prompts[promptName]
+	if !exists || promptTemplate == "" {
+		s.logger.Warn("Prompt %s not found in config, using default tool_analysis", promptName)
+		promptTemplate = domain.DefaultToolAnalysisPrompt
+		promptName = "tool_analysis"
+	}
+
+	// Build the full prompt with formatted view
+	prompt := promptTemplate + formattedContent
+	s.logger.Debug("Generated prompt with %d characters (%d KB)", len(prompt), len(prompt)/1024)
+
+	// Execute LLM analysis
+	s.logger.Info("Invoking LLM for %s analysis of view %s...", promptName, view.GetID())
+	analysisResult, err := s.llm.Query(ctx, prompt, nil)
+	if err != nil {
+		s.logger.Error("Failed to execute LLM analysis: %v", err)
+		return nil, fmt.Errorf("failed to execute LLM analysis: %w", err)
+	}
+	s.logger.Debug("LLM returned %d characters", len(analysisResult))
+
+	// Create and save analysis
+	// Note: We still use SessionAnalysis for backward compatibility
+	// Phase 3 will introduce ViewAnalysis, Phase 4 will make session-based methods wrap view-based methods
+	s.logger.Debug("Saving analysis to database")
+
+	// Use the view's ID as the session ID for now
+	sessionID := view.GetID()
+
+	analysis := domain.NewSessionAnalysisWithType(
+		sessionID,
+		analysisResult,
+		s.config.Analysis.Model,
+		promptTemplate,
+		promptName,
+		promptName,
+	)
+
+	if err := s.analysisRepo.SaveAnalysis(ctx, analysis); err != nil {
+		s.logger.Error("Failed to save analysis: %v", err)
+		return nil, fmt.Errorf("failed to save analysis: %w", err)
+	}
+
+	s.logger.Info("View analysis completed successfully")
 	return analysis, nil
 }
 
