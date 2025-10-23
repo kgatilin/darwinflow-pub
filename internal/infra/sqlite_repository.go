@@ -191,6 +191,18 @@ func (r *SQLiteEventRepository) Initialize(ctx context.Context) error {
 
 // createAnalysesTableAndMigrate creates the generic analyses table and migrates data from session_analyses
 func (r *SQLiteEventRepository) createAnalysesTableAndMigrate(ctx context.Context) error {
+	// Check if analyses table already exists BEFORE creating it
+	var analysesTableExists bool
+	var tableName string
+	err := r.db.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'").Scan(&tableName)
+	if err == sql.ErrNoRows {
+		analysesTableExists = false
+	} else if err != nil {
+		return fmt.Errorf("failed to check analyses table existence: %w", err)
+	} else {
+		analysesTableExists = true
+	}
+
 	// Create the new analyses table
 	analysesSchema := `
 		CREATE TABLE IF NOT EXISTS analyses (
@@ -209,20 +221,25 @@ func (r *SQLiteEventRepository) createAnalysesTableAndMigrate(ctx context.Contex
 		CREATE INDEX IF NOT EXISTS idx_analyses_timestamp ON analyses(timestamp);
 	`
 
-	_, err := r.db.ExecContext(ctx, analysesSchema)
+	_, err = r.db.ExecContext(ctx, analysesSchema)
 	if err != nil {
 		return fmt.Errorf("failed to create analyses table: %w", err)
 	}
 
-	// Check if migration is needed
-	needsMigration, err := r.checkMigrationNeeded(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to check migration status: %w", err)
-	}
+	// Only check migration if analyses table didn't exist before
+	// This means it's an old database being upgraded
+	if !analysesTableExists {
+		needsMigration, err := r.checkMigrationNeeded(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to check migration status: %w", err)
+		}
 
-	if needsMigration {
-		if err := r.migrateSessionAnalysesToAnalyses(ctx); err != nil {
-			return fmt.Errorf("failed to migrate session_analyses: %w", err)
+		if needsMigration {
+			fmt.Println("INFO: Migrating database schema from session_analyses to analyses table...")
+			if err := r.migrateSessionAnalysesToAnalyses(ctx); err != nil {
+				return fmt.Errorf("failed to migrate session_analyses: %w", err)
+			}
+			fmt.Println("INFO: Database migration completed successfully")
 		}
 	}
 
@@ -242,12 +259,24 @@ func (r *SQLiteEventRepository) checkMigrationNeeded(ctx context.Context) (bool,
 		return false, err
 	}
 
+	// Check if session_analyses has any data
+	// If it's empty, this is likely a fresh database, no migration needed
+	var count int
+	err = r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM session_analyses").Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	if count == 0 {
+		// Empty session_analyses table, no migration needed
+		return false, nil
+	}
+
 	// Check if data has already been migrated by looking for a migration marker
 	// We'll use a special row in analyses table with view_type='__migration_marker__'
 	var markerID string
 	err = r.db.QueryRowContext(ctx, "SELECT id FROM analyses WHERE view_type = '__migration_marker__' LIMIT 1").Scan(&markerID)
 	if err == sql.ErrNoRows {
-		// Marker doesn't exist, migration needed
+		// Marker doesn't exist but session_analyses has data, migration needed
 		return true, nil
 	}
 	if err != nil {
@@ -274,9 +303,9 @@ func (r *SQLiteEventRepository) migrateSessionAnalysesToAnalyses(ctx context.Con
 		return fmt.Errorf("failed to count session_analyses: %w", err)
 	}
 
-	// If no data, just mark migration as complete without creating marker
+	// If no data in session_analyses, don't insert marker (fresh database)
+	// Just commit empty transaction
 	if count == 0 {
-		// Commit empty transaction
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("failed to commit transaction: %w", err)
 		}

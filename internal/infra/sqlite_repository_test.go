@@ -2036,3 +2036,123 @@ func TestEmptyDatabaseNoMigration(t *testing.T) {
 		t.Errorf("Unexpected error querying migration marker: %v", err)
 	}
 }
+
+// TestOldDatabaseMigration tests automatic migration of old database with session_analyses data
+func TestOldDatabaseMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "old-test.db")
+
+	// Create an old database with session_analyses but no analyses table
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	// Create old schema (session_analyses table only)
+	_, err = db.Exec(`
+		CREATE TABLE events (
+			id TEXT PRIMARY KEY,
+			timestamp INTEGER NOT NULL,
+			event_type TEXT NOT NULL,
+			session_id TEXT,
+			payload TEXT NOT NULL,
+			content TEXT NOT NULL
+		);
+
+		CREATE TABLE session_analyses (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			analyzed_at INTEGER NOT NULL,
+			analysis_result TEXT NOT NULL,
+			model_used TEXT,
+			prompt_used TEXT,
+			patterns_summary TEXT,
+			analysis_type TEXT DEFAULT 'tool_analysis',
+			prompt_name TEXT DEFAULT 'analysis'
+		);
+	`)
+	if err != nil {
+		t.Fatalf("Failed to create old schema: %v", err)
+	}
+
+	// Insert test data into session_analyses
+	testTime := time.Now()
+	_, err = db.Exec(`
+		INSERT INTO session_analyses (id, session_id, analyzed_at, analysis_result, model_used, prompt_used, patterns_summary, analysis_type, prompt_name)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "test-analysis-1", "session-123", testTime.UnixMilli(), "Test analysis result", "claude-sonnet-4", "Test prompt", "Test patterns", "tool_analysis", "analysis")
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	db.Close()
+
+	// Now open with repository and initialize (should trigger migration)
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Verify analyses table exists
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'").Scan(&tableName)
+	if err != nil {
+		t.Fatalf("analyses table does not exist: %v", err)
+	}
+
+	// Verify data was migrated
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM analyses WHERE view_type = 'session'").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to count migrated analyses: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 migrated analysis, got %d", count)
+	}
+
+	// Verify migration marker exists
+	var markerID string
+	err = db.QueryRow("SELECT id FROM analyses WHERE view_type = '__migration_marker__'").Scan(&markerID)
+	if err != nil {
+		t.Errorf("Expected migration marker, got error: %v", err)
+	}
+
+	// Verify migrated data content
+	var viewID, result string
+	err = db.QueryRow("SELECT view_id, result FROM analyses WHERE view_type = 'session' LIMIT 1").Scan(&viewID, &result)
+	if err != nil {
+		t.Fatalf("Failed to query migrated data: %v", err)
+	}
+	if viewID != "session-123" {
+		t.Errorf("Expected view_id 'session-123', got %s", viewID)
+	}
+	if result != "Test analysis result" {
+		t.Errorf("Expected result 'Test analysis result', got %s", result)
+	}
+
+	// Run Initialize again - should NOT re-migrate
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Second Initialize failed: %v", err)
+	}
+
+	// Verify count didn't increase (no duplicate migration)
+	err = db.QueryRow("SELECT COUNT(*) FROM analyses WHERE view_type = 'session'").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to count analyses after second initialize: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 analysis after second initialize, got %d (possible duplicate migration)", count)
+	}
+}
