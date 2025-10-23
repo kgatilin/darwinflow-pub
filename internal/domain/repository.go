@@ -42,18 +42,29 @@ type EventBusRepository interface {
 }
 
 // AnalysisRepository defines the interface for persisting and retrieving analyses.
-// Supports both generic Analysis (new, plugin-agnostic) and SessionAnalysis (backward compatibility).
+//
+// The repository supports both:
+// 1. Generic Analysis methods (plugin-agnostic, view-based)
+// 2. SessionAnalysis methods (backward compatibility layer)
+//
+// Architecture: The generic Analysis methods are the primary interface. SessionAnalysis
+// methods exist for backward compatibility with internal framework code written before
+// the view-based analysis refactoring. Internally, SessionAnalysis is converted to/from
+// Analysis, so both interfaces operate on the same underlying data.
+//
+// New Features: Use the generic Analysis methods with AnalysisView interface.
 type AnalysisRepository interface {
-	// Generic analysis methods (plugin-agnostic)
+	// Generic analysis methods (plugin-agnostic, view-based)
+	// Use these for new features.
 	SaveGenericAnalysis(ctx context.Context, analysis *Analysis) error
 	FindAnalysisByViewID(ctx context.Context, viewID string) ([]*Analysis, error)
 	FindAnalysisByViewType(ctx context.Context, viewType string) ([]*Analysis, error)
 	FindAnalysisById(ctx context.Context, id string) (*Analysis, error)
 	ListRecentAnalyses(ctx context.Context, limit int) ([]*Analysis, error)
 
-	// Session-specific methods (backward compatibility)
-	// NOTE: These exist for backward compatibility with internal code.
-	// Analysis storage is semantically owned by the claude-code plugin.
+	// Session-specific methods (backward compatibility layer)
+	// These wrap the generic methods and convert SessionAnalysis ↔ Analysis.
+	// Kept for internal framework code compatibility.
 	SaveAnalysis(ctx context.Context, analysis *SessionAnalysis) error
 	GetAnalysisBySessionID(ctx context.Context, sessionID string) (*SessionAnalysis, error)
 	GetAnalysesBySessionID(ctx context.Context, sessionID string) ([]*SessionAnalysis, error)

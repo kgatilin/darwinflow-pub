@@ -52,8 +52,18 @@ func (a *Analysis) UnmarshalMetadata(data []byte) error {
 }
 
 // SessionAnalysis represents an AI-generated analysis of a Claude Code session.
-// NOTE: This type exists in domain for backward compatibility with internal code.
-// Analysis is semantically owned by the claude-code plugin.
+//
+// COMPATIBILITY LAYER: This type exists for backward compatibility with internal
+// framework code that was written before the view-based analysis refactoring.
+// New code should use the generic Analysis type and AnalysisView interface.
+//
+// Architecture Note: SessionAnalysis wraps the generic Analysis type. The framework
+// uses Analysis internally (view-agnostic), and converts to SessionAnalysis when
+// needed for backward compatibility. Analysis is semantically owned by the claude-code
+// plugin, but SessionAnalysis remains in domain for legacy internal usage.
+//
+// Deprecation: This type will remain for internal backward compatibility, but new
+// features should use Analysis + AnalysisView pattern.
 type SessionAnalysis struct {
 	ID              string
 	SessionID       string

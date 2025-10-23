@@ -7,11 +7,13 @@ DarwinFlow is a lightweight logging system that automatically captures all Claud
 ## Features
 
 - **Automatic Logging**: Captures all Claude Code events via hooks (tool invocations, user prompts, etc.)
-- **AI-Powered Analysis**: Analyze sessions using Claude with configurable prompts
+- **AI-Powered Analysis**: Plugin-agnostic analysis framework using view-based architecture
+  - **View-Based Pattern**: Plugins provide views of their events, framework analyzes any view type
   - **Multi-Prompt Support**: Session summaries, tool analysis, and custom prompts
   - **Auto-Triggered Summaries**: Optional automatic analysis on session end (configurable)
   - **Parallel Execution**: Concurrent analysis with semaphore-based concurrency control
   - **Token-Aware Selection**: Smart session selection based on token limits
+  - **LLM Abstraction**: Swappable LLM providers (Claude CLI, Anthropic API, OpenAI, etc.)
 - **Interactive TUI**: Browse sessions, view analyses, and manage workflows with a keyboard-driven interface
 - **Plugin System**: Extensible architecture with public SDK for building plugins
   - **Public SDK**: `pkg/pluginsdk` provides contracts for plugin development

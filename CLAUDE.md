@@ -59,6 +59,78 @@ DarwinFlow uses a plugin-based architecture:
 
 ---
 
+---
+
+## Analysis Architecture
+
+**View-Based Analysis**: The framework provides AI analysis capabilities for any view type through a plugin-agnostic architecture.
+
+### Core Components
+
+**LLM Abstraction**:
+- `LLM` interface (`internal/domain`) - Abstract LLM provider contract
+- `ClaudeCodeLLM` (`internal/infra`) - Claude Code CLI implementation
+- Swappable implementations (Claude, Anthropic API, OpenAI, etc.)
+
+**View-Based Pattern**:
+- `AnalysisView` interface (`pkg/pluginsdk`) - Plugin contract for providing analysis views
+- `Analysis` type (`internal/domain`) - Generic analysis results (view-agnostic)
+- `AnalysisService.AnalyzeView()` - Analyzes any view implementing AnalysisView
+
+**Plugin Implementation**:
+- Plugins implement `AnalysisView` to provide views of their events
+- Example: `SessionView` in Claude Code plugin provides session-based views
+- Framework analyzes any view using `AnalysisService.AnalyzeView()`
+- Plugins control how their events are formatted for LLM analysis
+
+**Storage**:
+- Generic `analyses` table stores all analysis types
+- View metadata stored as JSON (flexible, plugin-specific)
+- Migrated from old `session_analyses` table (Phase 3)
+
+### Backward Compatibility
+
+**SessionAnalysis Type**:
+- Exists in `internal/domain` for backward compatibility with internal code
+- Wraps the generic `Analysis` type (converts SessionAnalysis ↔ Analysis)
+- New features should use `Analysis + AnalysisView` pattern
+- Maintained for internal framework code written before refactoring
+
+**Repository Interface**:
+- Generic methods: `SaveGenericAnalysis()`, `FindAnalysisByViewID()` (primary)
+- Session methods: `SaveAnalysis()`, `GetAnalysisBySessionID()` (compatibility layer)
+- Both interfaces operate on same underlying `analyses` table
+
+### Architecture Flow
+
+```
+Plugin (e.g., claude-code)
+  ↓ implements
+AnalysisView interface (SDK)
+  ↓ provides to
+AnalysisService.AnalyzeView()
+  ↓ uses
+LLM interface (domain)
+  ↓ implemented by
+ClaudeCodeLLM (infra)
+  ↓ stores
+Analysis (generic, domain)
+  ↓ persisted in
+AnalysisRepository
+  ↓ stores as
+analyses table (SQLite)
+```
+
+### Benefits
+
+- **Plugin-Agnostic**: Framework has no knowledge of "sessions" or other plugin entities
+- **Extensible**: Any plugin can leverage analysis (Task Manager, Gmail, Calendar)
+- **Swappable LLM**: Easy to swap LLM providers (Claude CLI → Anthropic API)
+- **Cross-Plugin Analysis**: Future support for analyzing events from multiple plugins
+- **Clean Architecture**: Plugins own views, framework provides capability
+
+---
+
 ## Development Workflow
 
 **Note**: When the user refers to "workflow", they mean these CLAUDE.md instructions.
