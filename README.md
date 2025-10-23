@@ -19,6 +19,7 @@ DarwinFlow is a lightweight logging system that automatically captures all Claud
   - **Self-Contained Plugins**: All plugin logic isolated in plugin packages
   - **Capability-Driven**: Entities implement capabilities (IExtensible, ITrackable, IHasContext, etc.)
   - **Core Plugins**: Claude Code sessions built-in, extensible for custom entity types
+  - **Plugin Event Bus**: Cross-plugin communication via publish/subscribe pattern
 - **Log Viewer**: Query and explore captured events with `dw logs` command
 - **Event Sourcing**: Immutable event log enabling replay and analysis
 - **SQLite Storage**: Fast, file-based storage with full-text search
@@ -153,6 +154,70 @@ dw task-manager update task-123 --status done
 ```
 
 The task-manager plugin demonstrates real-time event streaming using fsnotify to watch task files and emit events when tasks are created, updated, or deleted. These events are visible in real-time in the TUI session list.
+
+### Plugin Event Bus
+
+DarwinFlow includes a powerful **Plugin Event Bus** for cross-plugin communication using publish/subscribe patterns. Plugins can emit events and subscribe to events from other plugins, enabling rich integrations and workflows.
+
+**Key Features:**
+- **Publish/Subscribe**: Plugins publish events; other plugins subscribe with filters
+- **Event Filtering**: Subscribe to specific event types, labels, or sources
+- **Async Delivery**: Non-blocking event delivery with 30-second timeout per subscriber
+- **Thread-Safe**: Concurrent publish/subscribe operations fully supported
+- **Event Persistence**: Optional SQLite persistence for replay and audit trails
+- **Event Replay**: Late-subscribing plugins can replay historical events
+
+**Event Structure:**
+```go
+type BusEvent struct {
+    ID        string                 // Unique event ID
+    Type      string                 // e.g., "gmail.email_received"
+    Source    string                 // Plugin ID that emitted the event
+    Timestamp time.Time
+    Labels    map[string]string      // Filterable labels
+    Metadata  map[string]interface{} // Additional metadata
+    Payload   []byte                 // JSON-encoded payload
+}
+```
+
+**Example Use Cases:**
+- **Gmail → Telegram**: Gmail plugin detects school event emails → Telegram bot sends notification
+- **Calendar → Multiple Plugins**: Calendar event created → notifications, task creation, reminders
+- **Cross-Plugin Workflows**: Build complex workflows across plugin boundaries
+
+**Example: Publishing Events**
+```go
+// Plugin publishes an event
+event, _ := pluginsdk.NewBusEvent("gmail.email_received", "gmail-plugin", emailData)
+event.Labels["category"] = "school_notification"
+event.Labels["priority"] = "high"
+
+eventBus.Publish(ctx, event)
+```
+
+**Example: Subscribing to Events**
+```go
+// Plugin subscribes to events with filtering
+filter := pluginsdk.EventFilter{
+    TypePattern: "gmail.*",           // All Gmail events
+    Labels: map[string]string{
+        "category": "school_notification",
+    },
+}
+
+handler := &MyEventHandler{}
+subscriptionID, _ := eventBus.Subscribe(filter, handler)
+```
+
+**Event Filtering:**
+- **Type Patterns**: Glob patterns (`gmail.*`, `*.event_detected`) or exact matches
+- **Label Matching**: Filter by label key-value pairs (subset matching)
+- **Source Plugin**: Filter events by originating plugin
+
+**Persistence & Replay:**
+- Events are optionally stored in SQLite for durability
+- Late-subscribing plugins can replay historical events
+- Useful for rebuilding state or catching up on missed events
 
 **Architecture Documentation:**
 - See `docs/arch-generated.md` for complete dependency graph

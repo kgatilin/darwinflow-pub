@@ -63,9 +63,13 @@ func uiCommand(args []string) {
 	// Create plugin registry
 	registry := app.NewPluginRegistry(logger)
 
+	// Create event bus for cross-plugin communication
+	busRepo := infra.NewSQLiteEventBusRepositoryFromRepo(repo)
+	eventBus := infra.NewInMemoryEventBus(busRepo)
+
 	// Register built-in plugins
 	workingDir, _ := os.Getwd()
-	if err := RegisterBuiltInPlugins(registry, analysisService, logsService, logger, setupService, configLoaderForPlugin, *dbPath, workingDir); err != nil {
+	if err := RegisterBuiltInPlugins(registry, analysisService, logsService, logger, setupService, configLoaderForPlugin, *dbPath, workingDir, eventBus); err != nil {
 		fmt.Fprintf(os.Stderr, "Error registering built-in plugins: %v\n", err)
 		os.Exit(1)
 	}

@@ -26,10 +26,12 @@ type TaskManagerPlugin struct {
 	workingDir  string
 	tasksDir    string
 	fileWatcher *FileWatcher
+	eventBus    pluginsdk.EventBus
 }
 
 // NewTaskManagerPlugin creates a new task manager plugin
-func NewTaskManagerPlugin(logger pluginsdk.Logger, workingDir string) (*TaskManagerPlugin, error) {
+// eventBus is passed as interface{} to allow cmd package to avoid importing pluginsdk.
+func NewTaskManagerPlugin(logger pluginsdk.Logger, workingDir string, eventBus interface{}) (*TaskManagerPlugin, error) {
 	tasksDir := filepath.Join(workingDir, ".darwinflow", "tasks")
 
 	fileWatcher, err := NewFileWatcher(logger, tasksDir)
@@ -37,11 +39,20 @@ func NewTaskManagerPlugin(logger pluginsdk.Logger, workingDir string) (*TaskMana
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
+	// Type assert eventBus to pluginsdk.EventBus
+	var eb pluginsdk.EventBus
+	if eventBus != nil {
+		if bus, ok := eventBus.(pluginsdk.EventBus); ok {
+			eb = bus
+		}
+	}
+
 	return &TaskManagerPlugin{
 		logger:      logger,
 		workingDir:  workingDir,
 		tasksDir:    tasksDir,
 		fileWatcher: fileWatcher,
+		eventBus:    eb,
 	}, nil
 }
 

@@ -117,7 +117,7 @@ func newTestEmitEventCommand() *claude_code.EmitEventCommand {
 			},
 		},
 	}
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader,  "", nil)
 	return claude_code.NewEmitEventCommand(plugin)
 }
 
@@ -134,7 +134,7 @@ func newTestCommandContext(t *testing.T, stdin io.Reader, stdout io.Writer) *moc
 // This command is kept for backward compatibility and simply logs a warning
 func TestLogCommand_Execute(t *testing.T) {
 	ctx := context.Background()
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil,  "", nil)
 
 	// Get the command from the plugin's GetCommands() - this is the proper way to test
 	commands := plugin.GetCommands()
@@ -208,7 +208,7 @@ func TestInitCommand_Execute(t *testing.T) {
 
 			ctx := context.Background()
 			plugin := claude_code.NewClaudeCodePlugin(
-				nil, nil, &mockLogger{}, tt.setupService, nil, "/tmp/test.db",
+				nil, nil, &mockLogger{}, tt.setupService, nil, "/tmp/test.db", nil,
 			)
 
 			// Get init command from plugin
@@ -303,7 +303,7 @@ func TestEmitEventCommand_parseAsHookInput(t *testing.T) {
 					},
 				},
 			}
-			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
+			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader,  "", nil)
 
 			// Create emit event command
 			emitCmd := claude_code.NewEmitEventCommand(plugin)
@@ -376,6 +376,7 @@ func TestSessionSummaryCommand_Execute_WithSessionID(t *testing.T) {
 				nil,
 				nil,
 				"",
+				nil,
 			)
 
 			// Get session summary command from plugin
@@ -444,6 +445,7 @@ func TestSessionSummaryCommand_Execute_WithLastFlag(t *testing.T) {
 		nil,
 		nil,
 		"",
+		nil,
 	)
 
 	// Get session summary command from plugin
@@ -484,7 +486,7 @@ func TestSessionSummaryCommand_Execute_MissingArguments(t *testing.T) {
 	ctx := context.Background()
 	logger := &mockLogger{}
 
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, logger, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, logger, nil, nil,  "", nil)
 
 	// Get session summary command from plugin
 	commands := plugin.GetCommands()
@@ -571,6 +573,7 @@ func TestAutoSummaryExecCommand_Execute(t *testing.T) {
 				nil,
 				tt.configLoader,
 				"",
+				nil,
 			)
 
 			// Get auto summary exec command from plugin
@@ -675,6 +678,7 @@ func TestAutoSummaryCommand_Execute(t *testing.T) {
 				nil,
 				tt.configLoader,
 				"",
+				nil,
 			)
 
 			// Get auto summary command from plugin
@@ -714,7 +718,7 @@ func TestAutoSummaryCommand_Execute(t *testing.T) {
 // TestAutoSummaryCommand_Execute_EmptyStdin tests handling of empty stdin
 func TestAutoSummaryCommand_Execute_EmptyStdin(t *testing.T) {
 	ctx := context.Background()
-	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil, "")
+	plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, nil,  "", nil)
 
 	// Get auto summary command from plugin
 	commands := plugin.GetCommands()
@@ -767,7 +771,7 @@ func TestInitCommand_WithHookInstallationWarning(t *testing.T) {
 
 	ctx := context.Background()
 	plugin := claude_code.NewClaudeCodePlugin(
-		nil, nil, &mockLogger{}, &mockSetupService{}, nil, "/tmp/test.db",
+		nil, nil, &mockLogger{}, &mockSetupService{}, nil, "/tmp/test.db", nil,
 	)
 
 	// Get init command from plugin
@@ -824,6 +828,7 @@ func TestAutoSummaryExecCommand_DefaultPrompt(t *testing.T) {
 		nil,
 		configLoader,
 		"",
+		nil,
 	)
 
 	// Get auto summary exec command from plugin
@@ -1342,7 +1347,7 @@ func TestEmitEventCommand_FileLogging(t *testing.T) {
 			}
 
 			// Create plugin and command
-			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
+			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader,  "", nil)
 			cmd := claude_code.NewEmitEventCommand(plugin)
 
 			// Create mock context with temp directory
@@ -1440,7 +1445,7 @@ func TestEmitEventCommand_LogLevelFiltering(t *testing.T) {
 			}
 
 			// Create plugin and command
-			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader, "")
+			plugin := claude_code.NewClaudeCodePlugin(nil, nil, &mockLogger{}, nil, configLoader,  "", nil)
 			cmd := claude_code.NewEmitEventCommand(plugin)
 
 			// Create mock context

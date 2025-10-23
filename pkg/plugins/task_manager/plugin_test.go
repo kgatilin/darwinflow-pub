@@ -39,7 +39,7 @@ func TestNewTaskManagerPlugin(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestGetCapabilities(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestGetEntityTypes(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestQueryTasks(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestCreateCommandExecution(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestEventStreamStartStop(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -274,7 +274,7 @@ func TestEventEmissionOnTaskCreation(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestListCommand(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestUpdateCommand(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestInitCommand(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
@@ -483,7 +483,7 @@ func TestUpdateEntity(t *testing.T) {
 	dir := t.TempDir()
 	logger := &MockLogger{}
 
-	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir)
+	plugin, err := task_manager.NewTaskManagerPlugin(logger, dir, nil)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}

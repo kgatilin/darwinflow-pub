@@ -27,6 +27,20 @@
 - Full-text search support
 - Event versioning and migration
 
+**SQLiteEventBusRepository**:
+- Implements `domain.EventBusRepository`
+- Persists plugin event bus events to SQLite
+- Methods: `StoreEvent`, `GetEvents`, `GetEventsSince`
+- Separate `bus_events` table with indexes on type, source, timestamp
+- Supports event replay for late-subscribing plugins
+
+**InMemoryEventBus**:
+- Implements `pluginsdk.EventBus`
+- Thread-safe in-memory publish/subscribe event bus
+- Async event delivery with 30-second timeout per handler
+- Optional persistence via `SQLiteEventBusRepository`
+- Methods: `Publish`, `Subscribe`, `Unsubscribe`, `Replay`
+
 #### Configuration
 
 **ConfigLoader**:
@@ -157,6 +171,113 @@ Event versioning handled in:
 - `Initialize()` - Creates schema
 - Version detection in `Save()`
 - Backward compatibility ensured
+
+---
+
+## Plugin Event Bus Implementation
+
+### InMemoryEventBus
+
+**Purpose**: Thread-safe in-memory implementation of the plugin event bus for cross-plugin communication.
+
+**Key Features**:
+- Publish/subscribe pattern for event routing
+- Async event delivery (non-blocking publishers)
+- Per-handler timeout (30 seconds)
+- Glob pattern matching for event type filters
+- Label-based filtering (subset matching)
+- Optional persistence via repository
+- Event replay from historical data
+
+**Thread Safety**:
+- RWMutex protects subscription map
+- Read locks during publish (concurrent publishers)
+- Write locks during subscribe/unsubscribe
+- Handlers run in separate goroutines
+
+**Event Delivery**:
+```go
+// Publisher publishes and returns immediately
+bus.Publish(ctx, event)
+
+// Events delivered asynchronously to each matching subscriber
+// Each handler has 30-second timeout
+// Handler errors don't affect other subscribers
+```
+
+**Filter Matching**:
+- Type pattern: Glob matching using `filepath.Match`
+  - `gmail.*` matches `gmail.email_received`
+  - `*.event` matches `calendar.event`
+  - Exact match if no wildcards
+- Source plugin: Exact string match
+- Labels: All filter labels must exist in event with matching values
+
+### SQLiteEventBusRepository
+
+**Purpose**: Persist event bus events to SQLite for replay and audit trails.
+
+**Schema**:
+```sql
+CREATE TABLE bus_events (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    labels TEXT,      -- JSON
+    metadata TEXT,    -- JSON
+    payload BLOB
+);
+
+CREATE INDEX idx_bus_events_type ON bus_events(type);
+CREATE INDEX idx_bus_events_source ON bus_events(source);
+CREATE INDEX idx_bus_events_timestamp ON bus_events(timestamp);
+```
+
+**Query Capabilities**:
+- Filter by type pattern (LIKE with % for globs)
+- Filter by source plugin (exact match)
+- Filter by timestamp (since time for replay)
+- Label filtering (post-query, after SQL filtering)
+- Order by timestamp ASC (for replay)
+- Optional limit
+
+**Event Replay**:
+```go
+// Replay events since timestamp for late-subscribing plugin
+events, err := repo.GetEventsSince(ctx, sinceTime, filter, limit)
+for _, event := range events {
+    handler.HandleEvent(ctx, event)
+}
+```
+
+**Integration**:
+- Shared database connection with `SQLiteEventRepository`
+- Created via `NewSQLiteEventBusRepositoryFromRepo(eventRepo)`
+- Separate table (`bus_events`) from main events
+- Optional initialization via `Initialize()`
+
+### Usage Pattern
+
+**Bootstrap**:
+```go
+// Create event bus with optional persistence
+eventBusRepo := infra.NewSQLiteEventBusRepositoryFromRepo(eventRepo)
+eventBusRepo.Initialize(ctx)
+
+eventBus := infra.NewInMemoryEventBus(eventBusRepo)
+```
+
+**Plugin Access**:
+- Event bus passed to plugins during initialization
+- Plugins can publish and subscribe immediately
+- Framework manages lifecycle (no cleanup needed)
+
+**Persistence Behavior**:
+- If repository is provided: Events stored on publish
+- Store errors don't fail publish (in-memory delivery continues)
+- Replay available for late subscribers
+- If repository is nil: Pure in-memory mode (no persistence)
 
 ---
 

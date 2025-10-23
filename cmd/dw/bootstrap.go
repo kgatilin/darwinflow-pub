@@ -78,10 +78,17 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		workingDir = "."
 	}
 
-	// 8. Create plugin registry
+	// 8. Create event bus - share the same database connection
+	// Note: The bus_events table is created in SQLiteEventRepository.Initialize()
+	// So we just create the in-memory event bus with the shared repo
+	// Create a separate bus repo that wraps the DB connection
+	busRepo := infra.NewSQLiteEventBusRepositoryFromRepo(repo)
+	eventBus := infra.NewInMemoryEventBus(busRepo)
+
+	// 9. Create plugin registry
 	pluginRegistry := app.NewPluginRegistry(logger)
 
-	// 9. Register built-in plugins (cmd layer handles plugin imports)
+	// 10. Register built-in plugins (cmd layer handles plugin imports)
 	if err := RegisterBuiltInPlugins(
 		pluginRegistry,
 		analysisService,
@@ -91,6 +98,7 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 		configLoader,
 		dbPath,
 		workingDir,
+		eventBus,
 	); err != nil {
 		return nil, fmt.Errorf("failed to register built-in plugins: %w", err)
 	}

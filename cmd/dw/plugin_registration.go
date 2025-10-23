@@ -158,6 +158,7 @@ func RegisterBuiltInPlugins(
 	configLoader app.ConfigLoader,
 	dbPath string,
 	workingDir string,
+	eventBus interface{},
 ) error {
 	// Create plugin context (SDK logger adapter)
 	sdkLogger := &loggerAdapter{inner: logger}
@@ -178,6 +179,7 @@ func RegisterBuiltInPlugins(
 		setupAdapter,    // Adapter to claude_code.SetupService
 		configAdapter,   // Adapter to claude_code.ConfigLoader
 		dbPath,
+		eventBus,        // Event bus for cross-plugin communication
 	)
 
 	if err := registry.RegisterPlugin(claudePlugin); err != nil {
@@ -185,7 +187,7 @@ func RegisterBuiltInPlugins(
 	}
 
 	// Register task-manager plugin (Phase 4 example plugin)
-	taskPlugin, err := task_manager.NewTaskManagerPlugin(sdkLogger, workingDir)
+	taskPlugin, err := task_manager.NewTaskManagerPlugin(sdkLogger, workingDir, eventBus)
 	if err != nil {
 		return fmt.Errorf("failed to create task-manager plugin: %w", err)
 	}

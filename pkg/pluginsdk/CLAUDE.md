@@ -29,6 +29,7 @@
 - `IEntityUpdater` - Updates entities
 - `ICommandProvider` - Provides CLI commands
 - `IEventEmitter` - Emits events for event sourcing
+- `EventBus` - Cross-plugin communication (publish/subscribe)
 
 **Entity Capabilities** (optional interfaces):
 - `IExtensible` - **REQUIRED** (GetID, GetType, GetCapabilities, GetField, GetAllFields)
@@ -123,6 +124,229 @@ func (e *MyEntity) GetCapabilities() []string {
     return []string{"trackable", "contextual", "schedulable"}
 }
 ```
+
+---
+
+## Plugin Event Bus
+
+The **EventBus** enables cross-plugin communication through publish/subscribe patterns. Plugins can emit events and subscribe to events from other plugins with flexible filtering.
+
+### EventBus Interface
+
+```go
+type EventBus interface {
+    // Publish sends an event to all matching subscribers
+    Publish(ctx context.Context, event BusEvent) error
+
+    // Subscribe registers a handler for events matching the filter
+    Subscribe(filter EventFilter, handler EventHandler) (string, error)
+
+    // Unsubscribe removes a subscription by its ID
+    Unsubscribe(subscriptionID string) error
+}
+```
+
+### BusEvent Structure
+
+Events carry metadata, labels for filtering, and a JSON-encoded payload:
+
+```go
+type BusEvent struct {
+    ID        string                 // Unique event ID (UUID)
+    Type      string                 // Event type (e.g., "gmail.email_received")
+    Source    string                 // Plugin ID that emitted this event
+    Timestamp time.Time
+    Labels    map[string]string      // Filterable key-value pairs
+    Metadata  map[string]interface{} // Additional context
+    Payload   []byte                 // JSON-encoded event data
+}
+```
+
+**Creating Events**:
+```go
+// Create a new event with JSON-encoded payload
+event, err := pluginsdk.NewBusEvent(
+    "gmail.email_received",  // Event type
+    "gmail-plugin",          // Source plugin
+    emailData,               // Payload (will be JSON-marshaled)
+)
+
+// Add labels for filtering
+event.Labels["category"] = "school_notification"
+event.Labels["priority"] = "high"
+
+// Publish the event
+eventBus.Publish(ctx, event)
+```
+
+### Event Filtering
+
+Subscribe to events with flexible filtering criteria:
+
+```go
+type EventFilter struct {
+    TypePattern  string            // Glob pattern or exact match
+    Labels       map[string]string // Required label key-value pairs
+    SourcePlugin string            // Filter by source plugin ID
+}
+```
+
+**Filter Examples**:
+```go
+// Subscribe to all Gmail events
+filter := EventFilter{
+    TypePattern: "gmail.*",
+}
+
+// Subscribe to school notifications from Gmail
+filter := EventFilter{
+    TypePattern: "gmail.*",
+    Labels: map[string]string{
+        "category": "school_notification",
+    },
+}
+
+// Subscribe to events from specific plugin
+filter := EventFilter{
+    TypePattern: "*",
+    SourcePlugin: "gmail-plugin",
+}
+```
+
+**Type Pattern Matching**:
+- `gmail.*` - All events starting with "gmail."
+- `*.event_detected` - All events ending with ".event_detected"
+- `gmail.email_received` - Exact match
+- `*` - All events
+
+### Event Handlers
+
+Implement `EventHandler` to process events:
+
+```go
+type EventHandler interface {
+    HandleEvent(ctx context.Context, event BusEvent) error
+}
+```
+
+**Example Handler**:
+```go
+type TelegramNotifier struct {
+    botAPI *telegram.Bot
+}
+
+func (h *TelegramNotifier) HandleEvent(ctx context.Context, event BusEvent) error {
+    // Decode the payload
+    var emailData EmailPayload
+    if err := json.Unmarshal(event.Payload, &emailData); err != nil {
+        return err
+    }
+
+    // Send notification
+    message := fmt.Sprintf("New %s: %s",
+        event.Labels["category"],
+        emailData.Subject)
+    return h.botAPI.SendMessage(ctx, message)
+}
+```
+
+### Complete Usage Example
+
+```go
+// Plugin initialization
+type MyPlugin struct {
+    eventBus pluginsdk.EventBus
+}
+
+func (p *MyPlugin) Init(ctx context.Context, pluginCtx pluginsdk.PluginContext, eventBus pluginsdk.EventBus) error {
+    p.eventBus = eventBus
+
+    // Subscribe to events
+    filter := pluginsdk.EventFilter{
+        TypePattern: "gmail.*",
+        Labels: map[string]string{
+            "category": "school_notification",
+        },
+    }
+
+    handler := &TelegramNotifier{botAPI: p.bot}
+    subscriptionID, err := eventBus.Subscribe(filter, handler)
+    if err != nil {
+        return err
+    }
+
+    // Store subscription ID for cleanup
+    p.subscriptionID = subscriptionID
+    return nil
+}
+
+// Publishing events
+func (p *MyPlugin) processEmail(email Email) error {
+    // Create event
+    event, err := pluginsdk.NewBusEvent(
+        "gmail.email_received",
+        "gmail-plugin",
+        email,
+    )
+    if err != nil {
+        return err
+    }
+
+    // Add labels
+    event.Labels["category"] = email.Category
+    event.Labels["priority"] = email.Priority
+
+    // Publish
+    return p.eventBus.Publish(context.Background(), event)
+}
+```
+
+### Key Features
+
+**Async Delivery**:
+- Events are delivered to subscribers asynchronously (non-blocking)
+- Each handler has a 30-second timeout
+- Publisher doesn't wait for handlers to complete
+
+**Thread-Safe**:
+- Concurrent Publish/Subscribe/Unsubscribe operations are safe
+- Multiple goroutines can publish simultaneously
+- Handlers may be called concurrently (must be thread-safe)
+
+**Event Persistence** (Optional):
+- Events can be persisted to SQLite for replay
+- Late-subscribing plugins can catch up on historical events
+- Useful for rebuilding state or audit trails
+
+**Event Replay**:
+- Replay events from a specific timestamp
+- Useful when plugins start after events were published
+- Filter replay by event type, labels, or source
+
+### Best Practices
+
+1. **Event Type Naming**: Use dot notation: `<plugin>.<event_name>`
+   - Examples: `gmail.email_received`, `calendar.event_created`
+
+2. **Label Design**: Use labels for filtering, metadata for context
+   - Labels: Categorical values for routing (category, priority, type)
+   - Metadata: Additional context not used for filtering
+
+3. **Payload Schema**: Document your event payload structures
+   - Use consistent JSON schemas across event types
+   - Version your payloads if structure may change
+
+4. **Error Handling**: Handlers should handle errors gracefully
+   - Don't crash on unexpected payloads
+   - Log errors but continue processing
+
+5. **Thread Safety**: Handlers may be called concurrently
+   - Use mutexes for shared state
+   - Prefer immutable data structures
+
+6. **Cleanup**: Unsubscribe when plugin shuts down
+   - Store subscription IDs
+   - Call Unsubscribe in cleanup/shutdown hooks
 
 ---
 

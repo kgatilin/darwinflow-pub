@@ -159,6 +159,28 @@ func (r *SQLiteEventRepository) Initialize(ctx context.Context) error {
 	// Attempt FTS5, but don't fail if unavailable
 	_, _ = r.db.ExecContext(ctx, ftsSchema)
 
+	// Step 6: Create bus_events table for event bus persistence
+	busEventsSchema := `
+		CREATE TABLE IF NOT EXISTS bus_events (
+			id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			source TEXT NOT NULL,
+			timestamp INTEGER NOT NULL,
+			labels TEXT,
+			metadata TEXT,
+			payload BLOB
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_bus_events_type ON bus_events(type);
+		CREATE INDEX IF NOT EXISTS idx_bus_events_source ON bus_events(source);
+		CREATE INDEX IF NOT EXISTS idx_bus_events_timestamp ON bus_events(timestamp);
+	`
+
+	_, err = r.db.ExecContext(ctx, busEventsSchema)
+	if err != nil {
+		return fmt.Errorf("failed to create bus_events table: %w", err)
+	}
+
 	return nil
 }
 

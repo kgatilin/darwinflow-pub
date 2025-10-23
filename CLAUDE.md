@@ -11,6 +11,7 @@
 - **SQLite Storage**: Event storage with full-text search
 - **AI Analysis**: Session analysis with configurable prompts
 - **Interactive TUI**: Browse sessions, view analyses, export to markdown
+- **Plugin Event Bus**: Cross-plugin communication via publish/subscribe (all plugins have access)
 
 ### Plugin Architecture
 

@@ -20,6 +20,7 @@ type ClaudeCodePlugin struct {
 	setupService    SetupService
 	configLoader    ConfigLoader
 	hookInputParser HookInputParser
+	eventBus        pluginsdk.EventBus
 	dbPath          string
 }
 
@@ -27,6 +28,7 @@ type ClaudeCodePlugin struct {
 //
 // For built-in plugins, we inject service implementations.
 // External plugins would receive only PluginContext.
+// eventBus is passed as interface{} to allow cmd package to avoid importing pluginsdk.
 func NewClaudeCodePlugin(
 	analysisService AnalysisService,
 	logsService LogsService,
@@ -34,7 +36,16 @@ func NewClaudeCodePlugin(
 	setupService SetupService,
 	configLoader ConfigLoader,
 	dbPath string,
+	eventBus interface{},
 ) *ClaudeCodePlugin {
+	// Type assert eventBus to pluginsdk.EventBus
+	var eb pluginsdk.EventBus
+	if eventBus != nil {
+		if bus, ok := eventBus.(pluginsdk.EventBus); ok {
+			eb = bus
+		}
+	}
+
 	return &ClaudeCodePlugin{
 		analysisService: analysisService,
 		logsService:     logsService,
@@ -42,6 +53,7 @@ func NewClaudeCodePlugin(
 		setupService:    setupService,
 		configLoader:    configLoader,
 		hookInputParser: newHookInputParser(), // Plugin creates its own parser
+		eventBus:        eb,
 		dbPath:          dbPath,
 	}
 }

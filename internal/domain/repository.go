@@ -28,6 +28,19 @@ type EventRepository interface {
 // Note: EventQuery, QueryResult, and RawQueryExecutor are now defined in pkg/pluginsdk
 // to serve as the single source of truth. Import from pluginsdk to use them.
 
+// EventBusRepository defines the interface for persisting and retrieving event bus events.
+// This provides optional persistence for the in-memory event bus.
+type EventBusRepository interface {
+	// StoreEvent persists a bus event to storage
+	StoreEvent(ctx context.Context, event pluginsdk.BusEvent) error
+
+	// GetEvents retrieves events matching the filter criteria
+	GetEvents(ctx context.Context, filter pluginsdk.EventFilter, limit int) ([]pluginsdk.BusEvent, error)
+
+	// GetEventsSince retrieves events since a given timestamp for replay
+	GetEventsSince(ctx context.Context, since interface{}, filter pluginsdk.EventFilter, limit int) ([]pluginsdk.BusEvent, error)
+}
+
 // AnalysisRepository defines the interface for persisting and retrieving session analyses.
 // NOTE: This interface exists in domain for backward compatibility with internal code.
 // Analysis storage is semantically owned by the claude-code plugin.
