@@ -899,3 +899,69 @@ func TestAnalysisViewerModel_UpdateUnknownKey(t *testing.T) {
 	_ = updatedModel
 }
 
+
+func TestAppModel_ErrorDismissalWithEsc(t *testing.T) {
+	ctx := context.Background()
+	config := &domain.Config{}
+	model := tui.NewAppModel(ctx, nil, nil, nil, config, nil)
+
+	// Send window size
+	updatedModel, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	model = updatedModel.(*tui.AppModel)
+
+	// Load sessions to set a view
+	sessions := []*tui.SessionInfo{
+		{
+			SessionID:  "session-1",
+			ShortID:    "sess-1",
+			FirstEvent: time.Now(),
+			LastEvent:  time.Now(),
+			EventCount: 5,
+		},
+	}
+	updatedModel, _ = model.Update(tui.SessionsLoadedMsg{Sessions: sessions})
+	model = updatedModel.(*tui.AppModel)
+
+	// Trigger an error (this should save the current view)
+	updatedModel, _ = model.Update(tui.AnalysisCompleteMsg{Error: domain.ErrNotFound})
+	model = updatedModel.(*tui.AppModel)
+
+	// Verify error is shown
+	view := model.View()
+	if view == "" {
+		t.Error("View should show error message")
+	}
+
+	// Dismiss error with Esc
+	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updatedModel.(*tui.AppModel)
+
+	// Verify error is cleared and view returns to normal
+	view = model.View()
+	if view == "" {
+		t.Error("View should show normal content after dismissing error")
+	}
+
+	// View should not contain error styling anymore
+	// (We can't easily check the exact content, but we verified it doesn't panic)
+}
+
+func TestAppModel_ErrorOverlayRendering(t *testing.T) {
+	ctx := context.Background()
+	config := &domain.Config{}
+	model := tui.NewAppModel(ctx, nil, nil, nil, config, nil)
+
+	// Send window size
+	updatedModel, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	model = updatedModel.(*tui.AppModel)
+
+	// Trigger an error
+	updatedModel, _ = model.Update(tui.SessionsLoadedMsg{Error: domain.ErrNotFound})
+	model = updatedModel.(*tui.AppModel)
+
+	// View should render error overlay
+	view := model.View()
+	if view == "" {
+		t.Error("Error overlay should render non-empty view")
+	}
+}

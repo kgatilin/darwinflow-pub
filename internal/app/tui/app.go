@@ -32,10 +32,11 @@ type AppModel struct {
 	config          *domain.Config
 
 	// State
-	currentView ViewState
-	sessions    []*SessionInfo
-	loading     bool
-	err         error
+	currentView  ViewState
+	previousView ViewState // Track previous view for error dismissal
+	sessions     []*SessionInfo
+	loading      bool
+	err          error
 
 	// Sub-models
 	sessionList     SessionListModel
@@ -177,6 +178,12 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		// Handle Esc to dismiss error overlay
+		if m.err != nil && msg.String() == "esc" {
+			m.err = nil
+			m.currentView = m.previousView
+			return m, nil
+		}
 
 	case EventArrivedMsg:
 		// Increment unread event counter
@@ -198,6 +205,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionsLoadedMsg:
 		m.loading = false
 		if msg.Error != nil {
+			m.previousView = m.currentView
 			m.err = msg.Error
 			return m, m.listenForNextEvent()
 		}
@@ -290,6 +298,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Get the analysis for this session (using generic analysis)
 		analyses, err := m.analysisService.GetAnalysesByViewID(m.ctx, msg.SessionID)
 		if err != nil || len(analyses) == 0 {
+			m.previousView = m.currentView
 			m.err = fmt.Errorf("no analysis found for session")
 			return m, nil
 		}
@@ -308,6 +317,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Get the logs for this session
 		logs, err := m.logsService.ListRecentLogs(m.ctx, 0, 0, msg.SessionID, true)
 		if err != nil || len(logs) == 0 {
+			m.previousView = m.currentView
 			m.err = fmt.Errorf("no logs found for session")
 			return m, nil
 		}
@@ -334,6 +344,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AnalysisCompleteMsg:
 		m.loading = false
 		if msg.Error != nil {
+			m.previousView = m.currentView
 			m.err = msg.Error
 		} else {
 			// Set flag to show detail view after refresh
@@ -346,6 +357,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SaveCompleteMsg:
 		m.loading = false
 		if msg.Error != nil {
+			m.previousView = m.currentView
 			m.err = msg.Error
 		} else {
 			// Success message handled in view
@@ -398,15 +410,9 @@ func (m *AppModel) updateCurrentView(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the current view
 func (m *AppModel) View() string {
+	// Show error overlay if error is set
 	if m.err != nil {
-		// Wrap error text to terminal width (with some padding for border)
-		maxWidth := m.width - 10
-		if maxWidth < 40 {
-			maxWidth = 40
-		}
-		errText := fmt.Sprintf("Error: %v\n\nPress ctrl+c to quit", m.err)
-		wrappedErr := lipgloss.NewStyle().Width(maxWidth).Render(errText)
-		return errorStyle.Render(wrappedErr)
+		return m.renderErrorOverlay()
 	}
 
 	if m.loading {
@@ -425,6 +431,59 @@ func (m *AppModel) View() string {
 	default:
 		return "Unknown view"
 	}
+}
+
+// renderErrorOverlay renders the error message as a centered overlay
+func (m *AppModel) renderErrorOverlay() string {
+	// Calculate max width for error message (leave padding for border)
+	maxWidth := m.width - 12
+	if maxWidth < 40 {
+		maxWidth = 40
+	}
+	if maxWidth > 80 {
+		maxWidth = 80
+	}
+
+	// Build error message with header and instructions
+	errorHeader := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("196")).
+		Render("Error")
+
+	errorBody := lipgloss.NewStyle().
+		Width(maxWidth).
+		Render(m.err.Error())
+
+	errorFooter := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Italic(true).
+		Render("Press Esc to go back")
+
+	// Combine all parts with spacing
+	errorContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		errorHeader,
+		"",
+		errorBody,
+		"",
+		errorFooter,
+	)
+
+	// Apply border and padding
+	errorBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("196")).
+		Padding(1, 2).
+		Render(errorContent)
+
+	// Center the error box on screen
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		errorBox,
+	)
 }
 
 // Command functions
