@@ -60,6 +60,13 @@ func analyzeCmd(args []string) {
 	}
 	defer repo.Close()
 
+	// Initialize database schema (including migration from old databases)
+	if err := repo.Initialize(ctx); err != nil {
+		logger.Error("Failed to initialize database schema: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to initialize database schema: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Load config
 	logger.Debug("Loading configuration")
 	configLoader := infra.NewConfigLoader(logger)

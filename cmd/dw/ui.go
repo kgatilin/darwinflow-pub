@@ -51,6 +51,13 @@ func uiCommand(args []string) {
 	}
 	defer repo.Close()
 
+	// Initialize database schema (including migration from old databases)
+	ctx := context.Background()
+	if err := repo.Initialize(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing database: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Create services
 	logsService := app.NewLogsService(repo, repo)
 	llm := infra.NewClaudeCodeLLMWithConfig(logger, config)
@@ -82,7 +89,6 @@ func uiCommand(args []string) {
 	}
 
 	// Create event dispatcher for real-time event streaming
-	ctx := context.Background()
 	pluginCtx := app.NewPluginContext(logger, *dbPath, "", repo)
 	eventDispatcher := app.NewEventDispatcher(repo, logger, pluginCtx)
 

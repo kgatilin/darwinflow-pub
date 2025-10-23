@@ -72,9 +72,15 @@ func handleLogs(args []string) {
 	}
 	defer repo.Close()
 
+	// Initialize database schema (including migration from old databases)
+	ctx := context.Background()
+	if err := repo.Initialize(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Failed to initialize database: %v\n", err)
+		os.Exit(1)
+	}
+
 	service := app.NewLogsService(repo, repo)
 	handler := app.NewLogsCommandHandler(service, os.Stdout)
-	ctx := context.Background()
 
 	// Handle arbitrary SQL query
 	if opts.Query != "" {
