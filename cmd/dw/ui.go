@@ -9,6 +9,8 @@ import (
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/app/tui"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
+	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
 func uiCommand(args []string) {
@@ -53,6 +55,11 @@ func uiCommand(args []string) {
 	logsService := app.NewLogsService(repo, repo)
 	llm := infra.NewClaudeCodeLLMWithConfig(logger, config)
 	analysisService := app.NewAnalysisService(repo, repo, logsService, llm, logger, config)
+
+	// Set the session view factory using the claude_code plugin
+	analysisService.SetSessionViewFactory(func(sessionID string, events []pluginsdk.Event) pluginsdk.AnalysisView {
+		return claude_code.NewSessionView(sessionID, events)
+	})
 
 	// Create setup service
 	setupService := app.NewSetupService(repo, logger)

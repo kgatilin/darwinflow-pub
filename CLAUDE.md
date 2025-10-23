@@ -22,7 +22,17 @@ DarwinFlow uses a plugin-based architecture:
 
 **Key Principle**: Framework is plugin-agnostic. Plugin-specific types belong in plugin packages.
 
-**For details**: See `pkg/pluginsdk/CLAUDE.md` and `@docs/plugin-development-guide.md`
+**Framework vs Plugin Responsibilities**:
+- **Framework handles**: Event storage, centralized analysis, cross-plugin communication (EventBus), logging, config, command routing, entity aggregation, database infrastructure, RPC protocol
+- **Plugins handle**: Domain logic, entity definitions, event types/payloads, custom commands, external API integrations, event handlers
+
+**Decision Guide**: Cross-plugin visibility → Framework. Infrastructure → Framework. Domain-specific → Plugin.
+
+**For Plugin Development**:
+- `template/go-plugin/README.md` - Complete plugin template with framework capabilities reference
+- `pkg/pluginsdk/CLAUDE.md` - Full SDK API documentation
+- `pkg/plugins/claude_code/` - Reference implementation
+- `README.md` (main) - Framework capabilities overview
 
 ---
 

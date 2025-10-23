@@ -125,6 +125,41 @@ cmd → internal/app + internal/infra → internal/domain
   - Commands: `init`, `create`, `list`, `update`
   - CLI: `dw task-manager <command>`
 
+### Framework Capabilities for Plugin Developers
+
+**Key Principle**: Framework handles infrastructure and cross-plugin concerns. Plugins handle domain logic.
+
+**What the Framework Provides:**
+- **Event Storage** (`EventRepository`): Persistent SQLite storage, queries, full-text search, versioning
+- **Centralized Analysis**: AI-powered session analysis across ALL plugin events with configurable prompts
+- **Cross-Plugin Communication** (`EventBus`): Publish/subscribe real-time communication with filtering
+- **Plugin Lifecycle**: Registration, initialization, context injection, shutdown management
+- **Configuration Management**: YAML config loading/saving, validation
+- **Logging Infrastructure**: Leveled logging with consistent formatting
+- **Command Registry**: Automatic command discovery, routing, help generation
+- **Entity Management**: Cross-plugin entity aggregation and routing
+- **Database Infrastructure**: Centralized SQLite with schema management, migrations, indexing
+- **External Plugin Support**: JSON-RPC 2.0 protocol for language-agnostic plugins
+
+**What Plugins Implement:**
+- Domain logic and business rules
+- Entity definitions and validation
+- Event types and payloads
+- Custom CLI commands
+- External API integrations
+- Event handlers for cross-plugin reactions
+
+**Decision Guide:**
+- Cross-plugin visibility? → Framework (analysis, entity aggregation)
+- Infrastructure? → Framework (database, config, logging, RPC)
+- Shared across plugins? → Framework (event storage, EventBus, Logger)
+- Domain-specific? → Plugin (entities, commands, business rules)
+
+**For Plugin Development:**
+- **Template**: `template/go-plugin/README.md` - Complete plugin template with framework capabilities reference
+- **SDK Docs**: `pkg/pluginsdk/CLAUDE.md` - Full API documentation
+- **Example**: `pkg/plugins/claude_code/` - Reference implementation
+
 ### Real-Time Event Streaming (Phase 4)
 
 DarwinFlow now supports real-time event streaming from multiple plugins simultaneously:

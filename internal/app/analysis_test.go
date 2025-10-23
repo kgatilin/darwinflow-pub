@@ -199,6 +199,7 @@ func TestNewAnalysisService(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	if service == nil {
 		t.Fatal("Expected non-nil AnalysisService")
@@ -238,6 +239,8 @@ func TestAnalysisService_AnalyzeSessionWithPrompt(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	analysis, err := service.AnalyzeSessionWithPrompt(ctx, "session-123", "tool_analysis")
 	if err != nil {
@@ -274,6 +277,7 @@ func TestAnalysisService_AnalyzeSessionWithPrompt_NoLogs(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	_, err := service.AnalyzeSessionWithPrompt(ctx, "session-123", "tool_analysis")
 	if err == nil {
@@ -298,6 +302,7 @@ func TestAnalysisService_GetAnalysesBySessionID(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	analyses, err := service.GetAnalysesBySessionID(ctx, "session-123")
 	if err != nil {
@@ -325,6 +330,7 @@ func TestAnalysisService_GetAllSessionIDs(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	sessionIDs, err := service.GetAllSessionIDs(ctx, 10)
 	if err != nil {
@@ -351,6 +357,7 @@ func TestAnalysisService_GetLastSession(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	sessionID, err := service.GetLastSession(ctx)
 	if err != nil {
@@ -375,6 +382,7 @@ func TestAnalysisService_GetLastSession_NoSessions(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	_, err := service.GetLastSession(ctx)
 	if err == nil {
@@ -397,6 +405,7 @@ func TestAnalysisService_AnalyzeMultipleSessions(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	results, errors := service.AnalyzeMultipleSessions(ctx, []string{"session-1"}, "tool_analysis")
 
@@ -433,6 +442,7 @@ func TestAnalysisService_EstimateTokenCount(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	tokenCount, err := service.EstimateTokenCount(ctx, "session-123")
 	if err != nil {
@@ -461,6 +471,7 @@ func TestAnalysisService_SelectSessionsWithinTokenLimit(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	selected, totalTokens, err := service.SelectSessionsWithinTokenLimit(ctx, []string{"session-123"}, 100000)
 	if err != nil {
@@ -493,6 +504,7 @@ func TestAnalysisService_AnalyzeSession(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	analysis, err := service.AnalyzeSession(ctx, "session-123")
 	if err != nil {
@@ -517,6 +529,7 @@ func TestAnalysisService_GetUnanalyzedSessions(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	sessions, err := service.GetUnanalyzedSessions(ctx)
 	if err != nil {
@@ -544,6 +557,7 @@ func TestAnalysisService_GetAnalysis(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	result, err := service.GetAnalysis(ctx, "session-123")
 	if err != nil {
@@ -570,6 +584,7 @@ func TestAnalysisService_AnalyzeMultipleSessionsParallel(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	results, errors := service.AnalyzeMultipleSessionsParallel(ctx, []string{"session-1"}, "tool_analysis")
 
@@ -593,6 +608,7 @@ func TestAnalysisService_AnalyzeMultipleSessionsParallel_Empty(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	results, errors := service.AnalyzeMultipleSessionsParallel(ctx, []string{}, "tool_analysis")
 
@@ -622,6 +638,7 @@ func TestAnalysisService_AnalyzeSessionWithMultiplePrompts(t *testing.T) {
 	config.Prompts["prompt2"] = "Prompt 2"
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	results, errors := service.AnalyzeSessionWithMultiplePrompts(ctx, "session-123", []string{"prompt1", "prompt2"})
 
@@ -648,6 +665,7 @@ func TestAnalysisService_SaveToMarkdown(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	filePath, err := service.SaveToMarkdown(ctx, analysis, tmpDir, "test-analysis.md")
 	if err != nil {
@@ -711,6 +729,7 @@ func TestAnalysisService_AnalyzeSessionWithPrompt_UnknownPrompt(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	// Should fall back to tool_analysis when prompt not found
 	analysis, err := service.AnalyzeSessionWithPrompt(ctx, "session-123", "nonexistent_prompt")
@@ -734,6 +753,7 @@ func TestAnalysisService_AnalyzeSessionWithMultiplePrompts_Empty(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	results, errors := service.AnalyzeSessionWithMultiplePrompts(ctx, "session-123", []string{})
 
@@ -760,6 +780,7 @@ func TestAnalysisService_SaveToMarkdown_WithDefaults(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	// Test with default filename (empty string)
 	filePath, err := service.SaveToMarkdown(ctx, analysis, tmpDir, "")
@@ -789,6 +810,7 @@ func TestAnalysisService_SaveToMarkdown_NilAnalysis(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	_, err := service.SaveToMarkdown(ctx, nil, tmpDir, "test.md")
 	if err == nil {
@@ -823,6 +845,7 @@ func TestAnalysisService_SaveToMarkdown_InvalidTemplate(t *testing.T) {
 	config.UI.FilenameTemplate = "{{.InvalidField}}" // Invalid template
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	_, err := service.SaveToMarkdown(ctx, analysis, tmpDir, "")
 	if err == nil {
@@ -845,6 +868,7 @@ func TestAnalysisService_SaveToMarkdown_ShortSessionID(t *testing.T) {
 	config := domain.DefaultConfig()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	// Test with session ID that's at least 8 characters
 	analysis := domain.NewSessionAnalysis("session-12345678", "test analysis", "claude-3", "prompt1")
@@ -873,6 +897,7 @@ func TestAnalysisService_SaveToMarkdown_WithDefaultOutputDir(t *testing.T) {
 	config.UI.DefaultOutputDir = t.TempDir()
 
 	service := app.NewAnalysisService(eventRepo, analysisRepo, logsService, llm, logger, config)
+	service.SetSessionViewFactory(mockSessionViewFactory)
 
 	// Use empty outputDir to test default behavior
 	filePath, err := service.SaveToMarkdown(ctx, analysis, "", "test.md")
@@ -891,6 +916,19 @@ func TestNewClaudeCLIExecutor_WithNilLogger(t *testing.T) {
 
 	if executor == nil {
 		t.Error("Expected non-nil executor even with nil logger")
+	}
+}
+
+// mockSessionViewFactory creates a mock session view factory for testing
+func mockSessionViewFactory(sessionID string, events []pluginsdk.Event) pluginsdk.AnalysisView {
+	return &MockAnalysisView{
+		ID:     sessionID,
+		Type:   "session",
+		Events: events,
+		Metadata: map[string]interface{}{
+			"session_id":  sessionID,
+			"event_count": len(events),
+		},
 	}
 }
 

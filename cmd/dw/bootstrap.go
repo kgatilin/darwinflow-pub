@@ -8,6 +8,8 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/internal/infra"
+	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
+	"github.com/kgatilin/darwinflow-pub/pkg/plugins/claude_code"
 )
 
 // AppServices contains all app-layer services needed by commands.
@@ -66,6 +68,11 @@ func InitializeApp(dbPath, configPath string, debugMode bool) (*AppServices, err
 	logsService := app.NewLogsService(repo, repo)
 	llm := infra.NewClaudeCodeLLMWithConfig(logger, config)
 	analysisService := app.NewAnalysisService(repo, repo, logsService, llm, logger, config)
+
+	// Set the session view factory using the claude_code plugin
+	analysisService.SetSessionViewFactory(func(sessionID string, events []pluginsdk.Event) pluginsdk.AnalysisView {
+		return claude_code.NewSessionView(sessionID, events)
+	})
 
 	// 6. Create setup service (for framework-level initialization)
 	// SetupService handles framework infrastructure only (database, schema, etc.)

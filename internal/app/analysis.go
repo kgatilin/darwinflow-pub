@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -40,14 +41,19 @@ type Logger interface {
 	Error(format string, args ...interface{})
 }
 
+// SessionViewFactory is a function type that creates a view from a session ID and events
+// This allows the service to work with views without importing plugin packages directly
+type SessionViewFactory func(sessionID string, events []pluginsdk.Event) pluginsdk.AnalysisView
+
 // AnalysisService handles session analysis operations
 type AnalysisService struct {
-	eventRepo    domain.EventRepository
-	analysisRepo domain.AnalysisRepository
-	logsService  *LogsService
-	llm          domain.LLM
-	logger       Logger
-	config       *domain.Config
+	eventRepo         domain.EventRepository
+	analysisRepo      domain.AnalysisRepository
+	logsService       *LogsService
+	llm               domain.LLM
+	logger            Logger
+	config            *domain.Config
+	sessionViewFactory SessionViewFactory // Injected factory for creating session views
 }
 
 // NewAnalysisService creates a new analysis service
@@ -63,13 +69,20 @@ func NewAnalysisService(
 		config = domain.DefaultConfig()
 	}
 	return &AnalysisService{
-		eventRepo:    eventRepo,
-		analysisRepo: analysisRepo,
-		logsService:  logsService,
-		llm:          llm,
-		logger:       logger,
-		config:       config,
+		eventRepo:          eventRepo,
+		analysisRepo:       analysisRepo,
+		logsService:        logsService,
+		llm:                llm,
+		logger:             logger,
+		config:             config,
+		sessionViewFactory: nil, // Can be set via SetSessionViewFactory
 	}
+}
+
+// SetSessionViewFactory sets the factory function for creating session views
+// This is typically called during initialization to wire up the plugin
+func (s *AnalysisService) SetSessionViewFactory(factory SessionViewFactory) {
+	s.sessionViewFactory = factory
 }
 
 // AnalyzeSession analyzes a specific session with the default analysis prompt
@@ -79,67 +92,99 @@ func (s *AnalysisService) AnalyzeSession(ctx context.Context, sessionID string) 
 }
 
 // AnalyzeSessionWithPrompt analyzes a specific session with a named prompt from config
+// This is now a wrapper around the view-based AnalyzeView method for backward compatibility
 func (s *AnalysisService) AnalyzeSessionWithPrompt(ctx context.Context, sessionID, promptName string) (*domain.SessionAnalysis, error) {
-	// Get session logs
-	s.logger.Debug("Fetching logs for session %s", sessionID)
-	logs, err := s.logsService.ListRecentLogs(ctx, 0, 0, sessionID, true)
+	// Get session events using FindByQuery
+	s.logger.Debug("Fetching events for session %s", sessionID)
+	query := pluginsdk.EventQuery{
+		Metadata: map[string]string{
+			"session_id": sessionID,
+		},
+	}
+	events, err := s.eventRepo.FindByQuery(ctx, query)
 	if err != nil {
-		s.logger.Error("Failed to get session logs: %v", err)
-		return nil, fmt.Errorf("failed to get session logs: %w", err)
+		s.logger.Error("Failed to get session events: %v", err)
+		return nil, fmt.Errorf("failed to get session events: %w", err)
 	}
 
-	if len(logs) == 0 {
-		s.logger.Warn("No logs found for session %s", sessionID)
-		return nil, fmt.Errorf("no logs found for session %s", sessionID)
+	if len(events) == 0 {
+		s.logger.Warn("No events found for session %s", sessionID)
+		return nil, fmt.Errorf("no events found for session %s", sessionID)
 	}
-	s.logger.Debug("Found %d log records for session %s", len(logs), sessionID)
+	s.logger.Debug("Found %d events for session %s", len(events), sessionID)
 
-	// Format logs as markdown
-	s.logger.Debug("Formatting logs as markdown")
-	var buf bytes.Buffer
-	if err := FormatLogsAsMarkdown(&buf, logs); err != nil {
-		s.logger.Error("Failed to format logs: %v", err)
-		return nil, fmt.Errorf("failed to format logs: %w", err)
+	// Convert domain.Event to pluginsdk.Event
+	pluginEvents := make([]pluginsdk.Event, len(events))
+	for i, e := range events {
+		// Convert payload to map if needed
+		payloadMap := make(map[string]interface{})
+		if e.Payload != nil {
+			if m, ok := e.Payload.(map[string]interface{}); ok {
+				payloadMap = m
+			} else {
+				// Try to marshal and unmarshal to get a map
+				jsonBytes, _ := e.MarshalPayload()
+				_ = json.Unmarshal(jsonBytes, &payloadMap)
+			}
+		}
+
+		// Create metadata map with session_id
+		metadata := map[string]string{
+			"session_id": e.SessionID,
+		}
+
+		pluginEvents[i] = pluginsdk.Event{
+			Type:      e.Type,
+			Source:    "claude_code",
+			Timestamp: e.Timestamp,
+			Payload:   payloadMap,
+			Metadata:  metadata,
+			Version:   e.Version,
+		}
 	}
 
-	// Get analysis prompt from config
+	// Create SessionView from events using the injected factory
+	var sessionView pluginsdk.AnalysisView
+	if s.sessionViewFactory != nil {
+		sessionView = s.sessionViewFactory(sessionID, pluginEvents)
+	} else {
+		// Fallback if factory not set (should not happen in normal operation)
+		return nil, fmt.Errorf("session view factory not configured")
+	}
+
+	// Call the view-based analysis method
+	analysis, err := s.AnalyzeView(ctx, sessionView, promptName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the prompt template from config for backward compatibility
 	promptTemplate, exists := s.config.Prompts[promptName]
 	if !exists || promptTemplate == "" {
-		s.logger.Warn("Prompt %s not found in config, using default tool_analysis", promptName)
 		promptTemplate = domain.DefaultToolAnalysisPrompt
-		promptName = "tool_analysis"
 	}
 
-	prompt := promptTemplate + buf.String()
-	s.logger.Debug("Generated prompt with %d characters (%d KB)", len(prompt), len(prompt)/1024)
-
-	// Execute LLM analysis
-	s.logger.Info("Invoking LLM for %s analysis...", promptName)
-	analysisResult, err := s.llm.Query(ctx, prompt, nil)
-	if err != nil {
-		s.logger.Error("Failed to execute LLM analysis: %v", err)
-		return nil, fmt.Errorf("failed to execute LLM analysis: %w", err)
-	}
-	s.logger.Debug("LLM returned %d characters", len(analysisResult))
-
-	// Create and save analysis with type
-	s.logger.Debug("Saving analysis to database")
-	analysis := domain.NewSessionAnalysisWithType(
+	// Convert generic Analysis to SessionAnalysis for backward compatibility
+	sessionAnalysis := domain.NewSessionAnalysisWithType(
 		sessionID,
-		analysisResult,
-		s.config.Analysis.Model,
+		analysis.Result,
+		analysis.ModelUsed,
 		promptTemplate,
-		promptName, // analysis type matches prompt name
-		promptName,
+		analysis.PromptUsed,
+		analysis.PromptUsed,
 	)
 
-	if err := s.analysisRepo.SaveAnalysis(ctx, analysis); err != nil {
-		s.logger.Error("Failed to save analysis: %v", err)
-		return nil, fmt.Errorf("failed to save analysis: %w", err)
+	// Preserve the created timestamp from generic analysis
+	sessionAnalysis.AnalyzedAt = analysis.Timestamp
+
+	// Save the SessionAnalysis for backward compatibility
+	// (The generic Analysis was already saved by AnalyzeView)
+	if err := s.analysisRepo.SaveAnalysis(ctx, sessionAnalysis); err != nil {
+		s.logger.Error("Failed to save session analysis: %v", err)
+		return nil, fmt.Errorf("failed to save session analysis: %w", err)
 	}
 
-	s.logger.Info("Analysis completed successfully")
-	return analysis, nil
+	return sessionAnalysis, nil
 }
 
 // AnalyzeView analyzes any view using the provided prompt.
@@ -197,6 +242,81 @@ func (s *AnalysisService) AnalyzeView(ctx context.Context, view pluginsdk.Analys
 	}
 
 	s.logger.Info("View analysis completed successfully")
+	return analysis, nil
+}
+
+// AnalysisOptions contains options for view-based analysis
+type AnalysisOptions struct {
+	// Model override (empty uses config default)
+	ModelOverride string
+	// Custom LLM options (e.g., temperature, max_tokens)
+	LLMOptions *domain.LLMOptions
+}
+
+// AnalyzeViewWithOptions analyzes a view with custom options
+// This allows more flexible control over analysis parameters
+func (s *AnalysisService) AnalyzeViewWithOptions(ctx context.Context, view pluginsdk.AnalysisView, promptName string, options *AnalysisOptions) (*domain.Analysis, error) {
+	if view == nil {
+		return nil, fmt.Errorf("view is nil")
+	}
+
+	if options == nil {
+		options = &AnalysisOptions{}
+	}
+
+	// Get the formatted view content
+	s.logger.Debug("Formatting view %s (%s) for analysis", view.GetID(), view.GetType())
+	formattedContent := view.FormatForAnalysis()
+
+	// Get analysis prompt from config
+	promptTemplate, exists := s.config.Prompts[promptName]
+	if !exists || promptTemplate == "" {
+		s.logger.Warn("Prompt %s not found in config, using default tool_analysis", promptName)
+		promptTemplate = domain.DefaultToolAnalysisPrompt
+		promptName = "tool_analysis"
+	}
+
+	// Build the full prompt with formatted view
+	prompt := promptTemplate + formattedContent
+	s.logger.Debug("Generated prompt with %d characters (%d KB)", len(prompt), len(prompt)/1024)
+
+	// Determine model to use
+	model := s.config.Analysis.Model
+	if options.ModelOverride != "" {
+		model = options.ModelOverride
+	}
+
+	// Execute LLM analysis with options
+	s.logger.Info("Invoking LLM for %s analysis of view %s...", promptName, view.GetID())
+	analysisResult, err := s.llm.Query(ctx, prompt, options.LLMOptions)
+	if err != nil {
+		s.logger.Error("Failed to execute LLM analysis: %v", err)
+		return nil, fmt.Errorf("failed to execute LLM analysis: %w", err)
+	}
+	s.logger.Debug("LLM returned %d characters", len(analysisResult))
+
+	// Create generic analysis
+	s.logger.Debug("Saving analysis to database")
+	analysis := domain.NewAnalysis(
+		view.GetID(),
+		view.GetType(),
+		analysisResult,
+		model,
+		promptName,
+	)
+
+	// Add view metadata if available
+	if metadata := view.GetMetadata(); metadata != nil {
+		analysis.Metadata = metadata
+	}
+
+	// Save to database using generic method
+	if err := s.analysisRepo.SaveGenericAnalysis(ctx, analysis); err != nil {
+		s.logger.Error("Failed to save analysis: %v", err)
+		return nil, fmt.Errorf("failed to save analysis: %w", err)
+	}
+
+	s.logger.Info("View analysis with options completed successfully")
 	return analysis, nil
 }
 

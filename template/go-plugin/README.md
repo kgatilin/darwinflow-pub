@@ -1,723 +1,370 @@
 # DarwinFlow Plugin Template (Go)
 
-This template provides a complete starting point for building external DarwinFlow plugins in Go. External plugins run as separate processes and communicate with DarwinFlow via JSON-RPC over stdin/stdout.
+External plugin template for building DarwinFlow plugins in Go. Plugins run as separate processes and communicate via JSON-RPC over stdin/stdout.
+
+---
 
 ## Quick Start
 
-1. **Copy this template**:
-   ```bash
-   cp -r template/go-plugin /path/to/your-plugin
-   cd /path/to/your-plugin
-   ```
-
-2. **Customize the module name**:
-   ```bash
-   # Edit go.mod and replace:
-   # module example.com/myplugin
-   # with:
-   # module github.com/yourname/yourplugin
-   ```
-
-3. **Update the replace directive** in `go.mod`:
-   ```go
-   // Point to your local DarwinFlow installation
-   replace github.com/kgatilin/darwinflow-pub => /path/to/darwinflow
-   ```
-
-4. **Build the plugin**:
-   ```bash
-   make build
-   ```
-
-5. **Test it**:
-   ```bash
-   ./bin/myplugin
-   # In another terminal, send a test request:
-   echo '{"jsonrpc":"2.0","id":1,"method":"get_info"}' | ./bin/myplugin
-   ```
-
-## Prerequisites
-
-- **Go 1.23+**: Required for building the plugin
-- **DarwinFlow**: The main DarwinFlow application must be installed
-- **Make**: Optional, but recommended for building
-
-## Building
-
-The template includes a Makefile with common tasks:
-
 ```bash
-# Build both plugin and CLI binaries
+# 1. Copy template
+cp -r template/go-plugin /path/to/your-plugin && cd /path/to/your-plugin
+
+# 2. Edit go.mod - update module name and replace directive
+# module github.com/yourname/yourplugin
+# replace github.com/kgatilin/darwinflow-pub => /path/to/darwinflow
+
+# 3. Build
 make build
 
-# Build only the CLI wrapper
-make build-cli
-
-# Clean build artifacts
-make clean
-
-# Build and run the RPC plugin
-make run
-
-# Build and run the CLI (shows help)
-make run-cli
-
-# Test all CLI commands
-make test-cli
-
-# Install to /usr/local/bin (requires sudo)
-sudo make install
-```
-
-To build manually:
-
-```bash
-mkdir -p bin
-go build -o bin/myplugin ./cmd/myplugin
-go build -o bin/myplugin-cli ./cmd/myplugin-cli
-```
-
-## Local Testing with CLI
-
-The template includes a CLI wrapper (`myplugin-cli`) for testing the plugin locally without DarwinFlow. This tool directly calls plugin methods instead of using JSON-RPC, making it ideal for development and debugging.
-
-### CLI Commands
-
-```bash
-# List all items
+# 4. Test locally
 ./bin/myplugin-cli list
 
-# Get a specific item by ID
-./bin/myplugin-cli get item-1
-
-# Update an item's field
-./bin/myplugin-cli update item-1 name "New Name"
-./bin/myplugin-cli update item-1 description "Updated description"
-./bin/myplugin-cli update item-1 tags "tag1,tag2,tag3"
-
-# Show plugin information
-./bin/myplugin-cli info
-
-# Show entity types
-./bin/myplugin-cli types
-
-# Show help
-./bin/myplugin-cli help
+# 5. Register in ~/.darwinflow/plugins.yaml
+# See "Integration" section below
 ```
 
-### Example Output
+**Prerequisites**: Go 1.23+, DarwinFlow installed
 
-**List items:**
+---
+
+## What the Framework Provides
+
+**Key Principle**: Framework handles infrastructure and cross-plugin concerns. Plugins handle domain logic.
+
+### 1. Event Storage (`EventRepository`)
+
+**Interface**: `pluginsdk.EventRepository`
+
+- Persistent SQLite storage for all plugin events
+- Query by type, time, session, metadata, full-text search
+- Raw SQL for advanced analytics
+- Versioning and migration support
+
+**Plugin receives**: `PluginContext.EventRepository` in `Init()`
+
+**Plugin responsibility**: Define event types/payloads, emit events
+
+**Framework responsibility**: Storage, indexing, queries, schema
+
+### 2. Centralized Analysis
+
+**Why Centralized**: Framework sees ALL events from ALL plugins → enables cross-plugin pattern detection
+
+- AI-powered session analysis with configurable prompts
+- Token budget management, parallel execution
+- LLM integration (Claude CLI)
+- Analysis persistence and retrieval
+- Multiple prompt support
+
+**Plugin responsibility**: Emit rich, meaningful events with context
+
+**Framework responsibility**: Collect events, run LLM, store results, provide UI/CLI
+
+**User configures**: `~/.darwinflow/config.yaml` (token limits, models, prompts)
+
+### 3. Cross-Plugin Communication (`EventBus`)
+
+**Interface**: `pluginsdk.EventBus`
+
+- Publish/subscribe real-time communication
+- Filter by type patterns (glob), labels, source
+- Async, thread-safe, non-blocking delivery
+- Optional persistence and replay
+
+**Plugin receives**: EventBus in `Init(ctx, pluginCtx, eventBus)`
+
+**Example**: Gmail publishes `gmail.email_received` → Calendar subscribes, creates event → Telegram subscribes, sends notification
+
+**Note**: EventBus ≠ EventRepository. EventBus = real-time. EventRepository = durable storage.
+
+### 4. Plugin Lifecycle
+
+**Interfaces**: `pluginsdk.PluginContext`, `pluginsdk.CommandContext`
+
+**Stages**: Registration → Init → Command execution → Query/Update → Event emission → Shutdown
+
+**PluginContext provides**: Logger, EventRepository, CWD
+
+**CommandContext provides**: Logger, CWD, Output, Input, ProjectData
+
+### 5. Configuration, Logging, Commands, Entities
+
+| Feature | Interface | Framework Provides | Plugin Implements |
+|---------|-----------|-------------------|-------------------|
+| **Config** | Framework-managed | YAML load/save, validation | Document config keys |
+| **Logging** | `pluginsdk.Logger` | Leveled logging, formatting | Use Logger for all output |
+| **Commands** | `pluginsdk.ICommandProvider` | Discovery, routing, help | Return commands from `GetCommands()` |
+| **Entities** | `pluginsdk.IEntityProvider` | Aggregation, routing | Define entities, implement queries |
+
+### 6. Database Infrastructure
+
+- Centralized SQLite for all plugins
+- Schema management, migrations, indexing, full-text search
+- Access via `EventRepository` interface
+
+**Don't**: Create plugin-specific tables. **Do**: Store as events/entities.
+
+### 7. External Plugin Support (RPC)
+
+- JSON-RPC 2.0 over stdin/stdout
+- Language-agnostic (Python, Node.js, Rust, Java, etc.)
+- Standard RPC methods: `init`, `get_info`, `get_capabilities`, `query_entities`, etc.
+
+**See**: `pkg/pluginsdk/rpc.go` for protocol details
+
+---
+
+## Framework vs Plugin Responsibilities
+
+| Framework Handles | Plugin Handles |
+|------------------|----------------|
+| Event storage & queries | Event types & payloads |
+| Centralized analysis | Domain logic |
+| Cross-plugin communication | Event handlers |
+| Configuration management | Business rules |
+| Logging infrastructure | Entity definitions |
+| Command routing | Custom commands |
+| Entity aggregation | External API integration |
+| Database management | Validation |
+| RPC protocol | - |
+
+**Decision Guide**:
+- Cross-plugin visibility? → Framework
+- Infrastructure? → Framework
+- Shared across plugins? → Framework
+- Domain-specific? → Plugin
+
+---
+
+## Template Usage
+
+### Building
+
 ```bash
-$ ./bin/myplugin-cli list
-Found 3 items:
-
-{
-  "id": "item-1",
-  "type": "item",
-  "name": "Example Item",
-  "description": "This is an example item from the external plugin.",
-  "tags": ["example", "demo"],
-  "created_at": "2025-10-21T15:30:00Z",
-  "updated_at": "2025-10-21T15:30:00Z",
-  "capabilities": []
-}
-...
+make build      # Build both plugin and CLI
+make build-cli  # CLI wrapper only
+make test-cli   # Test all commands
+make clean      # Clean artifacts
 ```
 
-**Get specific item:**
+### Local Testing (CLI Mode)
+
 ```bash
-$ ./bin/myplugin-cli get item-1
-{
-  "id": "item-1",
-  "type": "item",
-  "name": "Example Item",
-  ...
-}
+./bin/myplugin-cli list                      # List items
+./bin/myplugin-cli get item-1                # Get by ID
+./bin/myplugin-cli update item-1 name "New"  # Update field
+./bin/myplugin-cli info                      # Plugin info
+./bin/myplugin-cli types                     # Entity types
 ```
 
-**Update item (with event):**
-```bash
-$ ./bin/myplugin-cli update item-1 name "Updated Name"
-[15:30:45] [EVENT] type: stream.started | source: myplugin | payload: {"item_count":3}
-[15:30:45] [EVENT] type: item.updated | source: myplugin | payload: {"item_id":"item-1","name":"Updated Name"}
-Item updated successfully:
-{
-  "id": "item-1",
-  "type": "item",
-  "name": "Updated Name",
-  ...
-}
-```
+**CLI vs RPC**:
+- **CLI**: Direct calls, stderr events, local testing
+- **RPC**: JSON-RPC stdin/stdout, production use
 
-**Plugin info:**
-```bash
-$ ./bin/myplugin-cli info
-Plugin Information:
-  Name:        myplugin
-  Version:     1.0.0
-  Description: Example external plugin template
-  Is Core:     false
+### Integration with DarwinFlow
 
-Capabilities:
-  - IEntityProvider
-  - IEntityUpdater
-  - IEventEmitter
-```
-
-### Event Monitoring
-
-The CLI automatically monitors and displays events emitted by the plugin:
-
-- Events are displayed to **stderr** with timestamps
-- Command output goes to **stdout** for easy piping
-- Events show type, source, and payload in JSON format
-
-Example:
-```bash
-# Redirect events to a file while viewing output
-./bin/myplugin-cli update item-1 name "New" 2> events.log
-
-# View just events
-./bin/myplugin-cli update item-1 name "New" 2>&1 > /dev/null
-```
-
-### CLI vs RPC Mode
-
-| Feature | CLI Mode | RPC Mode |
-|---------|----------|----------|
-| **Communication** | Direct method calls | JSON-RPC over stdin/stdout |
-| **Use Case** | Local testing, debugging | Production integration |
-| **Events** | Displayed to stderr | Sent via stdout as JSON |
-| **Error Handling** | Printed to stderr | JSON error responses |
-| **Sample Data** | Built-in test data | Configured via init |
-
-**Important**: The CLI is for local testing only. For production use with DarwinFlow, use the RPC plugin binary (`bin/myplugin`).
-
-## Integration with DarwinFlow
-
-### Using plugins.yaml
-
-Create or edit `~/.darwinflow/plugins.yaml`:
-
+**Register in `~/.darwinflow/plugins.yaml`**:
 ```yaml
 plugins:
   myplugin:
-    # Absolute path to the plugin binary
     command: /path/to/your-plugin/bin/myplugin
     enabled: true
-
-    # Optional: Plugin-specific configuration
     config:
       custom_setting: "value"
 ```
 
-### Using CLI
-
+**Use via CLI**:
 ```bash
-# List all plugins (including external ones)
 dw plugins list
-
-# Query items from your plugin
 dw entities query --type item
-
-# Get a specific item
 dw entities get item-1
-
-# Update an item
-dw entities update item-1 --field name="Updated Name"
+dw entities update item-1 --field name="Updated"
 ```
 
-### Programmatic Usage
-
-```go
-import (
-    "github.com/kgatilin/darwinflow-pub/internal/infra"
-    "github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
-)
-
-// Create subprocess plugin
-plugin := infra.NewSubprocessPlugin("/path/to/bin/myplugin")
-
-// Initialize
-ctx := context.Background()
-err := plugin.Initialize(ctx, "/working/dir", nil)
-if err != nil {
-    log.Fatal(err)
-}
-defer plugin.Shutdown()
-
-// Query entities
-query := pluginsdk.EntityQuery{
-    EntityType: "item",
-    Limit:      10,
-}
-items, err := plugin.Query(ctx, query)
-
-// Get specific entity
-item, err := plugin.GetEntity(ctx, "item-1")
-
-// Update entity
-updated, err := plugin.UpdateEntity(ctx, "item-1", map[string]interface{}{
-    "name": "New Name",
-    "tags": []string{"updated"},
-})
-```
+---
 
 ## Customization
 
-### Changing the Entity Type
+### Change Entity Type
 
-The template uses a generic "item" entity. To customize:
+1. Edit `internal/entity.go` - rename struct, update fields
+2. Update `ToMap()` method
+3. Update handlers in `internal/handlers.go` (type name, queries)
+4. Update sample data in `cmd/myplugin/main.go`
 
-1. **Rename the entity type** in `internal/entity.go`:
-   ```go
-   type Task struct {  // Changed from Item
-       ID          string
-       Title       string  // Changed from Name
-       Status      string  // Add custom fields
-       // ...
-   }
-   ```
+### Add Persistence
 
-2. **Update the ToMap() method** to reflect new fields:
-   ```go
-   func (t *Task) ToMap() map[string]interface{} {
-       return map[string]interface{}{
-           "id":     t.ID,
-           "type":   "task",  // Change type name
-           "title":  t.Title,
-           "status": t.Status,
-           // ...
-       }
-   }
-   ```
+Default: in-memory. To persist:
+1. Add `db *sql.DB` to plugin struct
+2. Initialize in constructor
+3. Update handlers to query/update database
 
-3. **Update handlers** in `internal/handlers.go`:
-   ```go
-   // In handleGetEntityTypes:
-   Type:              "task",  // Change from "item"
-   DisplayName:       "Task",
-   DisplayNamePlural: "Tasks",
+### Add Capabilities
 
-   // In handleQueryEntities:
-   if query.EntityType != "task" { // Change from "item"
-   ```
+1. Update `GetCapabilities()` to include new capability
+2. Implement required RPC methods (see `pkg/pluginsdk/rpc.go`)
+3. Add handlers and register in `handleRequest()`
 
-4. **Update the main.go** sample data to use your new entity type.
+---
 
-### Adding Custom Fields
+## RPC Protocol Reference
 
-To add fields to your entity:
+### Methods
 
-1. Add fields to the struct in `internal/entity.go`
-2. Update the `ToMap()` serialization method
-3. Handle updates in `handleUpdateEntity` in `internal/handlers.go`
+| Method | Params | Response |
+|--------|--------|----------|
+| `init` | `InitParams` | `null` |
+| `get_info` | none | `PluginInfo` |
+| `get_capabilities` | none | `[]string` |
+| `get_entity_types` | none | `[]EntityTypeInfo` |
+| `query_entities` | `EntityQuery` | `[]map[string]interface{}` |
+| `get_entity` | `GetEntityParams` | `map[string]interface{}` |
+| `update_entity` | `UpdateEntityParams` | `map[string]interface{}` |
+| `start_event_stream` | none | `null` |
+| `stop_event_stream` | none | `null` |
 
-Example:
-```go
-// entity.go
-type Item struct {
-    ID          string
-    Name        string
-    Priority    int      // NEW FIELD
-    Assignee    string   // NEW FIELD
-    // ...
-}
+### Request Format (JSON-RPC 2.0)
 
-// ToMap()
-func (i *Item) ToMap() map[string]interface{} {
-    return map[string]interface{}{
-        // ...existing fields...
-        "priority": i.Priority,
-        "assignee": i.Assignee,
-    }
-}
-
-// handlers.go - handleUpdateEntity
-if priority, ok := params.Fields["priority"].(float64); ok {
-    item.Priority = int(priority)
-}
-if assignee, ok := params.Fields["assignee"].(string); ok {
-    item.Assignee = assignee
-}
+```json
+{"jsonrpc":"2.0","id":1,"method":"query_entities","params":{"entity_type":"item","limit":10}}
 ```
 
-### Adding Persistence
+### Response Format
 
-The template stores entities in memory. To add persistence:
+**Success**: `{"jsonrpc":"2.0","id":1,"result":[...]}`
 
-1. **Add database initialization** in `internal/plugin.go`:
-   ```go
-   import "database/sql"
+**Error**: `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}`
 
-   type ItemPlugin struct {
-       db *sql.DB
-       // ...
-   }
-   ```
+### Event Format
 
-2. **Initialize in NewItemPlugin()**:
-   ```go
-   func NewItemPlugin() *ItemPlugin {
-       db, err := sql.Open("sqlite3", "items.db")
-       if err != nil {
-           log.Fatal(err)
-       }
-       // Create tables...
-       return &ItemPlugin{db: db}
-   }
-   ```
+```json
+{"event":"event","type":"item.updated","source":"myplugin","timestamp":"2025-10-22T15:30:00Z","payload":{"item_id":"item-1"}}
+```
 
-3. **Update handlers** to query/update the database instead of the in-memory map.
+### Error Codes
 
-### Adding New Capabilities
+- `-32700`: Parse error
+- `-32600`: Invalid request
+- `-32601`: Method not found
+- `-32602`: Invalid params
+- `-32603`: Internal error
 
-The template implements three capabilities. To add more:
-
-1. **Update GetCapabilities** in `internal/handlers.go`:
-   ```go
-   capabilities := []string{
-       "IEntityProvider",
-       "IEntityUpdater",
-       "IEventEmitter",
-       "ICommandProvider",  // NEW
-   }
-   ```
-
-2. **Implement the required RPC methods**. See `pkg/pluginsdk/rpc.go` for method signatures.
-
-3. **Add handlers** in `internal/handlers.go` and register in `handleRequest()`.
+---
 
 ## Project Structure
 
 ```
 template/go-plugin/
 ├── cmd/
-│   └── myplugin/
-│       └── main.go          # Entry point - initializes plugin and starts server
+│   ├── myplugin/main.go      # RPC plugin entry point
+│   └── myplugin-cli/main.go  # CLI testing tool
 ├── internal/
-│   ├── entity.go            # Item entity definition and serialization
-│   ├── plugin.go            # ItemPlugin struct and RPC server loop
-│   └── handlers.go          # RPC method handlers
-├── .gitignore
-├── go.mod                   # Module definition and dependencies
-├── Makefile                 # Build automation
-└── README.md                # This file
+│   ├── entity.go             # Entity definition
+│   ├── plugin.go             # RPC server, event emission
+│   └── handlers.go           # RPC method handlers
+├── go.mod, Makefile, .gitignore
+└── README.md
 ```
 
-### File Responsibilities
+---
 
-**cmd/myplugin/main.go**:
-- Creates plugin instance
-- Initializes sample data
-- Starts JSON-RPC server
+## SDK Interface Reference
 
-**internal/entity.go**:
-- Defines entity structure (Item)
-- Implements serialization (ToMap)
+**Core**: `pluginsdk.Plugin` (main interface)
 
-**internal/plugin.go**:
-- ItemPlugin struct and state
-- RPC server loop (Serve)
-- Request routing (handleRequest)
-- Response helpers (sendResult, sendError)
-- Event emission (emitEvent)
+**Providers** (plugins implement):
+- `IEntityProvider` - Queryable entities
+- `IEntityUpdater` - Update entities
+- `ICommandProvider` - CLI commands
+- `IEventEmitter` - Emit events
 
-**internal/handlers.go**:
-- Individual RPC method handlers
-- Business logic for each operation
-- Parameter validation
+**Services** (plugins receive):
+- `EventRepository` - Event storage/queries
+- `EventBus` - Cross-plugin communication
+- `Logger` - Leveled logging
+- `PluginContext` - Init context
+- `CommandContext` - Command context
 
-## Protocol Reference
+**Entity Capabilities**:
+- `IExtensible` - Required for all entities
+- `ITrackable`, `IHasContext`, `ISchedulable`, `IRelatable` - Optional
 
-### Supported RPC Methods
+**See**: `pkg/pluginsdk/CLAUDE.md` for complete API docs
 
-| Method | Description | Parameters | Response |
-|--------|-------------|------------|----------|
-| `init` | Initialize plugin | `InitParams` | `null` |
-| `get_info` | Plugin metadata | none | `PluginInfo` |
-| `get_capabilities` | List capabilities | none | `[]string` |
-| `get_entity_types` | Entity type metadata | none | `[]EntityTypeInfo` |
-| `query_entities` | Query entities | `EntityQuery` | `[]map[string]interface{}` |
-| `get_entity` | Get by ID | `GetEntityParams` | `map[string]interface{}` |
-| `update_entity` | Update entity | `UpdateEntityParams` | `map[string]interface{}` |
-| `start_event_stream` | Start events | none | `null` |
-| `stop_event_stream` | Stop events | none | `null` |
+---
 
-### Request Format
-
-All requests follow JSON-RPC 2.0 format:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "query_entities",
-  "params": {
-    "entity_type": "item",
-    "limit": 10
-  }
-}
-```
-
-### Response Format
-
-Success:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": [...]
-}
-```
-
-Error:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "error": {
-    "code": -32602,
-    "message": "Invalid params"
-  }
-}
-```
-
-### Event Format
-
-Events are emitted to stdout when streaming is active:
-
-```json
-{
-  "event": "event",
-  "type": "item.updated",
-  "source": "myplugin",
-  "timestamp": "2025-10-22T15:30:00Z",
-  "payload": {
-    "item_id": "item-1",
-    "name": "Updated Name"
-  }
-}
-```
-
-### Standard Error Codes
-
-- `-32700`: Parse error (invalid JSON)
-- `-32600`: Invalid request
-- `-32601`: Method not found
-- `-32602`: Invalid params
-- `-32603`: Internal error
-- `-32000 to -32099`: Server-defined errors
-
-For complete protocol details, see `pkg/pluginsdk/rpc.go` in the DarwinFlow repository.
-
-## Testing
+## Testing & Debugging
 
 ### Manual Testing
 
-Start the plugin and send JSON requests:
-
 ```bash
-# Terminal 1: Start plugin
-./bin/myplugin
-
-# Terminal 2: Send requests
-echo '{"jsonrpc":"2.0","id":1,"method":"get_info"}' | nc localhost <stdin>
+./bin/myplugin  # Start RPC server
+echo '{"jsonrpc":"2.0","id":1,"method":"get_info"}' | ./bin/myplugin  # Send request
 ```
 
 ### Integration Testing
-
-The DarwinFlow test suite includes subprocess plugin tests:
 
 ```bash
 cd /path/to/darwinflow
 go test ./internal/infra -run SubprocessPlugin -v
 ```
 
-### Unit Testing
+### Debugging
 
-Add tests for your custom logic in `internal/*_test.go`:
-
+Add logging to **stderr** (stdout reserved for RPC):
 ```go
-package internal_test
-
-import "testing"
-
-func TestItemToMap(t *testing.T) {
-    item := &Item{
-        ID:   "test-1",
-        Name: "Test Item",
-    }
-
-    m := item.ToMap()
-    if m["id"] != "test-1" {
-        t.Errorf("Expected id=test-1, got %v", m["id"])
-    }
-}
+log.SetOutput(os.Stderr)
+log.Printf("[DEBUG] Received method: %s\n", req.Method)
 ```
 
-## Debugging
-
-### Enable Verbose Logging
-
-Add logging to stderr (stdout is reserved for RPC):
-
-```go
-import "log"
-
-func (p *ItemPlugin) handleRequest(req *pluginsdk.RPCRequest) {
-    log.Printf("[DEBUG] Received method: %s\n", req.Method)
-    // ...
-}
-```
-
-Run with stderr redirected:
-
-```bash
-./bin/myplugin 2> debug.log
-```
+Run: `./bin/myplugin 2> debug.log`
 
 ### Common Issues
 
-**Plugin doesn't start**:
-- Check if binary is executable: `chmod +x bin/myplugin`
-- Verify go.mod replace directive points to correct path
-- Run `go mod tidy` to ensure dependencies are correct
+- **Plugin doesn't start**: Check `chmod +x`, verify `go.mod` replace directive, run `go mod tidy`
+- **RPC errors**: Validate JSON, check method names match constants, verify param types
+- **Events not appearing**: Ensure `start_event_stream` called, check `eventStreaming` flag, verify stdout output
 
-**RPC errors**:
-- Ensure JSON is valid and newline-delimited
-- Check that method names match `pluginsdk.RPCMethod*` constants
-- Verify parameter structures match `pluginsdk.*Params` types
-
-**Events not appearing**:
-- Ensure `start_event_stream` was called
-- Check that `p.eventStreaming` is true before emitting
-- Verify events are written to stdout, not stderr
+---
 
 ## Advanced Topics
 
 ### Multi-Language Plugins
 
-While this template is in Go, you can implement plugins in any language:
+Protocol is language-agnostic. Implement in Python, Node.js, Rust, Java, etc. using JSON-RPC 2.0 over stdin/stdout.
 
-- **Python**: Use `json`, `sys.stdin`, `sys.stdout`
-- **TypeScript/Node.js**: Use `readline`, `console.log`
-- **Rust**: Use `serde_json`, `std::io`
-- **Java**: Use Jackson, `System.in`/`System.out`
+### Performance
 
-The protocol is language-agnostic JSON-RPC.
+- Buffer management: Increase scanner buffer sizes
+- Connection pooling: Reuse database connections
+- Caching: Cache frequently accessed entities
+- Batch operations: Process multiple entities at once
 
-### Performance Optimization
+### Security
 
-For high-volume plugins:
+- Validate all inputs
+- Prevent unbounded memory/CPU
+- Respect working directory
+- Never log secrets (use stderr, not stdout)
 
-1. **Buffer management**: Increase scanner buffer sizes
-2. **Connection pooling**: Reuse database connections
-3. **Caching**: Cache frequently accessed entities
-4. **Batch operations**: Process multiple entities at once
-
-### Security Considerations
-
-- **Input validation**: Always validate parameters before processing
-- **Resource limits**: Prevent unbounded memory/CPU usage
-- **File access**: Respect the working directory constraint
-- **Secrets**: Never log sensitive data (use stderr, not stdout for logs)
-
-## Examples
-
-### Example 1: Simple Query
-
-Request:
-```json
-{"jsonrpc":"2.0","id":1,"method":"query_entities","params":{"entity_type":"item","limit":2}}
-```
-
-Response:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": [
-    {
-      "id": "item-1",
-      "type": "item",
-      "name": "Example Item",
-      "description": "This is an example item from the external plugin.",
-      "tags": ["example", "demo"],
-      "created_at": "2025-10-21T15:30:00Z",
-      "updated_at": "2025-10-21T15:30:00Z",
-      "capabilities": []
-    },
-    {
-      "id": "item-2",
-      "type": "item",
-      "name": "Another Item",
-      "description": "External plugins can run in any language!",
-      "tags": ["external", "plugin"],
-      "created_at": "2025-10-22T13:30:00Z",
-      "updated_at": "2025-10-22T14:30:00Z",
-      "capabilities": []
-    }
-  ]
-}
-```
-
-### Example 2: Update with Event
-
-Request:
-```json
-{"jsonrpc":"2.0","id":2,"method":"update_entity","params":{"entity_id":"item-1","fields":{"name":"Updated Item","tags":["updated"]}}}
-```
-
-Response:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "result": {
-    "id": "item-1",
-    "type": "item",
-    "name": "Updated Item",
-    "description": "This is an example item from the external plugin.",
-    "tags": ["updated"],
-    "created_at": "2025-10-21T15:30:00Z",
-    "updated_at": "2025-10-22T15:45:00Z",
-    "capabilities": []
-  }
-}
-```
-
-Event (if streaming enabled):
-```json
-{
-  "event": "event",
-  "type": "item.updated",
-  "source": "myplugin",
-  "timestamp": "2025-10-22T15:45:00Z",
-  "payload": {
-    "item_id": "item-1",
-    "name": "Updated Item"
-  }
-}
-```
+---
 
 ## Resources
 
-- **DarwinFlow Documentation**: `/path/to/darwinflow/README.md`
-- **Plugin SDK Reference**: `pkg/pluginsdk/` (interface definitions)
-- **RPC Protocol**: `pkg/pluginsdk/rpc.go` (protocol types and constants)
-- **Example Plugin**: `examples/external_plugin/` (notes-plugin reference)
-- **Plugin Development Guide**: `docs/plugin-development-guide.md`
+- **Plugin SDK**: `pkg/pluginsdk/` - Interface definitions
+- **RPC Protocol**: `pkg/pluginsdk/rpc.go` - Method signatures
+- **SDK Docs**: `pkg/pluginsdk/CLAUDE.md` - Complete API reference
+- **Example Plugin**: `pkg/plugins/claude_code/` - Reference implementation
+- **DarwinFlow Docs**: Main repository README
 
-## License
-
-Same as DarwinFlow main project.
+---
 
 ## Support
 
-For questions or issues:
-1. Check the DarwinFlow documentation
-2. Review the notes-plugin example in `examples/external_plugin/`
-3. Consult `pkg/pluginsdk/rpc.go` for protocol details
-4. Open an issue in the DarwinFlow repository
+1. Check DarwinFlow documentation
+2. Review reference implementations
+3. Consult `pkg/pluginsdk/rpc.go` for protocol
+4. Open issue in DarwinFlow repository
+
+**License**: Same as DarwinFlow

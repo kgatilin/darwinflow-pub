@@ -137,6 +137,7 @@ overrides:
                 - internal/app
                 - internal/infra
                 - pkg/plugins
+                - pkg/pluginsdk # Allow cmd to import SDK for composition root
             internal/app:
                 - internal/domain
                 - pkg/pluginsdk
