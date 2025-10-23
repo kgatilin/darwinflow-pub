@@ -232,3 +232,180 @@ func TestSessionAnalysis_EmptyFields(t *testing.T) {
 		t.Error("Empty AnalysisResult should be preserved")
 	}
 }
+
+// Tests for generic Analysis type
+
+func TestNewAnalysis(t *testing.T) {
+	viewID := "view-123"
+	viewType := "session"
+	result := "This is the analysis result"
+	modelUsed := "claude-sonnet-4"
+	promptUsed := "test_prompt"
+
+	analysis := domain.NewAnalysis(viewID, viewType, result, modelUsed, promptUsed)
+
+	// Verify required fields
+	if analysis.ID == "" {
+		t.Error("Expected ID to be generated, got empty string")
+	}
+	if analysis.ViewID != viewID {
+		t.Errorf("Expected ViewID = %q, got %q", viewID, analysis.ViewID)
+	}
+	if analysis.ViewType != viewType {
+		t.Errorf("Expected ViewType = %q, got %q", viewType, analysis.ViewType)
+	}
+	if analysis.Result != result {
+		t.Errorf("Expected Result = %q, got %q", result, analysis.Result)
+	}
+	if analysis.ModelUsed != modelUsed {
+		t.Errorf("Expected ModelUsed = %q, got %q", modelUsed, analysis.ModelUsed)
+	}
+	if analysis.PromptUsed != promptUsed {
+		t.Errorf("Expected PromptUsed = %q, got %q", promptUsed, analysis.PromptUsed)
+	}
+
+	// Verify metadata is initialized
+	if analysis.Metadata == nil {
+		t.Error("Expected Metadata to be initialized, got nil")
+	}
+
+	// Verify timestamp is recent
+	if time.Since(analysis.Timestamp) > time.Second {
+		t.Errorf("Expected recent timestamp, got %v", analysis.Timestamp)
+	}
+}
+
+func TestNewAnalysis_UniqueIDs(t *testing.T) {
+	// Verify that multiple calls generate unique IDs
+	analysis1 := domain.NewAnalysis("view-1", "session", "result1", "model1", "prompt1")
+	analysis2 := domain.NewAnalysis("view-1", "session", "result2", "model2", "prompt2")
+
+	if analysis1.ID == analysis2.ID {
+		t.Error("Expected unique IDs for different analyses, got same ID")
+	}
+}
+
+func TestAnalysis_MarshalMetadata(t *testing.T) {
+	analysis := domain.NewAnalysis("view-1", "session", "result", "model", "prompt")
+	analysis.Metadata["key1"] = "value1"
+	analysis.Metadata["key2"] = 42
+	analysis.Metadata["key3"] = true
+
+	jsonData, err := analysis.MarshalMetadata()
+	if err != nil {
+		t.Fatalf("MarshalMetadata failed: %v", err)
+	}
+
+	// Should contain the keys
+	jsonStr := string(jsonData)
+	if !contains(jsonStr, "key1") {
+		t.Error("Expected JSON to contain key1")
+	}
+	if !contains(jsonStr, "value1") {
+		t.Error("Expected JSON to contain value1")
+	}
+}
+
+func TestAnalysis_MarshalMetadata_NilMetadata(t *testing.T) {
+	analysis := domain.NewAnalysis("view-1", "session", "result", "model", "prompt")
+	analysis.Metadata = nil
+
+	jsonData, err := analysis.MarshalMetadata()
+	if err != nil {
+		t.Fatalf("MarshalMetadata failed: %v", err)
+	}
+
+	// Should return empty object
+	if string(jsonData) != "{}" {
+		t.Errorf("Expected {}, got %s", string(jsonData))
+	}
+}
+
+func TestAnalysis_UnmarshalMetadata(t *testing.T) {
+	analysis := domain.NewAnalysis("view-1", "session", "result", "model", "prompt")
+
+	jsonData := []byte(`{"key1":"value1","key2":42,"key3":true}`)
+	err := analysis.UnmarshalMetadata(jsonData)
+	if err != nil {
+		t.Fatalf("UnmarshalMetadata failed: %v", err)
+	}
+
+	// Verify metadata was unmarshaled
+	if analysis.Metadata == nil {
+		t.Fatal("Expected Metadata to be set")
+	}
+
+	if v, ok := analysis.Metadata["key1"].(string); !ok || v != "value1" {
+		t.Error("Expected key1 to be 'value1'")
+	}
+
+	if v, ok := analysis.Metadata["key2"].(float64); !ok || v != 42 {
+		t.Error("Expected key2 to be 42")
+	}
+
+	if v, ok := analysis.Metadata["key3"].(bool); !ok || v != true {
+		t.Error("Expected key3 to be true")
+	}
+}
+
+func TestAnalysis_UnmarshalMetadata_EmptyData(t *testing.T) {
+	analysis := domain.NewAnalysis("view-1", "session", "result", "model", "prompt")
+
+	err := analysis.UnmarshalMetadata([]byte{})
+	if err != nil {
+		t.Fatalf("UnmarshalMetadata failed: %v", err)
+	}
+
+	// Should initialize empty metadata
+	if analysis.Metadata == nil {
+		t.Error("Expected Metadata to be initialized")
+	}
+}
+
+func TestAnalysis_RoundtripMetadata(t *testing.T) {
+	// Test marshaling and unmarshaling preserves data
+	original := domain.NewAnalysis("view-1", "session", "result", "model", "prompt")
+	original.Metadata["string_key"] = "string_value"
+	original.Metadata["int_key"] = 123
+	original.Metadata["bool_key"] = false
+	original.Metadata["nested"] = map[string]interface{}{
+		"nested_key": "nested_value",
+	}
+
+	// Marshal
+	jsonData, err := original.MarshalMetadata()
+	if err != nil {
+		t.Fatalf("MarshalMetadata failed: %v", err)
+	}
+
+	// Unmarshal into new analysis
+	restored := domain.NewAnalysis("view-2", "task", "result2", "model2", "prompt2")
+	err = restored.UnmarshalMetadata(jsonData)
+	if err != nil {
+		t.Fatalf("UnmarshalMetadata failed: %v", err)
+	}
+
+	// Verify data preserved
+	if v, ok := restored.Metadata["string_key"].(string); !ok || v != "string_value" {
+		t.Error("string_key not preserved")
+	}
+
+	// Note: JSON unmarshaling converts numbers to float64
+	if v, ok := restored.Metadata["int_key"].(float64); !ok || v != 123 {
+		t.Error("int_key not preserved")
+	}
+
+	if v, ok := restored.Metadata["bool_key"].(bool); !ok || v != false {
+		t.Error("bool_key not preserved")
+	}
+
+	if nested, ok := restored.Metadata["nested"].(map[string]interface{}); !ok {
+		t.Error("nested not preserved as map")
+	} else if nestedValue, ok := nested["nested_key"].(string); !ok || nestedValue != "nested_value" {
+		t.Error("nested_key not preserved")
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || len(s) > 0 && (s[0:len(substr)] == substr || contains(s[1:], substr)))
+}

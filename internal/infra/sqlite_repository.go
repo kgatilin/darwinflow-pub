@@ -181,6 +181,181 @@ func (r *SQLiteEventRepository) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to create bus_events table: %w", err)
 	}
 
+	// Step 7: Create analyses table (generic) and migrate from session_analyses if needed
+	if err := r.createAnalysesTableAndMigrate(ctx); err != nil {
+		return fmt.Errorf("failed to create analyses table: %w", err)
+	}
+
+	return nil
+}
+
+// createAnalysesTableAndMigrate creates the generic analyses table and migrates data from session_analyses
+func (r *SQLiteEventRepository) createAnalysesTableAndMigrate(ctx context.Context) error {
+	// Create the new analyses table
+	analysesSchema := `
+		CREATE TABLE IF NOT EXISTS analyses (
+			id TEXT PRIMARY KEY,
+			view_id TEXT NOT NULL,
+			view_type TEXT NOT NULL,
+			timestamp INTEGER NOT NULL,
+			result TEXT NOT NULL,
+			model_used TEXT,
+			prompt_used TEXT,
+			metadata TEXT
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_analyses_view_id ON analyses(view_id);
+		CREATE INDEX IF NOT EXISTS idx_analyses_view_type ON analyses(view_type);
+		CREATE INDEX IF NOT EXISTS idx_analyses_timestamp ON analyses(timestamp);
+	`
+
+	_, err := r.db.ExecContext(ctx, analysesSchema)
+	if err != nil {
+		return fmt.Errorf("failed to create analyses table: %w", err)
+	}
+
+	// Check if migration is needed
+	needsMigration, err := r.checkMigrationNeeded(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to check migration status: %w", err)
+	}
+
+	if needsMigration {
+		if err := r.migrateSessionAnalysesToAnalyses(ctx); err != nil {
+			return fmt.Errorf("failed to migrate session_analyses: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// checkMigrationNeeded checks if migration from session_analyses to analyses is needed
+func (r *SQLiteEventRepository) checkMigrationNeeded(ctx context.Context) (bool, error) {
+	// Check if session_analyses table exists
+	var tableName string
+	err := r.db.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name='session_analyses'").Scan(&tableName)
+	if err == sql.ErrNoRows {
+		// Old table doesn't exist, no migration needed
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	// Check if data has already been migrated by looking for a migration marker
+	// We'll use a special row in analyses table with view_type='__migration_marker__'
+	var markerID string
+	err = r.db.QueryRowContext(ctx, "SELECT id FROM analyses WHERE view_type = '__migration_marker__' LIMIT 1").Scan(&markerID)
+	if err == sql.ErrNoRows {
+		// Marker doesn't exist, migration needed
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	// Marker exists, migration already done
+	return false, nil
+}
+
+// migrateSessionAnalysesToAnalyses migrates data from session_analyses to analyses table
+func (r *SQLiteEventRepository) migrateSessionAnalysesToAnalyses(ctx context.Context) error {
+	// Start transaction for migration
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Check if old table has any data
+	var count int
+	err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM session_analyses").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to count session_analyses: %w", err)
+	}
+
+	// If no data, just mark migration as complete without creating marker
+	if count == 0 {
+		// Commit empty transaction
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+		return nil
+	}
+
+	// Select all records from session_analyses
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, session_id, analyzed_at, analysis_result, model_used, prompt_used,
+		       patterns_summary, COALESCE(analysis_type, 'tool_analysis'), COALESCE(prompt_name, 'analysis')
+		FROM session_analyses
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to query session_analyses: %w", err)
+	}
+	defer rows.Close()
+
+	// Prepare insert statement
+	insertStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO analyses (id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare insert statement: %w", err)
+	}
+	defer insertStmt.Close()
+
+	migratedCount := 0
+	for rows.Next() {
+		var id, sessionID, analysisResult string
+		var modelUsed, promptUsed, patternsSummary, analysisType, promptName sql.NullString
+		var analyzedAtMs int64
+
+		if err := rows.Scan(&id, &sessionID, &analyzedAtMs, &analysisResult, &modelUsed, &promptUsed, &patternsSummary, &analysisType, &promptName); err != nil {
+			return fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		// Build metadata JSON with session-specific fields
+		metadata := map[string]interface{}{
+			"patterns_summary": patternsSummary.String,
+			"analysis_type":    analysisType.String,
+			"prompt_name":      promptName.String,
+		}
+		metadataJSON, err := json.Marshal(metadata)
+		if err != nil {
+			return fmt.Errorf("failed to marshal metadata: %w", err)
+		}
+
+		// Insert into analyses table
+		// view_id = session_id, view_type = "session"
+		_, err = insertStmt.ExecContext(ctx, id, sessionID, "session", analyzedAtMs, analysisResult, modelUsed, promptUsed, string(metadataJSON))
+		if err != nil {
+			return fmt.Errorf("failed to insert analysis: %w", err)
+		}
+
+		migratedCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	// Insert migration marker only if we actually migrated data
+	if migratedCount > 0 {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO analyses (id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, "migration-marker", "migration", "__migration_marker__", time.Now().UnixMilli(), "Migration completed", "", "", "{}")
+		if err != nil {
+			return fmt.Errorf("failed to insert migration marker: %w", err)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Note: We keep the old session_analyses table for rollback safety
 	return nil
 }
 
@@ -642,6 +817,180 @@ func (r *SQLiteEventRepository) GetAllSessionIDs(ctx context.Context, limit int)
 	}
 
 	return sessionIDs, nil
+}
+
+// SaveGenericAnalysis persists a generic analysis
+func (r *SQLiteEventRepository) SaveGenericAnalysis(ctx context.Context, analysis *domain.Analysis) error {
+	metadataJSON, err := analysis.MarshalMetadata()
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	query := `
+		INSERT INTO analyses (id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err = r.db.ExecContext(ctx, query,
+		analysis.ID,
+		analysis.ViewID,
+		analysis.ViewType,
+		analysis.Timestamp.UnixMilli(),
+		analysis.Result,
+		analysis.ModelUsed,
+		analysis.PromptUsed,
+		string(metadataJSON),
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to store analysis: %w", err)
+	}
+
+	return nil
+}
+
+// FindAnalysisByViewID retrieves all analyses for a specific view ID
+func (r *SQLiteEventRepository) FindAnalysisByViewID(ctx context.Context, viewID string) ([]*domain.Analysis, error) {
+	query := `
+		SELECT id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata
+		FROM analyses
+		WHERE view_id = ? AND view_type != '__migration_marker__'
+		ORDER BY timestamp DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, viewID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query analyses: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanAnalyses(rows)
+}
+
+// FindAnalysisByViewType retrieves all analyses for a specific view type
+func (r *SQLiteEventRepository) FindAnalysisByViewType(ctx context.Context, viewType string) ([]*domain.Analysis, error) {
+	query := `
+		SELECT id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata
+		FROM analyses
+		WHERE view_type = ?
+		ORDER BY timestamp DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, viewType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query analyses: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanAnalyses(rows)
+}
+
+// FindAnalysisById retrieves a specific analysis by ID
+func (r *SQLiteEventRepository) FindAnalysisById(ctx context.Context, id string) (*domain.Analysis, error) {
+	query := `
+		SELECT id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata
+		FROM analyses
+		WHERE id = ?
+	`
+
+	var analysis domain.Analysis
+	var timestampMs int64
+	var modelUsed, promptUsed, metadataJSON sql.NullString
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&analysis.ID,
+		&analysis.ViewID,
+		&analysis.ViewType,
+		&timestampMs,
+		&analysis.Result,
+		&modelUsed,
+		&promptUsed,
+		&metadataJSON,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get analysis: %w", err)
+	}
+
+	analysis.Timestamp = millisecondsToTime(timestampMs)
+	analysis.ModelUsed = modelUsed.String
+	analysis.PromptUsed = promptUsed.String
+
+	if metadataJSON.Valid && metadataJSON.String != "" {
+		if err := analysis.UnmarshalMetadata([]byte(metadataJSON.String)); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+	}
+
+	return &analysis, nil
+}
+
+// ListRecentAnalyses retrieves recent analyses, ordered by timestamp DESC
+func (r *SQLiteEventRepository) ListRecentAnalyses(ctx context.Context, limit int) ([]*domain.Analysis, error) {
+	query := `
+		SELECT id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata
+		FROM analyses
+		WHERE view_type != '__migration_marker__'
+		ORDER BY timestamp DESC
+	`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query analyses: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanAnalyses(rows)
+}
+
+// scanAnalyses is a helper that scans rows into Analysis objects
+func (r *SQLiteEventRepository) scanAnalyses(rows *sql.Rows) ([]*domain.Analysis, error) {
+	var analyses []*domain.Analysis
+
+	for rows.Next() {
+		var analysis domain.Analysis
+		var timestampMs int64
+		var modelUsed, promptUsed, metadataJSON sql.NullString
+
+		err := rows.Scan(
+			&analysis.ID,
+			&analysis.ViewID,
+			&analysis.ViewType,
+			&timestampMs,
+			&analysis.Result,
+			&modelUsed,
+			&promptUsed,
+			&metadataJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan analysis: %w", err)
+		}
+
+		analysis.Timestamp = millisecondsToTime(timestampMs)
+		analysis.ModelUsed = modelUsed.String
+		analysis.PromptUsed = promptUsed.String
+
+		if metadataJSON.Valid && metadataJSON.String != "" {
+			if err := analysis.UnmarshalMetadata([]byte(metadataJSON.String)); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
+		analyses = append(analyses, &analysis)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return analyses, nil
 }
 
 // Helper function to convert milliseconds to time.Time

@@ -1705,3 +1705,334 @@ func TestSQLiteEventRepository_GetAnalysisBySessionID_NotFound(t *testing.T) {
 		t.Errorf("Expected nil analysis for non-existent session, got: %v", analysis)
 	}
 }
+// TestAnalysesMigration tests the migration from session_analyses to analyses table
+func TestAnalysesMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	// Step 1: Create old-style database with session_analyses
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	// Create old schema
+	oldSchema := `
+		CREATE TABLE IF NOT EXISTS session_analyses (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			analyzed_at INTEGER NOT NULL,
+			analysis_result TEXT NOT NULL,
+			model_used TEXT,
+			prompt_used TEXT,
+			patterns_summary TEXT,
+			analysis_type TEXT DEFAULT 'tool_analysis',
+			prompt_name TEXT DEFAULT 'analysis'
+		);
+	`
+	_, err = db.Exec(oldSchema)
+	if err != nil {
+		t.Fatalf("Failed to create old schema: %v", err)
+	}
+
+	// Insert test data into old table
+	testData := []struct {
+		id              string
+		sessionID       string
+		analyzedAt      int64
+		analysisResult  string
+		modelUsed       string
+		promptUsed      string
+		patternsSummary string
+		analysisType    string
+		promptName      string
+	}{
+		{
+			id:              "analysis-1",
+			sessionID:       "session-1",
+			analyzedAt:      time.Now().UnixMilli(),
+			analysisResult:  "Test analysis 1",
+			modelUsed:       "claude-sonnet-4",
+			promptUsed:      "Analyze this session",
+			patternsSummary: "Pattern 1",
+			analysisType:    "tool_analysis",
+			promptName:      "tool_analysis",
+		},
+		{
+			id:              "analysis-2",
+			sessionID:       "session-2",
+			analyzedAt:      time.Now().UnixMilli(),
+			analysisResult:  "Test analysis 2",
+			modelUsed:       "claude-opus-4",
+			promptUsed:      "Summarize this session",
+			patternsSummary: "Pattern 2",
+			analysisType:    "session_summary",
+			promptName:      "summary",
+		},
+	}
+
+	for _, td := range testData {
+		_, err := db.Exec(`
+			INSERT INTO session_analyses (id, session_id, analyzed_at, analysis_result, model_used, prompt_used, patterns_summary, analysis_type, prompt_name)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, td.id, td.sessionID, td.analyzedAt, td.analysisResult, td.modelUsed, td.promptUsed, td.patternsSummary, td.analysisType, td.promptName)
+		if err != nil {
+			t.Fatalf("Failed to insert test data: %v", err)
+		}
+	}
+
+	db.Close()
+
+	// Step 2: Initialize repository (should trigger migration)
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Step 3: Verify migration completed
+	// Check that analyses table exists
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to reopen database: %v", err)
+	}
+	defer db.Close()
+
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'").Scan(&tableName)
+	if err != nil {
+		t.Fatalf("analyses table does not exist: %v", err)
+	}
+
+	// Step 4: Verify data was migrated correctly
+	rows, err := db.Query(`
+		SELECT id, view_id, view_type, timestamp, result, model_used, prompt_used, metadata
+		FROM analyses
+		WHERE view_type != '__migration_marker__'
+		ORDER BY timestamp
+	`)
+	if err != nil {
+		t.Fatalf("Failed to query analyses: %v", err)
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var id, viewID, viewType, result, modelUsed, promptUsed, metadata string
+		var timestamp int64
+
+		err := rows.Scan(&id, &viewID, &viewType, &timestamp, &result, &modelUsed, &promptUsed, &metadata)
+		if err != nil {
+			t.Fatalf("Failed to scan row: %v", err)
+		}
+
+		// Verify view_type is "session" for migrated data
+		if viewType != "session" {
+			t.Errorf("Expected view_type='session', got %s", viewType)
+		}
+
+		// Verify view_id matches session_id from original data
+		expectedSessionID := testData[count].sessionID
+		if viewID != expectedSessionID {
+			t.Errorf("Expected view_id=%s, got %s", expectedSessionID, viewID)
+		}
+
+		// Verify result was preserved
+		if result != testData[count].analysisResult {
+			t.Errorf("Expected result=%s, got %s", testData[count].analysisResult, result)
+		}
+
+		count++
+	}
+
+	if count != len(testData) {
+		t.Errorf("Expected %d migrated records, got %d", len(testData), count)
+	}
+
+	// Step 5: Verify migration marker exists
+	var markerID string
+	err = db.QueryRow("SELECT id FROM analyses WHERE view_type = '__migration_marker__'").Scan(&markerID)
+	if err != nil {
+		t.Errorf("Migration marker not found: %v", err)
+	}
+
+	// Step 6: Verify migration is idempotent (running Initialize again should not duplicate data)
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Second Initialize failed: %v", err)
+	}
+
+	var recordCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM analyses WHERE view_type != '__migration_marker__'").Scan(&recordCount)
+	if err != nil {
+		t.Fatalf("Failed to count records: %v", err)
+	}
+
+	if recordCount != len(testData) {
+		t.Errorf("Migration not idempotent: expected %d records, got %d", len(testData), recordCount)
+	}
+}
+
+// TestGenericAnalysisRepository tests the generic analysis repository methods
+func TestGenericAnalysisRepository(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Test SaveGenericAnalysis
+	analysis1 := domain.NewAnalysis("view-1", "session", "Analysis result 1", "claude-sonnet-4", "tool_analysis")
+	analysis1.Metadata["key1"] = "value1"
+	analysis1.Metadata["key2"] = 42
+
+	if err := repo.SaveGenericAnalysis(ctx, analysis1); err != nil {
+		t.Fatalf("SaveGenericAnalysis failed: %v", err)
+	}
+
+	analysis2 := domain.NewAnalysis("view-1", "session", "Analysis result 2", "claude-opus-4", "summary")
+	analysis2.Metadata["key3"] = "value3"
+
+	if err := repo.SaveGenericAnalysis(ctx, analysis2); err != nil {
+		t.Fatalf("SaveGenericAnalysis failed: %v", err)
+	}
+
+	analysis3 := domain.NewAnalysis("view-2", "task-list", "Task analysis", "claude-sonnet-4", "task_analysis")
+
+	if err := repo.SaveGenericAnalysis(ctx, analysis3); err != nil {
+		t.Fatalf("SaveGenericAnalysis failed: %v", err)
+	}
+
+	// Test FindAnalysisByViewID
+	analyses, err := repo.FindAnalysisByViewID(ctx, "view-1")
+	if err != nil {
+		t.Fatalf("FindAnalysisByViewID failed: %v", err)
+	}
+
+	if len(analyses) != 2 {
+		t.Errorf("Expected 2 analyses for view-1, got %d", len(analyses))
+	}
+
+	// Verify metadata was preserved
+	if analyses[0].Metadata == nil {
+		t.Error("Metadata is nil")
+	}
+
+	// Test FindAnalysisByViewType
+	sessionAnalyses, err := repo.FindAnalysisByViewType(ctx, "session")
+	if err != nil {
+		t.Fatalf("FindAnalysisByViewType failed: %v", err)
+	}
+
+	if len(sessionAnalyses) != 2 {
+		t.Errorf("Expected 2 session analyses, got %d", len(sessionAnalyses))
+	}
+
+	taskAnalyses, err := repo.FindAnalysisByViewType(ctx, "task-list")
+	if err != nil {
+		t.Fatalf("FindAnalysisByViewType failed: %v", err)
+	}
+
+	if len(taskAnalyses) != 1 {
+		t.Errorf("Expected 1 task-list analysis, got %d", len(taskAnalyses))
+	}
+
+	// Test FindAnalysisById
+	found, err := repo.FindAnalysisById(ctx, analysis1.ID)
+	if err != nil {
+		t.Fatalf("FindAnalysisById failed: %v", err)
+	}
+
+	if found == nil {
+		t.Fatal("Analysis not found")
+	}
+
+	if found.ViewID != "view-1" {
+		t.Errorf("Expected view_id='view-1', got %s", found.ViewID)
+	}
+
+	if found.Result != "Analysis result 1" {
+		t.Errorf("Expected result='Analysis result 1', got %s", found.Result)
+	}
+
+	// Verify metadata
+	if v, ok := found.Metadata["key1"].(string); !ok || v != "value1" {
+		t.Errorf("Metadata key1 not preserved correctly")
+	}
+
+	// Test ListRecentAnalyses
+	recent, err := repo.ListRecentAnalyses(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListRecentAnalyses failed: %v", err)
+	}
+
+	if len(recent) != 3 {
+		t.Errorf("Expected 3 recent analyses, got %d", len(recent))
+	}
+
+	// Verify order (most recent first)
+	if recent[0].Timestamp.Before(recent[1].Timestamp) {
+		t.Error("Analyses not ordered by timestamp DESC")
+	}
+
+	// Test with limit
+	limited, err := repo.ListRecentAnalyses(ctx, 2)
+	if err != nil {
+		t.Fatalf("ListRecentAnalyses with limit failed: %v", err)
+	}
+
+	if len(limited) != 2 {
+		t.Errorf("Expected 2 limited analyses, got %d", len(limited))
+	}
+}
+
+// TestEmptyDatabaseNoMigration tests that a fresh database doesn't trigger migration
+func TestEmptyDatabaseNoMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	repo, err := infra.NewSQLiteEventRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteEventRepository failed: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Verify analyses table exists
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'").Scan(&tableName)
+	if err != nil {
+		t.Fatalf("analyses table does not exist: %v", err)
+	}
+
+	// Verify no migration marker (since there was nothing to migrate)
+	var markerID string
+	err = db.QueryRow("SELECT id FROM analyses WHERE view_type = '__migration_marker__'").Scan(&markerID)
+	if err == nil {
+		t.Errorf("Expected no migration marker in fresh database, but found one")
+	} else if err != sql.ErrNoRows {
+		t.Errorf("Unexpected error querying migration marker: %v", err)
+	}
+}

@@ -41,26 +41,23 @@ type EventBusRepository interface {
 	GetEventsSince(ctx context.Context, since interface{}, filter pluginsdk.EventFilter, limit int) ([]pluginsdk.BusEvent, error)
 }
 
-// AnalysisRepository defines the interface for persisting and retrieving session analyses.
-// NOTE: This interface exists in domain for backward compatibility with internal code.
-// Analysis storage is semantically owned by the claude-code plugin.
+// AnalysisRepository defines the interface for persisting and retrieving analyses.
+// Supports both generic Analysis (new, plugin-agnostic) and SessionAnalysis (backward compatibility).
 type AnalysisRepository interface {
-	// SaveAnalysis persists a session analysis
+	// Generic analysis methods (plugin-agnostic)
+	SaveGenericAnalysis(ctx context.Context, analysis *Analysis) error
+	FindAnalysisByViewID(ctx context.Context, viewID string) ([]*Analysis, error)
+	FindAnalysisByViewType(ctx context.Context, viewType string) ([]*Analysis, error)
+	FindAnalysisById(ctx context.Context, id string) (*Analysis, error)
+	ListRecentAnalyses(ctx context.Context, limit int) ([]*Analysis, error)
+
+	// Session-specific methods (backward compatibility)
+	// NOTE: These exist for backward compatibility with internal code.
+	// Analysis storage is semantically owned by the claude-code plugin.
 	SaveAnalysis(ctx context.Context, analysis *SessionAnalysis) error
-
-	// GetAnalysisBySessionID retrieves the most recent analysis for a session
 	GetAnalysisBySessionID(ctx context.Context, sessionID string) (*SessionAnalysis, error)
-
-	// GetAnalysesBySessionID retrieves all analyses for a session, ordered by analyzed_at DESC
 	GetAnalysesBySessionID(ctx context.Context, sessionID string) ([]*SessionAnalysis, error)
-
-	// GetUnanalyzedSessionIDs retrieves session IDs that have not been analyzed
 	GetUnanalyzedSessionIDs(ctx context.Context) ([]string, error)
-
-	// GetAllAnalyses retrieves all analyses, ordered by analyzed_at DESC
 	GetAllAnalyses(ctx context.Context, limit int) ([]*SessionAnalysis, error)
-
-	// GetAllSessionIDs retrieves all session IDs, ordered by most recent first
-	// If limit > 0, returns only the latest N sessions
 	GetAllSessionIDs(ctx context.Context, limit int) ([]string, error)
 }

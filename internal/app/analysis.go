@@ -144,8 +144,8 @@ func (s *AnalysisService) AnalyzeSessionWithPrompt(ctx context.Context, sessionI
 
 // AnalyzeView analyzes any view using the provided prompt.
 // This method provides a view-based interface for analysis that's plugin-agnostic.
-// For now, it returns a SessionAnalysis for backward compatibility (Phase 4 will change this).
-func (s *AnalysisService) AnalyzeView(ctx context.Context, view pluginsdk.AnalysisView, promptName string) (*domain.SessionAnalysis, error) {
+// Returns a generic Analysis type that works with any view from any plugin.
+func (s *AnalysisService) AnalyzeView(ctx context.Context, view pluginsdk.AnalysisView, promptName string) (*domain.Analysis, error) {
 	if view == nil {
 		return nil, fmt.Errorf("view is nil")
 	}
@@ -175,24 +175,23 @@ func (s *AnalysisService) AnalyzeView(ctx context.Context, view pluginsdk.Analys
 	}
 	s.logger.Debug("LLM returned %d characters", len(analysisResult))
 
-	// Create and save analysis
-	// Note: We still use SessionAnalysis for backward compatibility
-	// Phase 3 will introduce ViewAnalysis, Phase 4 will make session-based methods wrap view-based methods
+	// Create generic analysis
 	s.logger.Debug("Saving analysis to database")
-
-	// Use the view's ID as the session ID for now
-	sessionID := view.GetID()
-
-	analysis := domain.NewSessionAnalysisWithType(
-		sessionID,
+	analysis := domain.NewAnalysis(
+		view.GetID(),
+		view.GetType(),
 		analysisResult,
 		s.config.Analysis.Model,
-		promptTemplate,
-		promptName,
 		promptName,
 	)
 
-	if err := s.analysisRepo.SaveAnalysis(ctx, analysis); err != nil {
+	// Add view metadata if available
+	if metadata := view.GetMetadata(); metadata != nil {
+		analysis.Metadata = metadata
+	}
+
+	// Save to database using generic method
+	if err := s.analysisRepo.SaveGenericAnalysis(ctx, analysis); err != nil {
 		s.logger.Error("Failed to save analysis: %v", err)
 		return nil, fmt.Errorf("failed to save analysis: %w", err)
 	}
