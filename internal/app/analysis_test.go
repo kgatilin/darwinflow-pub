@@ -58,12 +58,13 @@ func (m *MockLLM) GetModel() string {
 
 // MockAnalysisRepository is a mock for testing
 type MockAnalysisRepository struct {
-	SavedAnalyses   []*domain.SessionAnalysis
-	UnanalyzedIDs   []string
-	AnalysisByID    map[string]*domain.SessionAnalysis
-	SaveError       error
-	GetError        error
-	UnanalyzedError error
+	SavedAnalyses      []*domain.SessionAnalysis
+	UnanalyzedIDs      []string
+	AnalysisByID       map[string]*domain.SessionAnalysis
+	AnalysesByViewID   []*domain.Analysis
+	SaveError          error
+	GetError           error
+	UnanalyzedError    error
 }
 
 func NewMockAnalysisRepository() *MockAnalysisRepository {
@@ -130,7 +131,10 @@ func (m *MockAnalysisRepository) SaveGenericAnalysis(ctx context.Context, analys
 }
 
 func (m *MockAnalysisRepository) FindAnalysisByViewID(ctx context.Context, viewID string) ([]*domain.Analysis, error) {
-	return nil, m.GetError
+	if m.GetError != nil {
+		return nil, m.GetError
+	}
+	return m.AnalysesByViewID, nil
 }
 
 func (m *MockAnalysisRepository) FindAnalysisByViewType(ctx context.Context, viewType string) ([]*domain.Analysis, error) {
@@ -1141,3 +1145,176 @@ func (l *NoOpTestLogger) Debug(format string, args ...interface{}) {}
 func (l *NoOpTestLogger) Info(format string, args ...interface{})  {}
 func (l *NoOpTestLogger) Warn(format string, args ...interface{})  {}
 func (l *NoOpTestLogger) Error(format string, args ...interface{}) {}
+
+// TestAnalysisService_GetAnalysesByViewID tests retrieving analyses by view ID
+func TestAnalysisService_GetAnalysesByViewID(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{
+		Response:   "Analysis result",
+		ModelValue: "claude-3",
+	}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+
+	// Add some generic analyses to the mock repo
+	expectedAnalyses := []*domain.Analysis{
+		{
+			ID:         "analysis-1",
+			ViewID:     "view-123",
+			ViewType:   "session",
+			PromptUsed: "test_prompt",
+			Result:     "Result 1",
+		},
+		{
+			ID:         "analysis-2",
+			ViewID:     "view-123",
+			ViewType:   "session",
+			PromptUsed: "another_prompt",
+			Result:     "Result 2",
+		},
+	}
+	mockAnalysisRepo.AnalysesByViewID = expectedAnalyses
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	analyses, err := service.GetAnalysesByViewID(ctx, "view-123")
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(analyses) != 2 {
+		t.Errorf("Expected 2 analyses, got %d", len(analyses))
+	}
+
+	if analyses[0].ViewID != "view-123" {
+		t.Errorf("Expected view ID 'view-123', got '%s'", analyses[0].ViewID)
+	}
+}
+
+// TestAnalysisService_AnalyzeViewWithOptions tests analyzing a view with custom options
+func TestAnalysisService_AnalyzeViewWithOptions(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{
+		Response:   "Custom options analysis result",
+		ModelValue: "claude-3",
+	}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+	config.Prompts["test_prompt"] = "Test prompt: "
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	view := &MockAnalysisView{
+		ID:   "view-789",
+		Type: "session",
+	}
+
+	options := &app.AnalysisOptions{
+		ModelOverride: "claude-opus",
+		LLMOptions: &domain.LLMOptions{
+			Temperature: 0.7,
+			MaxTokens:   1000,
+		},
+	}
+
+	analysis, err := service.AnalyzeViewWithOptions(ctx, view, "test_prompt", options)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if analysis.ViewID != "view-789" {
+		t.Errorf("Expected view ID 'view-789', got '%s'", analysis.ViewID)
+	}
+
+	if !contains(analysis.Result, "Custom options analysis result") {
+		t.Errorf("Expected custom options analysis result in output")
+	}
+}
+
+// TestAnalysisService_AnalyzeViewWithOptions_NilView tests error handling for nil view
+func TestAnalysisService_AnalyzeViewWithOptions_NilView(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	_, err := service.AnalyzeViewWithOptions(ctx, nil, "test_prompt", nil)
+
+	if err == nil {
+		t.Fatal("Expected error for nil view, got nil")
+	}
+
+	if !contains(err.Error(), "view is nil") {
+		t.Errorf("Expected 'view is nil' error, got: %v", err)
+	}
+}
+
+// TestAnalysisService_AnalyzeViewWithOptions_NilOptions tests that nil options are handled
+func TestAnalysisService_AnalyzeViewWithOptions_NilOptions(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := &MockEventRepository{}
+	mockAnalysisRepo := NewMockAnalysisRepository()
+	mockLLM := &MockLLM{
+		Response:   "Result with nil options",
+		ModelValue: "claude-3",
+	}
+	mockLogsService := app.NewLogsService(mockRepo, mockRepo)
+	config := domain.DefaultConfig()
+	config.Prompts["test_prompt"] = "Test: "
+
+	service := app.NewAnalysisService(
+		mockRepo,
+		mockAnalysisRepo,
+		mockLogsService,
+		mockLLM,
+		&NoOpTestLogger{},
+		config,
+	)
+
+	view := &MockAnalysisView{
+		ID:   "view-nil-opts",
+		Type: "session",
+	}
+
+	// Pass nil options - should use defaults
+	analysis, err := service.AnalyzeViewWithOptions(ctx, view, "test_prompt", nil)
+
+	if err != nil {
+		t.Fatalf("Expected no error with nil options, got: %v", err)
+	}
+
+	if analysis.ViewID != "view-nil-opts" {
+		t.Errorf("Expected view ID 'view-nil-opts', got '%s'", analysis.ViewID)
+	}
+}

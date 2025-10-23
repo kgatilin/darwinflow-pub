@@ -3,12 +3,21 @@ package app_test
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/kgatilin/darwinflow-pub/internal/app"
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
+
+// mockSDKLogger implements pluginsdk.Logger for testing
+type mockSDKLogger struct{}
+
+func (m *mockSDKLogger) Debug(msg string, keysAndValues ...interface{}) {}
+func (m *mockSDKLogger) Info(msg string, keysAndValues ...interface{})  {}
+func (m *mockSDKLogger) Warn(msg string, keysAndValues ...interface{})  {}
+func (m *mockSDKLogger) Error(msg string, keysAndValues ...interface{}) {}
 
 // mockCommand implements pluginsdk.Command
 type mockCommand struct {
@@ -27,6 +36,46 @@ func (m *mockCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandConte
 		return m.executeFunc(ctx, cmdCtx, args)
 	}
 	return nil
+}
+
+// mockCommandContext implements pluginsdk.CommandContext for testing
+type mockCommandContext struct {
+	logger pluginsdk.Logger
+	cwd    string
+	stdout io.Writer
+	stdin  io.Reader
+}
+
+func (m *mockCommandContext) GetLogger() pluginsdk.Logger {
+	if m.logger != nil {
+		return m.logger
+	}
+	return &mockSDKLogger{}
+}
+
+func (m *mockCommandContext) GetWorkingDir() string {
+	if m.cwd != "" {
+		return m.cwd
+	}
+	return "/tmp"
+}
+
+func (m *mockCommandContext) EmitEvent(ctx context.Context, event pluginsdk.Event) error {
+	return nil
+}
+
+func (m *mockCommandContext) GetStdout() io.Writer {
+	if m.stdout != nil {
+		return m.stdout
+	}
+	return io.Discard
+}
+
+func (m *mockCommandContext) GetStdin() io.Reader {
+	if m.stdin != nil {
+		return m.stdin
+	}
+	return strings.NewReader("")
 }
 
 // mockCommandProviderPlugin implements pluginsdk.Plugin and pluginsdk.ICommandProvider
@@ -385,4 +434,85 @@ func TestCommandRegistry_Caching(t *testing.T) {
 	if cmd.GetName() != "init" {
 		t.Errorf("GetCommand() with cache returned wrong command: %s", cmd.GetName())
 	}
+}
+
+// TestCommandRegistry_ExecuteCommand_Help tests help flag functionality
+func TestCommandRegistry_ExecuteCommand_Help(t *testing.T) {
+	pluginRegistry := app.NewPluginRegistry(&mockLogger{})
+	logger := &mockLogger{}
+
+	// Create a command with help text
+	cmd := &mockCommand{
+		name:        "test-cmd",
+		description: "Test command description",
+		usage:       "dw test-plugin test-cmd [options]",
+	}
+
+	// Create command with GetHelp returning detailed help
+	cmdWithHelp := &mockCommandWithHelp{
+		mockCommand: mockCommand{
+			name:        "help-cmd",
+			description: "Command with detailed help",
+			usage:       "dw test-plugin help-cmd",
+		},
+		help: "This is detailed help text\nWith multiple lines",
+	}
+
+	plugin := &mockCommandProviderPlugin{
+		info: pluginsdk.PluginInfo{
+			Name:    "test-plugin",
+			Version: "1.0.0",
+		},
+		commands: []pluginsdk.Command{cmd, cmdWithHelp},
+	}
+
+	pluginRegistry.RegisterPlugin(plugin)
+	registry := app.NewCommandRegistry(pluginRegistry, logger)
+
+	// Create a command context with output buffer
+	output := &strings.Builder{}
+	cmdCtx := &mockCommandContext{
+		stdout: output,
+	}
+
+	// Execute with --help flag
+	err := registry.ExecuteCommand(context.Background(), "test-plugin", "test-cmd", []string{"--help"}, cmdCtx)
+
+	if err != nil {
+		t.Errorf("ExecuteCommand() with --help should not error: %v", err)
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "test-cmd") {
+		t.Errorf("Help output should contain command name, got: %s", outputStr)
+	}
+	if !strings.Contains(outputStr, "Test command description") {
+		t.Errorf("Help output should contain description, got: %s", outputStr)
+	}
+
+	// Test with -h flag
+	output.Reset()
+	err = registry.ExecuteCommand(context.Background(), "test-plugin", "help-cmd", []string{"-h"}, cmdCtx)
+
+	if err != nil {
+		t.Errorf("ExecuteCommand() with -h should not error: %v", err)
+	}
+
+	outputStr = output.String()
+	if !strings.Contains(outputStr, "help-cmd") {
+		t.Errorf("Help output should contain command name")
+	}
+	if !strings.Contains(outputStr, "This is detailed help text") {
+		t.Errorf("Help output should contain detailed help text, got: %s", outputStr)
+	}
+}
+
+// mockCommandWithHelp extends mockCommand to provide GetHelp
+type mockCommandWithHelp struct {
+	mockCommand
+	help string
+}
+
+func (m *mockCommandWithHelp) GetHelp() string {
+	return m.help
 }

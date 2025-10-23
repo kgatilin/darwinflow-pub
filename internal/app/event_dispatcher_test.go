@@ -467,3 +467,34 @@ func TestEventDispatcher_IdempotentStop(t *testing.T) {
 		t.Errorf("Emitter StopEventStream should be idempotent: %v", err)
 	}
 }
+
+// TestEventDispatcher_GetEventChannel tests retrieving the event channel
+func TestEventDispatcher_GetEventChannel(t *testing.T) {
+	ctx := context.Background()
+	repo := newDispatcherEventRepository()
+	logger := &mockLogger{}
+	pluginCtx := &dispatcherPluginContext{repo: repo, logger: &dispatcherSDKLogger{}}
+
+	dispatcher := app.NewEventDispatcher(repo, logger, pluginCtx)
+
+	// Start the dispatcher
+	if err := dispatcher.Start(ctx); err != nil {
+		t.Fatalf("Failed to start dispatcher: %v", err)
+	}
+	defer dispatcher.Stop()
+
+	// Get the event channel
+	eventChan := dispatcher.GetEventChannel()
+
+	if eventChan == nil {
+		t.Fatal("Expected non-nil event channel")
+	}
+
+	// Verify channel is readable (shouldn't block immediately)
+	select {
+	case <-eventChan:
+		// Got an event (or channel closed) - this is fine
+	case <-time.After(10 * time.Millisecond):
+		// No event yet - this is also fine
+	}
+}
