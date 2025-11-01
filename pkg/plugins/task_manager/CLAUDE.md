@@ -2,292 +2,581 @@
 
 **Path**: `pkg/plugins/task_manager`
 
-**Role**: Example plugin demonstrating real-time event streaming with fsnotify
+**Role**: Hierarchical roadmap management plugin (Roadmap → Track → Task → Iteration)
 
 ---
 
-## Quick Reference
+## Overview
 
-- **Files**: 6
-- **Exports**: 10+
-- **Dependencies**: `pkg/pluginsdk`, `github.com/fsnotify/fsnotify`
-- **Layer**: Plugin implementation (example)
-- **Type**: External plugin (reference implementation)
-
----
-
-## Purpose
-
-This is an **example plugin** created as Task 4.3 to demonstrate:
-- Real-time event streaming using fsnotify
-- File-based task storage (JSON)
-- Full plugin capability implementation (IEntityProvider, ICommandProvider, IEventEmitter)
-- Proper test coverage and linter compliance
-
-## Quick Start
-
-### Using the Plugin
-
-To integrate this plugin into DarwinFlow:
-
-```go
-// In cmd/dw/plugin_registration.go
-import "github.com/kgatilin/darwinflow-pub/pkg/plugins/task_manager"
-
-func registerExternalPlugins(registry *internal.PluginRegistry) {
-    plugin, err := task_manager.NewTaskManagerPlugin(logger, workingDir)
-    if err != nil {
-        log.Fatalf("failed to create task-manager plugin: %v", err)
-    }
-    registry.RegisterPlugin(plugin)
-}
-```
-
-### Using the CLI
-
-```bash
-# Initialize task directory
-dw task-manager init
-
-# Create a new task
-dw task-manager create "Implement feature" --description "Add new feature" --priority high
-
-# List all tasks
-dw task-manager list
-
-# List tasks with specific status
-dw task-manager list --status todo
-
-# Update a task status
-dw task-manager update task-123456 --status done
-
-# Update multiple fields
-dw task-manager update task-123456 --status in-progress --priority high
-```
+The task-manager plugin provides comprehensive project/product roadmap management with:
+- **Multi-project support** - Separate isolated roadmaps (e.g., "production" vs "test")
+- **Hierarchical structure** - Roadmap → Track → Task → Iteration
+- **SQLite database storage** - Per-project databases with full schema management
+- **Full CLI commands** - 33 commands across all entities (28 entity + 5 project commands)
+- **Event bus integration** - Cross-plugin communication with 17 event types
+- **Interactive TUI** - Visualization and management with project context
+- **Event sourcing** - Complete audit trail for all changes
 
 ---
 
 ## Architecture
 
-### Plugin Implementation (`plugin.go`)
+### Domain Model
 
-**TaskManagerPlugin** implements:
-- `pluginsdk.Plugin` - Base plugin interface
-- `pluginsdk.IEntityProvider` - Query tasks by ID or filters
-- `pluginsdk.ICommandProvider` - CLI commands (init, create, list, update)
-- `pluginsdk.IEventEmitter` - Real-time file change events
+**Roadmap (Root Aggregate)**
+- Single active roadmap per project
+- Contains vision and success criteria
+- Parent to all tracks
 
-**Key Methods**:
-- `GetInfo()` - Plugin metadata (name, version, description)
-- `GetCapabilities()` - Lists implemented capabilities
-- `GetEntityTypes()` - Returns "task" entity type
-- `Query(ctx, query)` - Query tasks with filters and pagination
-- `GetEntity(ctx, id)` - Get task by ID
-- `UpdateEntity(ctx, id, fields)` - Update task fields
-- `GetCommands()` - Returns CLI commands
-- `StartEventStream(ctx, eventChan)` - Begin file watching
-- `StopEventStream()` - Stop file watching
+**Track (Major Work Area)**
+- Represents work streams (e.g., "Framework Core", "Plugin System")
+- Has status (not-started, in-progress, complete, blocked, waiting)
+- Has priority (critical, high, medium, low)
+- Can depend on other tracks (with circular dependency prevention)
+- Contains multiple tasks
 
-### Entity (`task_entity.go`)
+**Task (Concrete Work Item)**
+- Belongs to a track
+- Has status (todo, in-progress, done)
+- Can have git branch association
+- Atomic unit of work
+- Can be grouped into iterations
 
-**TaskEntity** implements:
-- `pluginsdk.IExtensible` - Required entity interface
-- `pluginsdk.ITrackable` - Status and progress tracking
+**Iteration (Time-Boxed Grouping)**
+- Groups tasks from multiple tracks
+- Has status (planned, current, complete)
+- Only one can be "current" at a time
+- Auto-incrementing iteration numbers
+- Deliverable-oriented (goal, deliverable description)
 
-**Fields**:
-- `ID` - Unique task identifier
-- `Title` - Task title
-- `Description` - Task description
-- `Status` - "todo", "in-progress", "done"
-- `Priority` - "low", "medium", "high"
-- `CreatedAt` - Creation timestamp
-- `UpdatedAt` - Last update timestamp
+### Multi-Project Architecture
 
-**Status → Progress Mapping**:
-- "todo" → 0.0
-- "in-progress" → 0.5
-- "done" → 1.0
+**Project Isolation:**
+- Each project has its own SQLite database in `.darwinflow/projects/<project-name>/roadmap.db`
+- Active project tracked in `.darwinflow/active-project.txt`
+- Complete data isolation between projects
+- Auto-migration from legacy single-database structure
 
-### Commands (`commands.go`)
+**Use Cases:**
+- Separate "production" and "test" roadmaps
+- Multiple product roadmaps in one workspace
+- Experimentation without affecting real data
 
-**4 Commands**:
+**Commands:**
+- All 28 entity commands support `--project <name>` flag to override active project
+- 5 dedicated project management commands (create, list, switch, show, delete)
 
-1. **InitCommand** (`init`)
-   - Usage: `dw task-manager init`
-   - Creates `.darwinflow/tasks/` directory
+### Package Structure
 
-2. **CreateCommand** (`create`)
-   - Usage: `dw task-manager create <title> [--description <desc>] [--priority <priority>]`
-   - Creates new task JSON file with unique ID
-   - Triggers `task.created` event
+**Entity Files (4):**
+- `roadmap_entity.go` - RoadmapEntity with IExtensible interface
+- `track_entity.go` - TrackEntity with IExtensible and ITrackable interfaces
+- `task_entity.go` - TaskEntity with IExtensible and ITrackable interfaces
+- `iteration_entity.go` - IterationEntity with IExtensible interface
 
-3. **ListCommand** (`list`)
-   - Usage: `dw task-manager list [--status <status>]`
-   - Lists all tasks or filtered by status
-   - Displays table: ID, Title, Status, Priority
+**Repository Files (3):**
+- `repository.go` - RoadmapRepository interface (34 methods)
+- `sqlite_repository.go` - SQLite implementation with full CRUD and queries
+- `event_emitting_repository.go` - Decorator pattern for event emission
 
-4. **UpdateCommand** (`update`)
-   - Usage: `dw task-manager update <id> --status <status> [--title] [--priority]`
-   - Updates task fields
-   - Triggers `task.updated` event
+**Command Files (6):**
+- `command_project.go` - Project commands (create, list, switch, show, delete)
+- `command_roadmap.go` - Roadmap commands (init, show, update)
+- `command_track.go` - Track commands (create, list, show, update, delete, dependencies)
+- `command_task.go` - Task commands (create, list, show, update, delete, move)
+- `command_iteration.go` - Iteration commands (create, list, show, current, start, complete, etc.)
+- `command_tui.go` - TUI launch command
 
-### File Watcher (`watcher.go`)
+**TUI Files (1):**
+- `tui_models.go` - Bubble Tea models and views for all entity types
 
-**FileWatcher** monitors `.darwinflow/tasks/` directory for changes:
+**Event Files (1):**
+- `events.go` - Event type constants (17 event types)
 
-**Lifecycle**:
-1. `NewFileWatcher()` - Create watcher with fsnotify
-2. `Start(ctx, eventChan)` - Watch directory and emit events
-3. Background goroutine processes file system events
-4. `Stop()` - Gracefully stop watching
+**Schema Files (1):**
+- `schema.go` - Database schema and migrations (6 tables)
 
-**Events Emitted**:
-- `task.created` - New task file created
-- `task.updated` - Task file modified (status change)
-- `task.deleted` - Task file deleted
+**Test Files (9):**
+- `roadmap_entity_test.go` - Roadmap entity tests
+- `track_entity_test.go` - Track entity tests (6 test cases)
+- `iteration_entity_test.go` - Iteration entity tests (3 test cases)
+- `sqlite_repository_test.go` - Repository integration tests (8 test cases)
+- `command_roadmap_test.go` - Roadmap command tests (7 test cases)
+- `command_track_test.go` - Track command tests (5 test cases)
+- `command_task_test.go` - Task command tests (9 test cases)
+- `command_iteration_test.go` - Iteration command tests (11 test cases)
+- `tui_models_test.go` - TUI tests (11 test cases)
+- `plugin_test.go` - Plugin integration tests (2 test cases)
 
-**Event Payload**:
-```json
-{
-  "type": "task.created",
-  "source": "task-manager",
-  "timestamp": "2025-10-22T10:00:00Z",
-  "payload": {
-    "id": "task-123",
-    "title": "Example task",
-    "status": "todo"
-  }
-}
-```
+**Other Files (3):**
+- `plugin.go` - TaskManagerPlugin implementation (IEntityProvider, ICommandProvider)
+- `schema.go` - Database schema definitions and migrations
+- `watcher.go` - File system watcher for legacy functionality
 
-**Implementation Details**:
-- Uses fsnotify for cross-platform file watching
-- Tracks file state to detect actual changes vs temporary files
-- Respects context cancellation for clean shutdown
-- Thread-safe with mutex protection
-- Graceful timeout on shutdown (5 seconds)
+### Database Schema
 
-### Event Types (`events.go`)
+**6 Tables:**
+- `roadmaps` - Roadmap entities (id, vision, success_criteria)
+- `tracks` - Track entities (id, roadmap_id, title, description, status, priority)
+- `track_dependencies` - Track dependency relationships (track_id, depends_on_id)
+- `tasks` - Task entities (id, track_id, title, description, status, priority, branch)
+- `iterations` - Iteration entities (id, roadmap_id, number, name, goal, status, deliverable)
+- `iteration_tasks` - Iteration-task relationships (iteration_id, task_id)
 
-**Constants**:
-- `EventTaskCreated = "task.created"`
-- `EventTaskUpdated = "task.updated"`
-- `EventTaskDeleted = "task.deleted"`
-- `PluginSourceName = "task-manager"`
+All tables have:
+- Primary keys and foreign keys
+- Proper indexes on frequently queried columns
+- Created_at and updated_at timestamps
+- Referential integrity constraints
 
 ---
 
-## Storage Format
+## Commands Overview
 
-### File Structure
+### Project Commands
 
+**Create Command**
+```bash
+dw task-manager project create <name>
 ```
-.darwinflow/
-  tasks/
-    task-1729604400000000000.json
-    task-1729604401000000000.json
-    ...
-```
+- Creates new isolated project with dedicated database
+- Project names: alphanumeric, hyphens, underscores only
+- Auto-initializes project directory structure
 
-### Task JSON File
-
-```json
-{
-  "id": "task-1729604400000000000",
-  "title": "Implement feature",
-  "description": "Add new feature to system",
-  "status": "in-progress",
-  "priority": "high",
-  "created_at": "2025-10-22T10:00:00Z",
-  "updated_at": "2025-10-22T10:15:30Z"
-}
+**List Command**
+```bash
+dw task-manager project list
 ```
+- Lists all projects with active project marked (*)
+- Shows project names and database paths
+
+**Switch Command**
+```bash
+dw task-manager project switch <name>
+```
+- Changes active project for all subsequent commands
+- Updates `.darwinflow/active-project.txt`
+
+**Show Command**
+```bash
+dw task-manager project show
+```
+- Displays current active project name
+
+**Delete Command**
+```bash
+dw task-manager project delete <name> [--force]
+```
+- Deletes project and all its data
+- Cannot delete currently active project (switch first)
+- Requires --force flag for safety
+
+### Roadmap Commands
+
+**Init Command**
+```bash
+dw task-manager roadmap init --vision "..." --success-criteria "..."
+```
+- Creates initial roadmap entity
+- Initializes database schema
+- Returns roadmap details
+
+**Show Command**
+```bash
+dw task-manager roadmap show
+```
+- Displays current roadmap vision and success criteria
+- Shows summary of tracks and task counts
+
+**Update Command**
+```bash
+dw task-manager roadmap update --vision "..." --success-criteria "..."
+```
+- Updates roadmap vision and/or success criteria
+- Emits roadmap.updated event
+
+### Track Commands
+
+**Create Command**
+```bash
+dw task-manager track create --id <id> --title <title> --description <desc> --priority <priority>
+```
+- Creates new track
+- Validates track ID format (track-*)
+- Emits track.created event
+
+**List Command**
+```bash
+dw task-manager track list [--status <status>] [--priority <priority>]
+```
+- Lists all tracks with optional filtering
+- Shows track ID, title, status, priority, task count, dependencies
+- Supports filtering by status and priority
+
+**Show Command**
+```bash
+dw task-manager track show <track-id>
+```
+- Displays track details including all nested tasks
+- Shows dependency information
+
+**Update Command**
+```bash
+dw task-manager track update <track-id> [--title] [--description] [--status] [--priority]
+```
+- Updates track fields
+- Emits track.updated event
+
+**Dependency Commands**
+```bash
+dw task-manager track add-dependency <track-id> <depends-on>
+dw task-manager track remove-dependency <track-id> <depends-on>
+```
+- Manages track dependencies
+- Prevents circular dependencies
+- Validates dependency relationships
+
+**Delete Command**
+```bash
+dw task-manager track delete <track-id> [--force]
+```
+- Deletes track and all child tasks
+- Requires --force flag for safety
+- Emits track.deleted event
+
+### Task Commands
+
+**Create Command**
+```bash
+dw task-manager task create --track <track-id> --title <title> [--description] [--priority]
+```
+- Creates new task in specified track
+- Auto-generates task ID
+- Emits task.created event
+
+**List Command**
+```bash
+dw task-manager task list [--track <track-id>] [--status <status>]
+```
+- Lists all tasks with optional filtering
+- Shows task ID, title, track, status, priority
+- Supports filtering by track and status
+
+**Show Command**
+```bash
+dw task-manager task show <task-id>
+```
+- Displays task details including track, status, branch
+- Shows iteration membership if applicable
+
+**Update Command**
+```bash
+dw task-manager task update <task-id> [--title] [--description] [--status] [--priority] [--branch]
+```
+- Updates task fields
+- Supports branch association for git integration
+- Emits task.updated event
+
+**Move Command**
+```bash
+dw task-manager task move <task-id> --track <new-track-id>
+```
+- Moves task to different track
+- Updates parent track reference
+- Emits task.moved event
+
+**Delete Command**
+```bash
+dw task-manager task delete <task-id> [--force]
+```
+- Deletes task
+- Removes from any iterations
+- Requires --force flag
+- Emits task.deleted event
+
+### Iteration Commands
+
+**Create Command**
+```bash
+dw task-manager iteration create --name <name> --goal <goal> --deliverable <deliverable>
+```
+- Creates new iteration (auto-numbered)
+- Sets status to "planned"
+- Emits iteration.created event
+
+**List Command**
+```bash
+dw task-manager iteration list
+```
+- Lists all iterations
+- Shows number, name, status, task count
+
+**Show Command**
+```bash
+dw task-manager iteration show <iteration-number>
+```
+- Displays iteration details with all tasks
+- Shows progress metrics
+
+**Current Command**
+```bash
+dw task-manager iteration current
+```
+- Shows the current active iteration (status = "current")
+- Displays detailed task breakdown
+
+**Update Command**
+```bash
+dw task-manager iteration update <number> [--name] [--goal] [--deliverable]
+```
+- Updates iteration fields
+- Emits iteration.updated event
+
+**Add/Remove Task Commands**
+```bash
+dw task-manager iteration add-task <iteration> <task-id> [<task-id>...]
+dw task-manager iteration remove-task <iteration> <task-id> [<task-id>...]
+```
+- Manages tasks in iterations
+- Handles multiple tasks at once
+- Validates task and iteration existence
+
+**Start Command**
+```bash
+dw task-manager iteration start <iteration-number>
+```
+- Sets iteration status to "current"
+- Only one iteration can be current
+- Emits iteration.started event
+
+**Complete Command**
+```bash
+dw task-manager iteration complete <iteration-number>
+```
+- Sets iteration status to "complete"
+- Marks iteration as finished
+- Emits iteration.completed event
+
+**Delete Command**
+```bash
+dw task-manager iteration delete <iteration-number> [--force]
+```
+- Deletes iteration
+- Removes iteration-task relationships
+- Requires --force flag
+- Emits iteration.deleted event
+
+### TUI Command
+
+**TUI Launch**
+```bash
+dw task-manager tui
+```
+- Launches interactive terminal user interface
+- Uses Bubble Tea framework
+- Provides multiple views (roadmap, tracks, iterations)
+
+---
+
+## Event Bus Integration
+
+The plugin emits events for all CRUD operations:
+
+**Roadmap Events:**
+- `task-manager.roadmap.created` - Roadmap initialized
+- `task-manager.roadmap.updated` - Vision/criteria changed
+
+**Track Events:**
+- `task-manager.track.created` - New track created
+- `task-manager.track.updated` - Track fields updated
+- `task-manager.track.status_changed` - Status changed (not-started → in-progress, etc.)
+- `task-manager.track.completed` - Track marked complete
+- `task-manager.track.blocked` - Track marked blocked
+
+**Task Events:**
+- `task-manager.task.created` - New task created
+- `task-manager.task.updated` - Task fields updated
+- `task-manager.task.status_changed` - Status changed (todo → in-progress, etc.)
+- `task-manager.task.completed` - Task marked done
+- `task-manager.task.moved` - Moved to different track
+
+**Iteration Events:**
+- `task-manager.iteration.created` - New iteration created
+- `task-manager.iteration.updated` - Iteration fields updated
+- `task-manager.iteration.started` - Iteration marked as current
+- `task-manager.iteration.completed` - Iteration marked complete
+
+Other plugins can subscribe to these events for notifications, automation, etc.
 
 ---
 
 ## Testing
 
-### Test Coverage: 59.1%
+**Test Coverage:** 58.1% (156 tests)
 
-**Tests**:
-- `TestNewTaskManagerPlugin` - Plugin creation
-- `TestGetCapabilities` - Capability reporting
-- `TestGetEntityTypes` - Entity type metadata
-- `TestTaskEntityGetters` - Entity field access
-- `TestTaskEntityProgress` - Progress calculation
-- `TestQueryTasks` - Entity querying
-- `TestCreateCommandExecution` - Create command
-- `TestListCommand` - List command with filters
-- `TestUpdateCommand` - Update command
-- `TestInitCommand` - Init command
-- `TestEventStreamStartStop` - Event stream lifecycle
-- `TestEventEmissionOnTaskCreation` - Event emission
-- `TestUpdateEntity` - Entity updates
+**Test Organization:**
+- Entity tests: 13 tests (roadmap, track, iteration)
+- Repository tests: 8 tests (SQLite integration)
+- Command tests: 32 tests (all command types)
+- TUI tests: 11 tests (views and navigation)
+- Plugin tests: 2 tests (plugin lifecycle)
 
-### Running Tests
+**Running Tests:**
 
 ```bash
 # Run all tests
 go test ./pkg/plugins/task_manager -v
 
-# Check coverage
+# Run with coverage
 go test -cover ./pkg/plugins/task_manager
 
 # Generate coverage report
 go test -coverprofile=coverage.out ./pkg/plugins/task_manager
 go tool cover -html=coverage.out
+
+# Run specific test suites
+go test ./pkg/plugins/task_manager -run TestRoadmap
+go test ./pkg/plugins/task_manager -run TestTrack
+go test ./pkg/plugins/task_manager -run TestTask
+go test ./pkg/plugins/task_manager -run TestIteration
+go test ./pkg/plugins/task_manager -run TestTUI
 ```
 
 ---
 
-## Architecture Principles
+## Plugin Architecture
 
-### What's Here
+### Plugin Interface Implementation
 
-✅ **Plugin implementation** - TaskManagerPlugin
-✅ **Entity type** - TaskEntity with IExtensible and ITrackable
-✅ **Commands** - Init, create, list, update
-✅ **Event streaming** - File watcher with fsnotify
-✅ **Event types** - Task lifecycle events
-✅ **Comprehensive tests** - 59% coverage, 13 test cases
-✅ **Only pluginsdk imports** - No internal/* dependencies
+**TaskManagerPlugin** implements:
+- `pluginsdk.Plugin` - Base plugin interface
+- `pluginsdk.IEntityProvider` - Query roadmaps, tracks, tasks, iterations
+- `pluginsdk.ICommandProvider` - All CLI commands
 
-### Key Patterns
+**Key Methods:**
+- `GetInfo()` - Plugin metadata (name, version, description)
+- `GetCapabilities()` - Lists implemented capabilities
+- `GetEntityTypes()` - Returns "roadmap", "track", "task", "iteration" entity types
+- `Query(ctx, query)` - Query entities with filters and pagination
+- `GetEntity(ctx, id)` - Get entity by ID
+- `UpdateEntity(ctx, id, fields)` - Update entity fields
+- `GetCommands()` - Returns all CLI commands
 
-1. **Plugin Structure**: Minimal, focused on task management
-2. **File-Based Storage**: JSON files for simplicity and event-driven design
-3. **Real-Time Events**: fsnotify integration for immediate notifications
-4. **Clean Separation**: Commands, entity, watcher, and events in separate files
-5. **Error Handling**: Graceful degradation and timeout management
+### Repository Pattern
 
-### Plugin Rules
+**RoadmapRepository Interface:**
+- 34 methods for complete CRUD and querying
+- Methods organized by entity type:
+  - Roadmap: Create, Get, Update, Delete
+  - Track: Create, Get, Update, Delete, AddDependency, RemoveDependency, GetDependencies
+  - Task: Create, Get, Update, Delete, GetByTrack
+  - Iteration: Create, Get, Update, Delete, GetCurrent, SetCurrent
+  - Query: List with filtering and pagination
 
-- ✅ Implements all required SDK interfaces correctly
-- ✅ Only imports `pkg/pluginsdk` (no `internal/*`)
-- ✅ Fully self-contained and extractable
-- ✅ Thread-safe operations (watcher with mutex)
-- ✅ Respects context cancellation
-- ✅ Graceful error handling
+**SQLiteRepository Implementation:**
+- Implements all 34 methods
+- Manages all 6 database tables
+- Handles migrations and schema creation
+- Provides transaction support for complex operations
+- Full error handling and validation
+
+### Event Emission
+
+**EventEmittingRepository Decorator:**
+- Wraps underlying repository
+- Emits events after successful operations
+- Publishes to event bus
+- Non-blocking event emission (errors don't fail operations)
+
+---
+
+## Usage Examples
+
+### Complete Workflow
+
+```bash
+# 1. Initialize roadmap
+dw task-manager roadmap init \
+  --vision "Build plugin ecosystem" \
+  --success-criteria "5 plugins, 80% coverage"
+
+# 2. Create tracks
+dw task-manager track create \
+  --id track-core \
+  --title "Core Framework" \
+  --priority critical
+
+dw task-manager track create \
+  --id track-plugins \
+  --title "Plugin System" \
+  --priority high
+
+# 3. Add dependency
+dw task-manager track add-dependency track-plugins track-core
+
+# 4. Create tasks
+dw task-manager task create \
+  --track track-core \
+  --title "Implement event bus" \
+  --priority high
+
+dw task-manager task create \
+  --track track-plugins \
+  --title "Create plugin SDK" \
+  --priority high
+
+# 5. Create iteration
+dw task-manager iteration create \
+  --name "Sprint 1" \
+  --goal "Foundation" \
+  --deliverable "Event bus and SDK"
+
+# 6. Add tasks to iteration
+dw task-manager iteration add-task 1 task-001 task-002
+
+# 7. Start iteration
+dw task-manager iteration start 1
+
+# 8. Track progress (in TUI)
+dw task-manager tui
+```
 
 ---
 
 ## Performance Characteristics
 
-### Event Streaming
-- **Latency**: File changes detected within 100ms (system-dependent)
-- **Memory**: Minimal overhead; tracks file state for de-duplication
-- **CPU**: Negligible when idle, scales with file system activity
+### Storage
 
-### File I/O
-- **Create**: O(1) - Direct JSON write
-- **Query**: O(n) - Reads all task files from directory
-- **Update**: O(1) - Direct JSON rewrite
-- **Delete**: O(1) - File removal
+- **Roadmap size**: ~50 bytes
+- **Track entry**: ~200 bytes (plus dependencies)
+- **Task entry**: ~250 bytes
+- **Iteration entry**: ~150 bytes
 
-### Scalability
-- Works well for hundreds of tasks
-- File system limits apply (typically 1000s of files)
-- For larger datasets, consider database backend
+### Operations
+
+- **Create track**: O(1) - Direct insert
+- **List tracks**: O(n) - Full table scan
+- **Add dependency**: O(1) - Direct insert with validation
+- **Get task by ID**: O(1) - Index lookup
+- **Query tasks by track**: O(n) - Index scan
+- **Start iteration**: O(1) - Direct update
+
+### Database
+
+- All primary tables have indexes on ID and common query fields
+- Track dependencies indexed for fast lookups
+- Iteration-task relationships indexed both directions
+
+---
+
+## Key Design Decisions
+
+1. **Hierarchical Structure**: Roadmap → Track → Task → Iteration follows domain hierarchy naturally
+2. **Event Sourcing**: All changes emit events for audit trail and cross-plugin notifications
+3. **SQLite Persistence**: Reliable local storage without external dependencies
+4. **TUI Integration**: Bubble Tea framework for rich terminal user experience
+5. **Track Dependencies**: Enables workflow management and blocking detection
+6. **Iteration Grouping**: Time-boxed work organizing across tracks
 
 ---
 
@@ -295,62 +584,58 @@ go tool cover -html=coverage.out
 
 Possible extensions:
 
-1. **Database Backend** - Replace JSON files with SQLite
-2. **Task Dependencies** - Add parent/child relationships
-3. **Recurring Tasks** - Implement schedules (cron-like)
-4. **Tags/Categories** - Organize tasks
-5. **Search** - Full-text search across tasks
-6. **Analytics** - Track task completion metrics
-7. **Notifications** - Alert on status changes
-8. **Sync** - Multi-device synchronization
+1. **Batch Operations**: Bulk update/delete commands
+2. **Export/Import**: Export roadmaps to markdown or CSV
+3. **Recurring Tasks**: Auto-create tasks based on templates
+4. **Progress Analytics**: Generate reports and metrics
+5. **Git Integration**: Auto-create branches from tasks
+6. **Notifications**: Alert on status changes
+7. **Collaboration**: Multi-user roadmap management
+8. **Estimation**: Story points and burn-down charts
 
 ---
 
 ## Troubleshooting
 
-### File Watcher Not Detecting Changes
+### Database Locked
 
-**Cause**: Some file systems don't send fsnotify events reliably (especially over network mounts).
+**Cause**: Multiple processes accessing the database simultaneously.
 
-**Solution**: Test with local storage or configure longer polling intervals.
+**Solution**: Ensure only one instance of `dw task-manager` is running.
 
-### High CPU Usage
+### Circular Dependencies
 
-**Cause**: Too many file system events (rapid file creation/deletion).
+**Cause**: Attempting to create a circular dependency between tracks.
 
-**Solution**: Add debouncing or batch events in watcher.
+**Solution**: The system prevents this automatically. Check your dependency graph.
 
-### Tasks Not Persisting
+### Iteration Not Updating
 
-**Cause**: Permissions issue on `.darwinflow/tasks/` directory.
+**Cause**: Iteration in "complete" status cannot be edited.
 
-**Solution**: Verify directory is writable: `chmod 755 .darwinflow/tasks`
+**Solution**: Only planned and current iterations can be updated.
 
 ---
 
 ## Files
 
-- `plugin.go` - TaskManagerPlugin implementation
-- `task_entity.go` - TaskEntity with IExtensible and ITrackable
-- `commands.go` - Init, Create, List, Update commands
-- `events.go` - Event type constants
-- `watcher.go` - File watcher with fsnotify
-- `plugin_test.go` - Comprehensive tests (59% coverage)
-- `CLAUDE.md` - This file
+**Total: 28 files**
+
+**Entities:** 4 files
+**Repository:** 3 files
+**Commands:** 5 files
+**TUI:** 1 file
+**Tests:** 10 files
+**Other:** 3 files (plugin.go, events.go, schema.go, watcher.go)
 
 ---
 
-## Example: Integration Guide
+## References
 
-To use this plugin as a template for your own plugins:
-
-1. **Copy structure**: Use this plugin's file organization
-2. **Replace entity**: Implement your entity type (inherits IExtensible)
-3. **Implement commands**: Copy command pattern from commands.go
-4. **Add storage**: Extend SaveTask/LoadTask for your backend
-5. **Add events**: Emit events for important state changes
-6. **Write tests**: Achieve 70%+ coverage minimum
+- **Plugin Development**: `pkg/pluginsdk/CLAUDE.md` - SDK documentation
+- **Architecture**: `/workspace/CLAUDE.md` - DarwinFlow architecture guide
+- **Commands**: See README.md for command examples and usage
 
 ---
 
-*Created as Task 4.3: Example plugin demonstrating real-time event streaming with fsnotify*
+*Updated: 2025-10-31 (Phase 10 - Final documentation, testing, and polish)*

@@ -17,7 +17,6 @@ import (
 
 type TaskCreateCommand struct {
 	Plugin      *TaskManagerPlugin
-	project string
 	trackID     string
 	title       string
 	description string
@@ -73,11 +72,6 @@ func (c *TaskCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 	c.priority = "medium" // default
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--project":
-			if i+1 < len(args) {
-				c.project = args[i+1]
-				i++
-			}
 		case "--track":
 			if i+1 < len(args) {
 				c.trackID = args[i+1]
@@ -160,7 +154,6 @@ func (c *TaskCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 
 type TaskListCommand struct {
 	Plugin   *TaskManagerPlugin
-	project string
 	track    string
 	status   string
 	priority string
@@ -213,11 +206,6 @@ func (c *TaskListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 	// Parse flags
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--project":
-			if i+1 < len(args) {
-				c.project = args[i+1]
-				i++
-			}
 		case "--track":
 			if i+1 < len(args) {
 				c.track = args[i+1]
@@ -304,8 +292,7 @@ func (c *TaskListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 // ============================================================================
 
 type TaskShowCommand struct {
-	Plugin  *TaskManagerPlugin
-	project string
+	Plugin *TaskManagerPlugin
 	taskID string
 }
 
@@ -402,7 +389,6 @@ func (c *TaskShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 
 type TaskUpdateCommand struct {
 	Plugin      *TaskManagerPlugin
-	project string
 	taskID      string
 	title       string
 	description string
@@ -559,8 +545,7 @@ func (c *TaskUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 // ============================================================================
 
 type TaskDeleteCommand struct {
-	Plugin  *TaskManagerPlugin
-	project string
+	Plugin *TaskManagerPlugin
 	taskID string
 	force  bool
 }
@@ -664,7 +649,6 @@ func (c *TaskDeleteCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 
 type TaskMoveCommand struct {
 	Plugin       *TaskManagerPlugin
-	project string
 	taskID        string
 	newTrackID    string
 }
@@ -777,7 +761,6 @@ func (c *TaskMoveCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 
 type TaskMigrateCommand struct {
 	Plugin  *TaskManagerPlugin
-	project string
 	taskID  string
 	trackID string
 }

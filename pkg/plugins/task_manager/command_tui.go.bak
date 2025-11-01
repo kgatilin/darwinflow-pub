@@ -11,8 +11,7 @@ import (
 
 // TUICommand launches the interactive TUI for browsing roadmaps and tracks
 type TUICommand struct {
-	Plugin  *TaskManagerPlugin
-	project string
+	Plugin *TaskManagerPlugin
 }
 
 // GetName returns the command name
@@ -51,35 +50,13 @@ func (c *TUICommand) GetUsage() string {
 
 // Execute runs the TUI command
 func (c *TUICommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
-	// Parse flags
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--project":
-			if i+1 < len(args) {
-				c.project = args[i+1]
-				i++
-			}
-		}
+	// Repository must be initialized for TUI
+	if c.Plugin.repository == nil {
+		return fmt.Errorf("database not initialized; run 'dw task-manager roadmap init' first")
 	}
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
-	// Determine project name for display
-	projectName := c.project
-	if projectName == "" {
-		projectName, err = c.Plugin.getActiveProject()
-		if err != nil {
-			projectName = "default"
-		}
-	}
-
-	// Create the TUI model with project name
-	appModel := NewAppModelWithProject(ctx, repo, c.Plugin.logger, projectName)
+	// Create the TUI model
+	appModel := NewAppModel(ctx, c.Plugin.repository, c.Plugin.logger)
 
 	// Start the Bubble Tea program
 	p := tea.NewProgram(appModel, tea.WithAltScreen())

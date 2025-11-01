@@ -121,11 +121,11 @@ cmd → internal/app + internal/infra → internal/domain
   - Entity: `session` (IExtensible + IHasContext + ITrackable)
   - Commands: `init`, `emit-event` (for hook integration)
   - CLI: `dw claude-code <command>` or `dw claude <command>` (backward compat)
-- **task-manager** (`pkg/plugins/task_manager`): Task tracking with real-time event streaming
-  - Entity: `task` (IExtensible + IHasContext)
-  - Capabilities: IEventEmitter (file-based fsnotify watching)
-  - Commands: `init`, `create`, `list`, `update`
-  - CLI: `dw task-manager <command>`
+- **task-manager** (`pkg/plugins/task_manager`): Hierarchical roadmap management
+  - Entities: `roadmap`, `track`, `task`, `iteration` (all IExtensible)
+  - Capabilities: Event sourcing, SQLite persistence, interactive TUI
+  - Commands: Full CRUD operations on all entities with CLI and TUI
+  - CLI: `dw task-manager <command>` or `dw task-manager tui` for interactive mode
 
 ### Framework Capabilities for Plugin Developers
 
@@ -172,25 +172,170 @@ DarwinFlow now supports real-time event streaming from multiple plugins simultan
 - **TUI Real-Time Updates**: Auto-refresh session list when new events arrive
 - **Event Counter Badge**: Shows "+N new" indicator in TUI status bar
 
-**Example Workflow: Task Tracking**
+#### Task Manager Commands
+
+The task-manager plugin provides comprehensive hierarchical roadmap management with Roadmap → Track → Task → Iteration structure.
+
+**Multi-Project Support:**
+
+The task-manager supports multiple isolated projects (e.g., separate "production" and "test" roadmaps). Each project has its own database and complete isolation.
 
 ```bash
-# Initialize task tracking
-dw task-manager init
+# Create a new project
+dw task-manager project create test
 
-# Create tasks
-dw task-manager create "Implement feature X" --priority high
-dw task-manager create "Write tests" --priority medium
+# List all projects (* marks active project)
+dw task-manager project list
 
-# List tasks
-dw task-manager list
-dw task-manager list --status in-progress
+# Switch active project
+dw task-manager project switch test
 
-# Update task status
-dw task-manager update task-123 --status done
+# Show current active project
+dw task-manager project show
+
+# Delete a project
+dw task-manager project delete test --force
+
+# Use --project flag to override active project on any command
+dw task-manager track list --project production
 ```
 
-The task-manager plugin demonstrates real-time event streaming using fsnotify to watch task files and emit events when tasks are created, updated, or deleted. These events are visible in real-time in the TUI session list.
+**Project Notes:**
+- First run auto-creates a "default" project with any existing data
+- All commands use the active project by default
+- Use `--project <name>` flag to override on any command
+- Cannot delete the currently active project (switch first)
+
+**Roadmap Commands:**
+
+```bash
+# Initialize a new roadmap
+dw task-manager roadmap init \
+  --vision "Build extensible event-sourced framework" \
+  --success-criteria "10 external plugins, 90% test coverage"
+
+# Show current roadmap
+dw task-manager roadmap show
+
+# Update roadmap
+dw task-manager roadmap update \
+  --vision "Updated vision" \
+  --success-criteria "New criteria"
+```
+
+**Track Commands (Major Work Areas):**
+
+```bash
+# Create a track
+dw task-manager track create \
+  --id track-framework-core \
+  --title "Framework Core" \
+  --description "Core framework implementation" \
+  --priority high
+
+# List all tracks (with filtering)
+dw task-manager track list
+dw task-manager track list --status in-progress --priority critical
+
+# Show track details
+dw task-manager track show track-framework-core
+
+# Update track
+dw task-manager track update track-framework-core --status in-progress
+
+# Manage dependencies
+dw task-manager track add-dependency track-plugin-system track-framework-core
+dw task-manager track remove-dependency track-plugin-system track-framework-core
+
+# Delete track
+dw task-manager track delete track-framework-core --force
+```
+
+**Task Commands (Concrete Work Items):**
+
+```bash
+# Create a task
+dw task-manager task create \
+  --track track-framework-core \
+  --title "Implement LLM abstraction" \
+  --description "Create LLM interface in domain layer" \
+  --priority high
+
+# List tasks (with filtering)
+dw task-manager task list
+dw task-manager task list --track track-framework-core --status todo
+
+# Show task details
+dw task-manager task show task-fc-001
+
+# Update task
+dw task-manager task update task-fc-001 \
+  --status in-progress \
+  --branch feat/llm-abstraction
+
+# Move task to different track
+dw task-manager task move task-fc-001 --track track-plugin-system
+
+# Delete task
+dw task-manager task delete task-fc-001 --force
+```
+
+**Iteration Commands (Time-Boxed Sprints):**
+
+```bash
+# Create an iteration
+dw task-manager iteration create \
+  --name "Foundation Sprint" \
+  --goal "Complete view-based analysis" \
+  --deliverable "Plugin-agnostic analysis framework"
+
+# List iterations
+dw task-manager iteration list
+
+# Show iteration details
+dw task-manager iteration show 1
+
+# Show current iteration
+dw task-manager iteration current
+
+# Update iteration
+dw task-manager iteration update 1 --name "Sprint 1"
+
+# Add/remove tasks
+dw task-manager iteration add-task 1 task-fc-003 task-fc-005
+dw task-manager iteration remove-task 1 task-fc-003
+
+# Start iteration (mark as current)
+dw task-manager iteration start 2
+
+# Complete iteration
+dw task-manager iteration complete 1
+
+# Delete iteration
+dw task-manager iteration delete 1 --force
+```
+
+**Interactive TUI (Terminal User Interface):**
+
+```bash
+# Launch interactive TUI
+dw task-manager tui
+```
+
+Navigation:
+- `j/k` or `↑/↓` - Navigate lists
+- `enter` - Select/drill down
+- `i` - Switch to iteration view
+- `r` - Refresh data
+- `esc` - Go back
+- `q` - Quit
+
+**Features:**
+- Roadmap overview with tracks and task counts
+- Track details with nested task lists
+- Iteration planning and progress visualization
+- Dependency visualization
+- Status and priority filtering
 
 ### Plugin Event Bus
 

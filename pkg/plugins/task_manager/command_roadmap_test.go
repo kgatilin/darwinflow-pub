@@ -64,22 +64,10 @@ func createRoadmapTestDB(t *testing.T) *sql.DB {
 // TestRoadmapInitCommand tests successful roadmap creation
 func TestRoadmapInitCommand_Success(t *testing.T) {
 	// Setup
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
-	defer db.Close()
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
 
 	cmd := &task_manager.RoadmapInitCommand{Plugin: plugin}
-	ctx := context.Background()
 	cmdCtx := &mockCommandContext{
 		workingDir: tmpDir,
 		stdout:     &bytes.Buffer{},
@@ -87,7 +75,7 @@ func TestRoadmapInitCommand_Success(t *testing.T) {
 	}
 
 	// Execute
-	err = cmd.Execute(ctx, cmdCtx, []string{
+	err := cmd.Execute(ctx, cmdCtx, []string{
 		"--vision", "Build extensible framework",
 		"--success-criteria", "Support 10 plugins",
 	})
@@ -104,8 +92,11 @@ func TestRoadmapInitCommand_Success(t *testing.T) {
 		t.Errorf("expected vision in output, got: %s", output)
 	}
 
-	// Verify roadmap was saved
-	repo := plugin.GetRepository()
+	// Verify roadmap was saved - get database for default project
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := repo.GetActiveRoadmap(ctx)
 	if err != nil {
 		t.Errorf("failed to retrieve saved roadmap: %v", err)
@@ -113,11 +104,13 @@ func TestRoadmapInitCommand_Success(t *testing.T) {
 	if roadmap == nil {
 		t.Error("roadmap should not be nil")
 	}
-	if roadmap.Vision != "Build extensible framework" {
-		t.Errorf("expected vision 'Build extensible framework', got '%s'", roadmap.Vision)
-	}
-	if roadmap.SuccessCriteria != "Support 10 plugins" {
-		t.Errorf("expected success criteria 'Support 10 plugins', got '%s'", roadmap.SuccessCriteria)
+	if roadmap != nil {
+		if roadmap.Vision != "Build extensible framework" {
+			t.Errorf("expected vision 'Build extensible framework', got '%s'", roadmap.Vision)
+		}
+		if roadmap.SuccessCriteria != "Support 10 plugins" {
+			t.Errorf("expected success criteria 'Support 10 plugins', got '%s'", roadmap.SuccessCriteria)
+		}
 	}
 }
 
@@ -205,29 +198,13 @@ func TestRoadmapInitCommand_MissingSuccessCriteria(t *testing.T) {
 
 // TestRoadmapInitCommand_DuplicateRoadmap tests error when roadmap already exists
 func TestRoadmapInitCommand_DuplicateRoadmap(t *testing.T) {
-	tmpDir := t.TempDir()
-	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+
+	// Create first roadmap using database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	if err := task_manager.InitSchema(db); err != nil {
-		t.Fatalf("failed to initialize schema: %v", err)
-	}
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create first roadmap
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 	roadmap1, err := task_manager.NewRoadmapEntity(
 		"roadmap-1",
@@ -244,7 +221,7 @@ func TestRoadmapInitCommand_DuplicateRoadmap(t *testing.T) {
 		t.Fatalf("failed to save first roadmap: %v", err)
 	}
 
-	// Try to create second roadmap
+	// Try to create second roadmap via command
 	cmd := &task_manager.RoadmapInitCommand{Plugin: plugin}
 	cmdCtx := &mockCommandContext{
 		workingDir: tmpDir,
@@ -264,30 +241,14 @@ func TestRoadmapInitCommand_DuplicateRoadmap(t *testing.T) {
 
 // TestRoadmapShowCommand_WithExistingRoadmap tests showing an existing roadmap
 func TestRoadmapShowCommand_WithExistingRoadmap(t *testing.T) {
-	tmpDir := t.TempDir()
-	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap in the project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	if err := task_manager.InitSchema(db); err != nil {
-		t.Fatalf("failed to initialize schema: %v", err)
-	}
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -378,30 +339,14 @@ func TestRoadmapShowCommand_NoExistingRoadmap(t *testing.T) {
 
 // TestRoadmapUpdateCommand_UpdateVision tests updating only vision
 func TestRoadmapUpdateCommand_UpdateVision(t *testing.T) {
-	tmpDir := t.TempDir()
-	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap in the project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	if err := task_manager.InitSchema(db); err != nil {
-		t.Fatalf("failed to initialize schema: %v", err)
-	}
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Old vision",
@@ -448,30 +393,14 @@ func TestRoadmapUpdateCommand_UpdateVision(t *testing.T) {
 
 // TestRoadmapUpdateCommand_UpdateSuccessCriteria tests updating only success criteria
 func TestRoadmapUpdateCommand_UpdateSuccessCriteria(t *testing.T) {
-	tmpDir := t.TempDir()
-	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap in the project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	if err := task_manager.InitSchema(db); err != nil {
-		t.Fatalf("failed to initialize schema: %v", err)
-	}
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -518,30 +447,14 @@ func TestRoadmapUpdateCommand_UpdateSuccessCriteria(t *testing.T) {
 
 // TestRoadmapUpdateCommand_UpdateBoth tests updating both vision and criteria
 func TestRoadmapUpdateCommand_UpdateBoth(t *testing.T) {
-	tmpDir := t.TempDir()
-	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap in the project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	if err := task_manager.InitSchema(db); err != nil {
-		t.Fatalf("failed to initialize schema: %v", err)
-	}
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Old vision",

@@ -16,23 +16,14 @@ import (
 // ============================================================================
 
 func TestTrackCreateCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap first in project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap first
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -82,29 +73,17 @@ func TestTrackCreateCommand_Success(t *testing.T) {
 }
 
 func TestTrackCreateCommand_MissingId(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
-	defer db.Close()
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
 
 	cmd := &task_manager.TrackCreateCommand{Plugin: plugin}
-	ctx := context.Background()
 	cmdCtx := &mockCommandContext{
 		workingDir: tmpDir,
 		stdout:     &bytes.Buffer{},
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{
+	err := cmd.Execute(ctx, cmdCtx, []string{
 		"--title", "Plugin System",
 	})
 
@@ -114,29 +93,17 @@ func TestTrackCreateCommand_MissingId(t *testing.T) {
 }
 
 func TestTrackCreateCommand_NoActiveRoadmap(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
-	defer db.Close()
-
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
 
 	cmd := &task_manager.TrackCreateCommand{Plugin: plugin}
-	ctx := context.Background()
 	cmdCtx := &mockCommandContext{
 		workingDir: tmpDir,
 		stdout:     &bytes.Buffer{},
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{
+	err := cmd.Execute(ctx, cmdCtx, []string{
 		"--id", "track-plugin-system",
 		"--title", "Plugin System",
 	})
@@ -151,23 +118,14 @@ func TestTrackCreateCommand_NoActiveRoadmap(t *testing.T) {
 // ============================================================================
 
 func TestTrackListCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap and tracks in project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap and tracks
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -219,23 +177,14 @@ func TestTrackListCommand_Success(t *testing.T) {
 // ============================================================================
 
 func TestTrackShowCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap and track in project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap and track
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -289,23 +238,14 @@ func TestTrackShowCommand_Success(t *testing.T) {
 // ============================================================================
 
 func TestTrackUpdateCommand_UpdateTitle(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap and track in project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap and track
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -363,23 +303,14 @@ func TestTrackUpdateCommand_UpdateTitle(t *testing.T) {
 // ============================================================================
 
 func TestTrackDeleteCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap and track in project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap and track
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -434,23 +365,14 @@ func TestTrackDeleteCommand_Success(t *testing.T) {
 // ============================================================================
 
 func TestTrackAddDependencyCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap and tracks in project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap and tracks
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",
@@ -521,23 +443,14 @@ func TestTrackAddDependencyCommand_Success(t *testing.T) {
 // ============================================================================
 
 func TestTrackRemoveDependencyCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Setup: Create roadmap and tracks in project database
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Create roadmap and tracks
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	roadmap, err := task_manager.NewRoadmapEntity(
 		"roadmap-test",
 		"Test vision",

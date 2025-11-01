@@ -17,7 +17,6 @@ import (
 
 type TrackCreateCommand struct {
 	Plugin      *TaskManagerPlugin
-	project string
 	id          string
 	title       string
 	description string
@@ -73,11 +72,6 @@ func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 	c.priority = "medium" // default
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--project":
-			if i+1 < len(args) {
-				c.project = args[i+1]
-				i++
-			}
 		case "--id":
 			if i+1 < len(args) {
 				c.id = args[i+1]
@@ -106,12 +100,11 @@ func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 		return fmt.Errorf("--id and --title are required")
 	}
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
+	// Get repository
+	repo := c.Plugin.GetRepository()
+	if repo == nil {
+		return fmt.Errorf("database repository not initialized")
 	}
-	defer cleanup()
 
 	// Get active roadmap (required)
 	roadmap, err := repo.GetActiveRoadmap(ctx)
@@ -164,7 +157,6 @@ func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 
 type TrackListCommand struct {
 	Plugin   *TaskManagerPlugin
-	project string
 	status   string
 	priority string
 }
@@ -211,11 +203,6 @@ func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	// Parse flags
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--project":
-			if i+1 < len(args) {
-				c.project = args[i+1]
-				i++
-			}
 		case "--status":
 			if i+1 < len(args) {
 				c.status = args[i+1]
@@ -229,12 +216,11 @@ func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 		}
 	}
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
+	// Get repository
+	repo := c.Plugin.GetRepository()
+	if repo == nil {
+		return fmt.Errorf("database repository not initialized")
 	}
-	defer cleanup()
 
 	// Get active roadmap
 	roadmap, err := repo.GetActiveRoadmap(ctx)
@@ -297,7 +283,6 @@ func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 
 type TrackShowCommand struct {
 	Plugin  *TaskManagerPlugin
-	project string
 	trackID string
 }
 
@@ -337,12 +322,11 @@ func (c *TrackShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	}
 	c.trackID = args[0]
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
+	// Get repository
+	repo := c.Plugin.GetRepository()
+	if repo == nil {
+		return fmt.Errorf("database repository not initialized")
 	}
-	defer cleanup()
 
 	// Get track
 	track, err := repo.GetTrack(ctx, c.trackID)
@@ -385,7 +369,6 @@ func (c *TrackShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 
 type TrackUpdateCommand struct {
 	Plugin      *TaskManagerPlugin
-	project string
 	trackID     string
 	title       *string
 	description *string
@@ -473,12 +456,11 @@ func (c *TrackUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 		return fmt.Errorf("at least one flag must be provided (--title, --description, --status, or --priority)")
 	}
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
+	// Get repository
+	repo := c.Plugin.GetRepository()
+	if repo == nil {
+		return fmt.Errorf("database repository not initialized")
 	}
-	defer cleanup()
 
 	// Get existing track
 	track, err := repo.GetTrack(ctx, c.trackID)
@@ -530,7 +512,6 @@ func (c *TrackUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 
 type TrackDeleteCommand struct {
 	Plugin  *TaskManagerPlugin
-	project string
 	trackID string
 	force   bool
 }
@@ -582,12 +563,11 @@ func (c *TrackDeleteCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 		}
 	}
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
+	// Get repository
+	repo := c.Plugin.GetRepository()
+	if repo == nil {
+		return fmt.Errorf("database repository not initialized")
 	}
-	defer cleanup()
 
 	// Get track to verify it exists
 	track, err := repo.GetTrack(ctx, c.trackID)
@@ -629,7 +609,6 @@ func (c *TrackDeleteCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 
 type TrackAddDependencyCommand struct {
 	Plugin      *TaskManagerPlugin
-	project string
 	trackID     string
 	dependsOnID string
 }
@@ -678,12 +657,11 @@ func (c *TrackAddDependencyCommand) Execute(ctx context.Context, cmdCtx pluginsd
 	c.trackID = args[0]
 	c.dependsOnID = args[1]
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
+	// Get repository
+	repo := c.Plugin.GetRepository()
+	if repo == nil {
+		return fmt.Errorf("database repository not initialized")
 	}
-	defer cleanup()
 
 	// Validate both tracks exist
 	track, err := repo.GetTrack(ctx, c.trackID)
@@ -734,7 +712,6 @@ func (c *TrackAddDependencyCommand) Execute(ctx context.Context, cmdCtx pluginsd
 
 type TrackRemoveDependencyCommand struct {
 	Plugin      *TaskManagerPlugin
-	project string
 	trackID     string
 	dependsOnID string
 }
@@ -774,15 +751,14 @@ func (c *TrackRemoveDependencyCommand) Execute(ctx context.Context, cmdCtx plugi
 	c.trackID = args[0]
 	c.dependsOnID = args[1]
 
-	// Get repository for project
-	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
-	if err != nil {
-		return err
+	// Get repository
+	repo := c.Plugin.GetRepository()
+	if repo == nil {
+		return fmt.Errorf("database repository not initialized")
 	}
-	defer cleanup()
 
 	// Validate tracks exist
-	_, err = repo.GetTrack(ctx, c.trackID)
+	_, err := repo.GetTrack(ctx, c.trackID)
 	if err != nil {
 		if errors.Is(err, pluginsdk.ErrNotFound) {
 			fmt.Fprintf(cmdCtx.GetStdout(), "Track not found: %s\n", c.trackID)

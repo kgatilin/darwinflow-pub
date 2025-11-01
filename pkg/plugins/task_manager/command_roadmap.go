@@ -11,7 +11,8 @@ import (
 
 // RoadmapInitCommand initializes a new roadmap
 type RoadmapInitCommand struct {
-	Plugin *TaskManagerPlugin
+	Plugin  *TaskManagerPlugin
+	project string
 }
 
 func (c *RoadmapInitCommand) GetName() string {
@@ -54,15 +55,15 @@ Notes:
 }
 
 func (c *RoadmapInitCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
-	repo := c.Plugin.GetRepository()
-	if repo == nil {
-		return fmt.Errorf("database repository not initialized")
-	}
-
 	// Parse flags
 	var vision, successCriteria string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
 		case "--vision":
 			if i+1 < len(args) {
 				vision = args[i+1]
@@ -75,6 +76,13 @@ func (c *RoadmapInitCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 			}
 		}
 	}
+
+	// Get repository for project
+	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	// Validate required flags
 	if vision == "" {
@@ -118,7 +126,8 @@ func (c *RoadmapInitCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 
 // RoadmapShowCommand displays the current roadmap
 type RoadmapShowCommand struct {
-	Plugin *TaskManagerPlugin
+	Plugin  *TaskManagerPlugin
+	project string
 }
 
 func (c *RoadmapShowCommand) GetName() string {
@@ -151,10 +160,23 @@ Output:
 }
 
 func (c *RoadmapShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
-	repo := c.Plugin.GetRepository()
-	if repo == nil {
-		return fmt.Errorf("database repository not initialized")
+	// Parse flags
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		}
 	}
+
+	// Get repository for project
+	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	// Get active roadmap
 	roadmap, err := repo.GetActiveRoadmap(ctx)
@@ -180,7 +202,8 @@ func (c *RoadmapShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 
 // RoadmapUpdateCommand updates the current roadmap
 type RoadmapUpdateCommand struct {
-	Plugin *TaskManagerPlugin
+	Plugin  *TaskManagerPlugin
+	project string
 }
 
 func (c *RoadmapUpdateCommand) GetName() string {
@@ -220,15 +243,15 @@ Notes:
 }
 
 func (c *RoadmapUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
-	repo := c.Plugin.GetRepository()
-	if repo == nil {
-		return fmt.Errorf("database repository not initialized")
-	}
-
 	// Parse flags
 	var vision, successCriteria *string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
 		case "--vision":
 			if i+1 < len(args) {
 				v := args[i+1]
@@ -243,6 +266,13 @@ func (c *RoadmapUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Com
 			}
 		}
 	}
+
+	// Get repository for project
+	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	// At least one flag must be provided
 	if vision == nil && successCriteria == nil {

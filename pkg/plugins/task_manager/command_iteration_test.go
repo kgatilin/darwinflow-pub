@@ -58,40 +58,54 @@ func TestIterationCreateCommand_Success(t *testing.T) {
 
 func TestIterationCreateCommand_AutoIncrementNumber(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
-	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
-	repo := plugin.GetRepository()
 	ctx := context.Background()
 
-	// Create first iteration
-	iter1, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("failed to create iteration: %v", err)
+	// Create project command to set up default project
+	projectCmd := &task_manager.ProjectCreateCommand{Plugin: plugin}
+	projectCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
 	}
-	if err := repo.SaveIteration(ctx, iter1); err != nil {
-		t.Fatalf("failed to save iteration: %v", err)
+	if err := projectCmd.Execute(ctx, projectCtx, []string{"default"}); err != nil {
+		t.Fatalf("failed to create default project: %v", err)
 	}
 
-	// Create second iteration via command
-	cmd := &task_manager.IterationCreateCommand{Plugin: plugin}
-	cmdCtx := &mockCommandContext{
+	// Create first iteration using command
+	cmd1 := &task_manager.IterationCreateCommand{Plugin: plugin}
+	cmdCtx1 := &mockCommandContext{
 		workingDir: tmpDir,
 		stdout:     &bytes.Buffer{},
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{
+	err = cmd1.Execute(ctx, cmdCtx1, []string{
+		"--name", "Sprint 1",
+		"--goal", "Goal 1",
+	})
+	if err != nil {
+		t.Fatalf("failed to create first iteration: %v", err)
+	}
+
+	// Create second iteration via command
+	cmd2 := &task_manager.IterationCreateCommand{Plugin: plugin}
+	cmdCtx2 := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd2.Execute(ctx, cmdCtx2, []string{
 		"--name", "Sprint 2",
 		"--goal", "Goal 2",
 	})
@@ -100,7 +114,7 @@ func TestIterationCreateCommand_AutoIncrementNumber(t *testing.T) {
 	}
 
 	// Verify output shows number 2
-	output := cmdCtx.stdout.String()
+	output := cmdCtx2.stdout.String()
 	if !strings.Contains(output, "Number:       2") {
 		t.Errorf("expected iteration number 2, got: %s", output)
 	}
@@ -171,22 +185,15 @@ func TestIterationCreateCommand_MissingGoal(t *testing.T) {
 // ============================================================================
 
 func TestIterationListCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iterations
 	iter1, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
@@ -254,22 +261,15 @@ func TestIterationListCommand_NoIterations(t *testing.T) {
 // ============================================================================
 
 func TestIterationShowCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create roadmap
 	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
@@ -367,22 +367,15 @@ func TestIterationShowCommand_NotFound(t *testing.T) {
 // ============================================================================
 
 func TestIterationCurrentCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
 	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
@@ -455,22 +448,15 @@ func TestIterationCurrentCommand_NoCurrentIteration(t *testing.T) {
 // ============================================================================
 
 func TestIterationUpdateCommand_UpdateName(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
 	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
@@ -510,22 +496,15 @@ func TestIterationUpdateCommand_UpdateName(t *testing.T) {
 }
 
 func TestIterationUpdateCommand_NoFlags(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
 	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
@@ -555,22 +534,15 @@ func TestIterationUpdateCommand_NoFlags(t *testing.T) {
 // ============================================================================
 
 func TestIterationDeleteCommand_ForceDelete(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
 	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
@@ -644,22 +616,15 @@ func TestIterationDeleteCommand_NotFound(t *testing.T) {
 // ============================================================================
 
 func TestIterationAddTaskCommand_SingleTask(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Setup: Create roadmap, track, task, iteration
 	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
@@ -711,22 +676,15 @@ func TestIterationAddTaskCommand_SingleTask(t *testing.T) {
 }
 
 func TestIterationAddTaskCommand_MultipleTasksSuccess(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Setup
 	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
@@ -782,22 +740,15 @@ func TestIterationAddTaskCommand_MultipleTasksSuccess(t *testing.T) {
 }
 
 func TestIterationAddTaskCommand_TaskNotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
@@ -830,22 +781,15 @@ func TestIterationAddTaskCommand_TaskNotFound(t *testing.T) {
 // ============================================================================
 
 func TestIterationRemoveTaskCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Setup
 	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
@@ -904,22 +848,15 @@ func TestIterationRemoveTaskCommand_Success(t *testing.T) {
 // ============================================================================
 
 func TestIterationStartCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
 	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
@@ -963,22 +900,15 @@ func TestIterationStartCommand_Success(t *testing.T) {
 // ============================================================================
 
 func TestIterationCompleteCommand_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
-		&stubLogger{},
-		tmpDir,
-		db,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	repo := plugin.GetRepository()
-	ctx := context.Background()
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
 	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
