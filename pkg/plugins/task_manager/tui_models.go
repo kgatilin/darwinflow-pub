@@ -21,6 +21,7 @@ const (
 	ViewIterationList
 	ViewIterationDetail
 	ViewADRList
+	ViewACList
 	ViewError
 	ViewLoading
 )
@@ -50,7 +51,12 @@ type AppModel struct {
 	// Data - ADR views
 	adrs             []*ADREntity
 	selectedADRIdx   int
-	previousViewMode ViewMode // To return to previous view after ADR list
+
+	// Data - AC views
+	acs              []*AcceptanceCriteriaEntity
+	selectedACIdx    int
+
+	previousViewMode ViewMode // To return to previous view after ADR/AC list
 
 	// UI state
 	selectedTrackIdx     int
@@ -96,6 +102,11 @@ type IterationDetailLoadedMsg struct {
 
 type ADRsLoadedMsg struct {
 	ADRs  []*ADREntity
+	Error error
+}
+
+type ACsLoadedMsg struct {
+	ACs   []*AcceptanceCriteriaEntity
 	Error error
 }
 
@@ -236,6 +247,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentView = m.previousViewMode
 				m.selectedADRIdx = 0
 				return m, nil
+			case ViewACList:
+				m.currentView = m.previousViewMode
+				m.selectedACIdx = 0
+				return m, nil
 			}
 		}
 
@@ -251,6 +266,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleIterationDetailKeys(msg)
 		case ViewADRList:
 			return m.handleADRListKeys(msg)
+		case ViewACList:
+			return m.handleACListKeys(msg)
 		}
 
 	case tea.WindowSizeMsg:
@@ -314,6 +331,17 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedADRIdx = 0
 		m.lastUpdate = time.Now()
 
+	case ACsLoadedMsg:
+		if msg.Error != nil {
+			m.currentView = ViewError
+			m.error = msg.Error
+			return m, nil
+		}
+		m.acs = msg.ACs
+		m.currentView = ViewACList
+		m.selectedACIdx = 0
+		m.lastUpdate = time.Now()
+
 	case ErrorMsg:
 		m.currentView = ViewError
 		m.error = msg.Error
@@ -367,6 +395,13 @@ func (m *AppModel) handleTrackDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.currentView = ViewLoading
 			return m, m.loadADRs(m.currentTrack.ID)
 		}
+	case "c":
+		// View ACs for the current track
+		if m.currentTrack != nil {
+			m.previousViewMode = ViewTrackDetail
+			m.currentView = ViewLoading
+			return m, m.loadACs(m.currentTrack.ID)
+		}
 	}
 	return m, nil
 }
@@ -418,6 +453,8 @@ func (m *AppModel) View() string {
 		return m.renderIterationDetail()
 	case ViewADRList:
 		return m.renderADRList()
+	case ViewACList:
+		return m.renderACList()
 	default:
 		return "Unknown view"
 	}
@@ -556,6 +593,28 @@ func (m *AppModel) renderTrackDetail() string {
 		}
 	}
 
+	// AC Status (aggregate across all tasks in track)
+	if tasks, err := m.repository.ListTasks(m.ctx, TaskFilters{TrackID: m.currentTrack.ID}); err == nil {
+		totalACs := 0
+		verifiedACs := 0
+		pendingReviewACs := 0
+		for _, task := range tasks {
+			if acs, err := m.repository.ListAC(m.ctx, task.ID); err == nil {
+				for _, ac := range acs {
+					totalACs++
+					if ac.Status == ACStatusVerified || ac.Status == ACStatusAutomaticallyVerified {
+						verifiedACs++
+					} else if ac.Status == ACStatusPendingHumanReview {
+						pendingReviewACs++
+					}
+				}
+			}
+		}
+		if totalACs > 0 {
+			s += fmt.Sprintf("Acceptance Criteria: %d total (%d verified, %d pending review) [press 'c' to view]\n", totalACs, verifiedACs, pendingReviewACs)
+		}
+	}
+
 	// Dependencies
 	if len(m.currentTrack.Dependencies) > 0 {
 		s += "\nDependencies:\n"
@@ -585,7 +644,7 @@ func (m *AppModel) renderTrackDetail() string {
 
 	// Help
 	s += "\n"
-	s += helpStyle.Render("Navigation: j/k or ↑/↓ | a: ADRs | esc: Back | q: Quit")
+	s += helpStyle.Render("Navigation: j/k or ↑/↓ | a: ADRs | c: Acceptance Criteria | esc: Back | q: Quit")
 
 	return s
 }
@@ -986,6 +1045,123 @@ func getADRStatusIcon(status string) string {
 		return "✗"
 	case string(ADRStatusSuperseded):
 		return "⇒"
+	default:
+		return "?"
+	}
+}
+
+// renderACList renders the AC list view
+func (m *AppModel) renderACList() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("205")).
+		MarginBottom(1)
+
+	acItemStyle := lipgloss.NewStyle().
+		PaddingLeft(2).
+		MarginBottom(0)
+
+	selectedACStyle := lipgloss.NewStyle().
+		PaddingLeft(2).
+		MarginBottom(0).
+		Background(lipgloss.Color("240")).
+		Foreground(lipgloss.Color("229"))
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("244")).
+		Italic(true).
+		MarginTop(1)
+
+	var s string
+
+	// Header
+	s += titleStyle.Render(fmt.Sprintf("Acceptance Criteria for Track: %s", m.currentTrack.ID)) + "\n\n"
+
+	// ACs
+	if len(m.acs) == 0 {
+		s += "No acceptance criteria yet. Create one with:\n"
+		s += "  dw task-manager ac add <task-id> --description \"...\" [--type manual|automated]\n"
+	} else {
+		for i, ac := range m.acs {
+			statusIcon := getACStatusIcon(string(ac.Status))
+			typeStr := "manual"
+			if ac.VerificationType == VerificationTypeAutomated {
+				typeStr = "auto"
+			}
+			line := fmt.Sprintf("%s [%s] (%s) %s", statusIcon, ac.ID, typeStr, truncateString(ac.Description, 60))
+
+			if i == m.selectedACIdx {
+				s += selectedACStyle.Render(line) + "\n"
+			} else {
+				s += acItemStyle.Render(line) + "\n"
+			}
+		}
+	}
+
+	// Help
+	s += "\n"
+	s += helpStyle.Render("Navigation: j/k or ↑/↓ | esc: Back | q: Quit")
+
+	return s
+}
+
+// handleACListKeys processes key presses on AC list view
+func (m *AppModel) handleACListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		if m.selectedACIdx < len(m.acs)-1 {
+			m.selectedACIdx++
+		}
+	case "k", "up":
+		if m.selectedACIdx > 0 {
+			m.selectedACIdx--
+		}
+	}
+	return m, nil
+}
+
+// loadACs loads ACs for a track (all tasks in track)
+func (m *AppModel) loadACs(trackID string) tea.Cmd {
+	return func() tea.Msg {
+		// Get all tasks in track
+		tasks, err := m.repository.ListTasks(m.ctx, TaskFilters{TrackID: trackID})
+		if err != nil {
+			return ACsLoadedMsg{
+				ACs:   nil,
+				Error: err,
+			}
+		}
+
+		// Collect all ACs from all tasks
+		var allACs []*AcceptanceCriteriaEntity
+		for _, task := range tasks {
+			acs, err := m.repository.ListAC(m.ctx, task.ID)
+			if err != nil {
+				continue // Skip task if error
+			}
+			allACs = append(allACs, acs...)
+		}
+
+		return ACsLoadedMsg{
+			ACs:   allACs,
+			Error: nil,
+		}
+	}
+}
+
+// getACStatusIcon returns a visual icon for AC status
+func getACStatusIcon(status string) string {
+	switch status {
+	case string(ACStatusVerified):
+		return "✓"
+	case string(ACStatusAutomaticallyVerified):
+		return "✓ₐ"
+	case string(ACStatusPendingHumanReview):
+		return "⏸"
+	case string(ACStatusFailed):
+		return "✗"
+	case string(ACStatusNotStarted):
+		return "○"
 	default:
 		return "?"
 	}

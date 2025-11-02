@@ -36,6 +36,54 @@ DarwinFlow uses a plugin-based architecture:
 
 ---
 
+## Task Manager - Core Workflow
+
+**Understanding What to Work On:**
+
+```bash
+# Check current iteration and tasks
+dw task-manager iteration current
+
+# View all iterations (find next planned work)
+dw task-manager iteration list
+
+# View roadmap with tracks and priorities
+dw task-manager track list
+
+# Browse interactively
+dw task-manager tui
+```
+
+**Working on Tasks:**
+
+```bash
+# Start a task
+dw task-manager task update TM-task-X --status in-progress
+
+# Complete a task
+dw task-manager task update TM-task-X --status done
+```
+
+**Creating New Work:**
+
+```bash
+# Create a new task in a track
+dw task-manager task create --track TM-track-X --title "..." --priority high
+
+# Create a new iteration
+dw task-manager iteration create --name "..." --goal "..." --deliverable "..."
+
+# Add tasks to iteration
+dw task-manager iteration add-task <iter-num> TM-task-1 TM-task-2
+
+# Start working on iteration
+dw task-manager iteration start <iter-num>
+```
+
+**Priority Guidance**: Work on current iteration first → critical/high priority tracks → planned iterations.
+
+---
+
 ## Package Structure
 
 **Foundation Layer**:
