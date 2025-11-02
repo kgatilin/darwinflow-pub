@@ -539,34 +539,49 @@ func (c *TaskUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 			return fmt.Errorf("failed to retrieve parent track: %w", err)
 		}
 
-		// TODO: Future - Check if all acceptance criteria are verified
-		// This is a placeholder for when AC feature is implemented
-		// Example validation:
-		// unverifiedAC := getUnverifiedAcceptanceCriteria(ctx, repo, c.taskID)
-		// if len(unverifiedAC) > 0 {
-		//     fmt.Fprintf(cmdCtx.GetStdout(), "Error: Cannot mark task as done - acceptance criteria not verified:\n")
-		//     for _, ac := range unverifiedAC {
-		//         fmt.Fprintf(cmdCtx.GetStdout(), "  - %s: %s\n", ac.ID, ac.Description)
-		//     }
-		//     fmt.Fprintf(cmdCtx.GetStdout(), "Hint: Use 'dw task-manager ac verify <ac-id>' to verify criteria\n")
-		//     return fmt.Errorf("acceptance criteria not verified")
-		// }
+		// Check if all acceptance criteria are verified
+		acs, err := repo.ListAC(ctx, c.taskID)
+		if err != nil {
+			return fmt.Errorf("failed to check acceptance criteria: %w", err)
+		}
 
-		// TODO: Future - Check if track has ADR (when ADR feature exists and is configured)
-		// This is a placeholder for when ADR feature is implemented
-		// Example validation:
-		// hasADR, err := trackHasADR(ctx, repo, track.ID)
-		// if err != nil {
-		//     return fmt.Errorf("failed to check ADR status: %w", err)
-		// }
-		// if !hasADR {
-		//     fmt.Fprintf(cmdCtx.GetStdout(), "Error: Cannot mark task as done - track \"%s\" has no ADR\n", track.ID)
-		//     fmt.Fprintf(cmdCtx.GetStdout(), "Hint: Use 'dw task-manager adr create %s' to create an ADR\n", track.ID)
-		//     return fmt.Errorf("track has no ADR")
-		// }
+		// Build list of unverified ACs
+		var unverifiedAC []*AcceptanceCriteriaEntity
+		for _, ac := range acs {
+			if !ac.IsVerified() && ac.Status != ACStatusFailed {
+				unverifiedAC = append(unverifiedAC, ac)
+			}
+		}
 
-		// Log that validation would occur here in future
-		_ = track // Use track to avoid unused variable warning
+		if len(unverifiedAC) > 0 {
+			fmt.Fprintf(cmdCtx.GetStdout(), "Error: Cannot mark task as done - acceptance criteria not verified:\n")
+			for _, ac := range unverifiedAC {
+				statusIcon := ac.StatusIndicator()
+				fmt.Fprintf(cmdCtx.GetStdout(), "  %s [%s] %s\n", statusIcon, ac.ID, ac.Description)
+			}
+			fmt.Fprintf(cmdCtx.GetStdout(), "Hint: Use 'dw task-manager ac verify <ac-id>' to verify criteria\n")
+			return fmt.Errorf("cannot mark task as done: acceptance criteria not verified")
+		}
+
+		// Check if ADR requirement is configured and enforce it
+		config := c.Plugin.GetConfig()
+		if config.ADR.Required && config.ADR.EnforceOnTaskCompletion {
+			// Check if track has at least one ADR
+			adrs, err := repo.ListADRs(ctx, &task.TrackID)
+			if err != nil {
+				return fmt.Errorf("failed to check ADR status: %w", err)
+			}
+
+			if len(adrs) == 0 {
+				fmt.Fprintf(cmdCtx.GetStdout(), "Error: Cannot complete task - track has no ADR\n\n")
+				fmt.Fprintf(cmdCtx.GetStdout(), "Track \"%s\" requires an Architecture Decision Record before tasks can be completed.\n\n", track.ID)
+				fmt.Fprintf(cmdCtx.GetStdout(), "Create an ADR with:\n")
+				fmt.Fprintf(cmdCtx.GetStdout(), "  dw task-manager adr create %s --title \"...\" --context \"...\" --decision \"...\" --consequences \"...\"\n\n", track.ID)
+				fmt.Fprintf(cmdCtx.GetStdout(), "Or disable ADR requirement in config:\n")
+				fmt.Fprintf(cmdCtx.GetStdout(), "  task_manager.adr.enforce_on_task_completion: false\n")
+				return fmt.Errorf("cannot complete task: track has no ADR")
+			}
+		}
 	}
 
 	// Update fields
@@ -890,5 +905,133 @@ func (c *TaskMigrateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 	fmt.Fprintf(stdout, "Task migration is not yet implemented\n")
 	fmt.Fprintf(stdout, "Task migration will be implemented in a future phase\n")
 
+	return nil
+}
+
+// ============================================================================
+// TaskCheckReadyCommand checks if a task is ready to be marked as done
+// ============================================================================
+
+type TaskCheckReadyCommand struct {
+	Plugin  *TaskManagerPlugin
+	project string
+	taskID  string
+}
+
+func (c *TaskCheckReadyCommand) GetName() string {
+	return "task check-ready"
+}
+
+func (c *TaskCheckReadyCommand) GetDescription() string {
+	return "Check if a task is ready to be marked as done"
+}
+
+func (c *TaskCheckReadyCommand) GetUsage() string {
+	return "dw task-manager task check-ready <task-id>"
+}
+
+func (c *TaskCheckReadyCommand) GetHelp() string {
+	return `Checks if a task is ready to be marked as done by verifying
+all acceptance criteria have been verified.
+
+Returns success if all ACs are verified, or an error listing unverified ACs.
+
+Examples:
+  # Check if task is ready
+  dw task-manager task check-ready DW-task-123
+
+  # Command will show status of each AC
+  # Example output:
+  #   ✓ DW-ac-1: User can login
+  #   ✓ DW-ac-2: Password validation works
+  #   ⏸ DW-ac-3: 2FA enabled (Pending human review)
+
+Notes:
+  - All acceptance criteria must be verified to mark task as done
+  - Failed ACs (✗) will block task completion
+  - Pending review ACs (⏸) will block task completion`
+}
+
+func (c *TaskCheckReadyCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		default:
+			if c.taskID == "" && !strings.HasPrefix(args[i], "--") {
+				c.taskID = args[i]
+			}
+		}
+	}
+
+	if c.taskID == "" {
+		return fmt.Errorf("<task-id> is required")
+	}
+
+	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Verify task exists
+	task, err := repo.GetTask(ctx, c.taskID)
+	if err != nil {
+		if errors.Is(err, pluginsdk.ErrNotFound) {
+			fmt.Fprintf(cmdCtx.GetStdout(), "Error: Task \"%s\" not found\n", c.taskID)
+			return fmt.Errorf("task not found: %s", c.taskID)
+		}
+		return fmt.Errorf("failed to verify task: %w", err)
+	}
+
+	// Get ACs for task
+	acs, err := repo.ListAC(ctx, c.taskID)
+	if err != nil {
+		return fmt.Errorf("failed to check acceptance criteria: %w", err)
+	}
+
+	// If no ACs, task is ready
+	if len(acs) == 0 {
+		fmt.Fprintf(cmdCtx.GetStdout(), "Task is ready to be marked as done\n")
+		fmt.Fprintf(cmdCtx.GetStdout(), "  %s - No acceptance criteria\n", task.Title)
+		return nil
+	}
+
+	// Check verification status
+	var verifiedCount, unverifiedCount int
+	var unverifiedAC []*AcceptanceCriteriaEntity
+
+	for _, ac := range acs {
+		if ac.IsVerified() {
+			verifiedCount++
+		} else if ac.Status == ACStatusFailed {
+			unverifiedAC = append(unverifiedAC, ac)
+			unverifiedCount++
+		} else {
+			unverifiedAC = append(unverifiedAC, ac)
+			unverifiedCount++
+		}
+	}
+
+	// Display results
+	fmt.Fprintf(cmdCtx.GetStdout(), "Task: %s (%s)\n", task.Title, task.ID)
+	fmt.Fprintf(cmdCtx.GetStdout(), "Acceptance Criteria: %d/%d verified\n\n", verifiedCount, len(acs))
+
+	for _, ac := range acs {
+		statusIcon := ac.StatusIndicator()
+		fmt.Fprintf(cmdCtx.GetStdout(), "%s [%s] %s\n", statusIcon, ac.ID, ac.Description)
+	}
+
+	// Return error if any unverified
+	if len(unverifiedAC) > 0 {
+		fmt.Fprintf(cmdCtx.GetStdout(), "\nTask is NOT ready - %d acceptance criteria not verified\n", len(unverifiedAC))
+		fmt.Fprintf(cmdCtx.GetStdout(), "Hint: Use 'dw task-manager ac verify <ac-id>' to verify criteria\n")
+		return fmt.Errorf("task not ready: %d acceptance criteria not verified", len(unverifiedAC))
+	}
+
+	fmt.Fprintf(cmdCtx.GetStdout(), "\nTask is ready to be marked as done\n")
 	return nil
 }

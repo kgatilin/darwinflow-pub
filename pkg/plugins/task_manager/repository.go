@@ -178,7 +178,69 @@ type RoadmapRepository interface {
 	// Returns "DW" as default if not set.
 	GetProjectCode(ctx context.Context) string
 
+	// ADR operations
+
+	// SaveADR persists a new ADR to storage.
+	// Returns ErrAlreadyExists if an ADR with the same ID already exists.
+	// Returns ErrNotFound if the track doesn't exist.
+	SaveADR(ctx context.Context, adr *ADREntity) error
+
+	// GetADR retrieves an ADR by its ID.
+	// Returns ErrNotFound if the ADR doesn't exist.
+	GetADR(ctx context.Context, id string) (*ADREntity, error)
+
+	// ListADRs returns all ADRs, optionally filtered by track.
+	// Returns empty slice if no ADRs match the filters.
+	ListADRs(ctx context.Context, trackID *string) ([]*ADREntity, error)
+
+	// UpdateADR updates an existing ADR.
+	// Returns ErrNotFound if the ADR doesn't exist.
+	UpdateADR(ctx context.Context, adr *ADREntity) error
+
+	// SupersedeADR marks an ADR as superseded by another ADR.
+	// Returns ErrNotFound if either ADR doesn't exist.
+	SupersedeADR(ctx context.Context, adrID, supersededByID string) error
+
+	// DeprecateADR marks an ADR as deprecated.
+	// Returns ErrNotFound if the ADR doesn't exist.
+	DeprecateADR(ctx context.Context, adrID string) error
+
+	// GetADRsByTrack returns all ADRs for a specific track.
+	// Returns empty slice if the track has no ADRs.
+	GetADRsByTrack(ctx context.Context, trackID string) ([]*ADREntity, error)
+
 	// GetNextSequenceNumber retrieves the next sequence number for an entity type.
 	// Entity types: "task", "track", "iter"
 	GetNextSequenceNumber(ctx context.Context, entityType string) (int, error)
+
+	// Acceptance Criteria operations
+
+	// SaveAC persists a new acceptance criterion to storage.
+	// Returns ErrAlreadyExists if an AC with the same ID already exists.
+	// Returns ErrNotFound if the task doesn't exist.
+	SaveAC(ctx context.Context, ac *AcceptanceCriteriaEntity) error
+
+	// GetAC retrieves an acceptance criterion by its ID.
+	// Returns ErrNotFound if the AC doesn't exist.
+	GetAC(ctx context.Context, id string) (*AcceptanceCriteriaEntity, error)
+
+	// ListAC returns all acceptance criteria for a task.
+	// Returns empty slice if the task has no ACs.
+	ListAC(ctx context.Context, taskID string) ([]*AcceptanceCriteriaEntity, error)
+
+	// UpdateAC updates an existing acceptance criterion.
+	// Returns ErrNotFound if the AC doesn't exist.
+	UpdateAC(ctx context.Context, ac *AcceptanceCriteriaEntity) error
+
+	// DeleteAC removes an acceptance criterion from storage.
+	// Returns ErrNotFound if the AC doesn't exist.
+	DeleteAC(ctx context.Context, id string) error
+
+	// ListACByTrack returns all acceptance criteria for all tasks in a track.
+	// Returns empty slice if the track has no ACs.
+	ListACByTrack(ctx context.Context, trackID string) ([]*AcceptanceCriteriaEntity, error)
+
+	// ListACByIteration returns all acceptance criteria for all tasks in an iteration.
+	// Returns empty slice if the iteration has no ACs.
+	ListACByIteration(ctx context.Context, iterationNum int) ([]*AcceptanceCriteriaEntity, error)
 }

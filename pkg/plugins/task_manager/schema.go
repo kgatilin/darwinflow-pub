@@ -11,7 +11,7 @@ import (
 
 const (
 	// SchemaVersion is the current database schema version
-	SchemaVersion = 2
+	SchemaVersion = 3
 )
 
 // SQL table creation statements
@@ -96,6 +96,20 @@ CREATE TABLE IF NOT EXISTS project_metadata (
 )
 `
 
+	createAcceptanceCriteriaTable = `
+CREATE TABLE IF NOT EXISTS acceptance_criteria (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    description TEXT NOT NULL,
+    verification_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+)
+`
+
 	// Indexes for common queries
 	createTracksRoadmapIDIndex = `
 CREATE INDEX IF NOT EXISTS idx_tracks_roadmap_id ON tracks(roadmap_id)
@@ -124,6 +138,40 @@ CREATE INDEX IF NOT EXISTS idx_iteration_tasks_iteration ON iteration_tasks(iter
 	createIterationTasksTaskIndex = `
 CREATE INDEX IF NOT EXISTS idx_iteration_tasks_task ON iteration_tasks(task_id)
 `
+
+	createAcceptanceCriteriaTaskIDIndex = `
+CREATE INDEX IF NOT EXISTS idx_ac_task_id ON acceptance_criteria(task_id)
+`
+
+	createAcceptanceCriteriaStatusIndex = `
+CREATE INDEX IF NOT EXISTS idx_ac_status ON acceptance_criteria(status)
+`
+
+	createADRsTable = `
+CREATE TABLE IF NOT EXISTS adrs (
+    id TEXT PRIMARY KEY,
+    track_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL,
+    context TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    consequences TEXT NOT NULL,
+    alternatives TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    superseded_by TEXT,
+    FOREIGN KEY(track_id) REFERENCES tracks(id) ON DELETE CASCADE,
+    FOREIGN KEY(superseded_by) REFERENCES adrs(id) ON DELETE SET NULL
+)
+`
+
+	createADRsTrackIDIndex = `
+CREATE INDEX IF NOT EXISTS idx_adrs_track_id ON adrs(track_id)
+`
+
+	createADRsStatusIndex = `
+CREATE INDEX IF NOT EXISTS idx_adrs_status ON adrs(status)
+`
 )
 
 // InitSchema initializes the database schema with all required tables and indexes.
@@ -137,6 +185,8 @@ func InitSchema(db *sql.DB) error {
 		createIterationsTable,
 		createIterationTasksTable,
 		createProjectMetadataTable,
+		createAcceptanceCriteriaTable,
+		createADRsTable,
 		createTracksRoadmapIDIndex,
 		createTracksStatusIndex,
 		createTasksTrackIDIndex,
@@ -144,6 +194,10 @@ func InitSchema(db *sql.DB) error {
 		createIterationsStatusIndex,
 		createIterationTasksIterationIndex,
 		createIterationTasksTaskIndex,
+		createAcceptanceCriteriaTaskIDIndex,
+		createAcceptanceCriteriaStatusIndex,
+		createADRsTrackIDIndex,
+		createADRsStatusIndex,
 	}
 
 	for _, stmt := range statements {

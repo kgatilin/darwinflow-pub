@@ -20,6 +20,7 @@ const (
 	ViewTrackDetail
 	ViewIterationList
 	ViewIterationDetail
+	ViewADRList
 	ViewError
 	ViewLoading
 )
@@ -45,6 +46,11 @@ type AppModel struct {
 	iterations       []*IterationEntity
 	currentIteration *IterationEntity
 	iterationTasks   []*TaskEntity
+
+	// Data - ADR views
+	adrs             []*ADREntity
+	selectedADRIdx   int
+	previousViewMode ViewMode // To return to previous view after ADR list
 
 	// UI state
 	selectedTrackIdx     int
@@ -86,6 +92,11 @@ type IterationDetailLoadedMsg struct {
 	Iteration *IterationEntity
 	Tasks     []*TaskEntity
 	Error     error
+}
+
+type ADRsLoadedMsg struct {
+	ADRs  []*ADREntity
+	Error error
 }
 
 // NewAppModel creates a new TUI app model
@@ -221,6 +232,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentView = ViewRoadmapList
 				m.selectedIterationIdx = 0
 				return m, nil
+			case ViewADRList:
+				m.currentView = m.previousViewMode
+				m.selectedADRIdx = 0
+				return m, nil
 			}
 		}
 
@@ -234,6 +249,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleIterationListKeys(msg)
 		case ViewIterationDetail:
 			return m.handleIterationDetailKeys(msg)
+		case ViewADRList:
+			return m.handleADRListKeys(msg)
 		}
 
 	case tea.WindowSizeMsg:
@@ -286,6 +303,17 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentView = ViewIterationDetail
 		m.lastUpdate = time.Now()
 
+	case ADRsLoadedMsg:
+		if msg.Error != nil {
+			m.currentView = ViewError
+			m.error = msg.Error
+			return m, nil
+		}
+		m.adrs = msg.ADRs
+		m.currentView = ViewADRList
+		m.selectedADRIdx = 0
+		m.lastUpdate = time.Now()
+
 	case ErrorMsg:
 		m.currentView = ViewError
 		m.error = msg.Error
@@ -331,6 +359,13 @@ func (m *AppModel) handleTrackDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		if m.selectedTaskIdx > 0 {
 			m.selectedTaskIdx--
+		}
+	case "a":
+		// View ADRs for the current track
+		if m.currentTrack != nil {
+			m.previousViewMode = ViewTrackDetail
+			m.currentView = ViewLoading
+			return m, m.loadADRs(m.currentTrack.ID)
 		}
 	}
 	return m, nil
@@ -381,6 +416,8 @@ func (m *AppModel) View() string {
 		return m.renderIterationList()
 	case ViewIterationDetail:
 		return m.renderIterationDetail()
+	case ViewADRList:
+		return m.renderADRList()
 	default:
 		return "Unknown view"
 	}
@@ -503,6 +540,22 @@ func (m *AppModel) renderTrackDetail() string {
 	s += fmt.Sprintf("Description: %s\n", m.currentTrack.Description)
 	s += fmt.Sprintf("Status: %s | Priority: %s\n", m.currentTrack.Status, m.currentTrack.Priority)
 
+	// ADR Status
+	if adrs, err := m.repository.ListADRs(m.ctx, &m.currentTrack.ID); err == nil {
+		if len(adrs) > 0 {
+			acceptedCount := 0
+			for _, adr := range adrs {
+				if adr.Status == string(ADRStatusAccepted) {
+					acceptedCount++
+				}
+			}
+			proposedCount := len(adrs) - acceptedCount
+			s += fmt.Sprintf("ADRs: %d (%d accepted, %d proposed) [press 'a' to view]\n", len(adrs), acceptedCount, proposedCount)
+		} else {
+			s += "ADRs: None (required for task completion)\n"
+		}
+	}
+
 	// Dependencies
 	if len(m.currentTrack.Dependencies) > 0 {
 		s += "\nDependencies:\n"
@@ -532,7 +585,7 @@ func (m *AppModel) renderTrackDetail() string {
 
 	// Help
 	s += "\n"
-	s += helpStyle.Render("Navigation: j/k or ↑/↓ | esc: Back | q: Quit")
+	s += helpStyle.Render("Navigation: j/k or ↑/↓ | a: ADRs | esc: Back | q: Quit")
 
 	return s
 }
@@ -837,4 +890,103 @@ func (m *AppModel) GetCurrentView() ViewMode {
 // GetSelectedIterationIdx returns the selected iteration index for testing
 func (m *AppModel) GetSelectedIterationIdx() int {
 	return m.selectedIterationIdx
+}
+
+// renderADRList renders the ADR list view
+func (m *AppModel) renderADRList() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("205")).
+		MarginBottom(1)
+
+	adrItemStyle := lipgloss.NewStyle().
+		PaddingLeft(2).
+		MarginBottom(0)
+
+	selectedADRStyle := lipgloss.NewStyle().
+		PaddingLeft(2).
+		MarginBottom(0).
+		Background(lipgloss.Color("240")).
+		Foreground(lipgloss.Color("229"))
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("244")).
+		Italic(true).
+		MarginTop(1)
+
+	var s string
+
+	// Header
+	s += titleStyle.Render(fmt.Sprintf("ADRs for Track: %s", m.currentTrack.ID)) + "\n\n"
+
+	// ADRs
+	if len(m.adrs) == 0 {
+		s += "No ADRs yet. Create one with:\n"
+		s += fmt.Sprintf("  dw task-manager adr create %s --title \"...\" --context \"...\" --decision \"...\"\n", m.currentTrack.ID)
+	} else {
+		for i, adr := range m.adrs {
+			statusIcon := getADRStatusIcon(adr.Status)
+			line := fmt.Sprintf("%s [%s] %s", statusIcon, adr.ID, adr.Title)
+
+			if i == m.selectedADRIdx {
+				s += selectedADRStyle.Render(line) + "\n"
+			} else {
+				s += adrItemStyle.Render(line) + "\n"
+			}
+		}
+	}
+
+	// Help
+	s += "\n"
+	s += helpStyle.Render("Navigation: j/k or ↑/↓ | esc: Back | q: Quit")
+
+	return s
+}
+
+// handleADRListKeys processes key presses on ADR list view
+func (m *AppModel) handleADRListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		if m.selectedADRIdx < len(m.adrs)-1 {
+			m.selectedADRIdx++
+		}
+	case "k", "up":
+		if m.selectedADRIdx > 0 {
+			m.selectedADRIdx--
+		}
+	}
+	return m, nil
+}
+
+// loadADRs loads ADRs for a track
+func (m *AppModel) loadADRs(trackID string) tea.Cmd {
+	return func() tea.Msg {
+		adrs, err := m.repository.ListADRs(m.ctx, &trackID)
+		if err != nil {
+			return ADRsLoadedMsg{
+				ADRs:  nil,
+				Error: err,
+			}
+		}
+		return ADRsLoadedMsg{
+			ADRs:  adrs,
+			Error: nil,
+		}
+	}
+}
+
+// getADRStatusIcon returns a visual icon for ADR status
+func getADRStatusIcon(status string) string {
+	switch status {
+	case string(ADRStatusAccepted):
+		return "✓"
+	case string(ADRStatusProposed):
+		return "○"
+	case string(ADRStatusDeprecated):
+		return "✗"
+	case string(ADRStatusSuperseded):
+		return "⇒"
+	default:
+		return "?"
+	}
 }

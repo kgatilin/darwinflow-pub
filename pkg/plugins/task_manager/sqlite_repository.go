@@ -1217,3 +1217,393 @@ func (r *SQLiteRoadmapRepository) GetNextSequenceNumber(ctx context.Context, ent
 
 	return maxNum + 1, nil
 }
+
+// ============================================================================
+// ADR Operations
+// ============================================================================
+
+// SaveADR persists a new ADR to storage.
+func (r *SQLiteRoadmapRepository) SaveADR(ctx context.Context, adr *ADREntity) error {
+	// Check if ADR already exists
+	var exists int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM adrs WHERE id = ?", adr.ID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check ADR existence: %w", err)
+	}
+	if exists > 0 {
+		return fmt.Errorf("%w: ADR %s already exists", pluginsdk.ErrAlreadyExists, adr.ID)
+	}
+
+	// Check if track exists
+	err = r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE id = ?", adr.TrackID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check track existence: %w", err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("%w: track %s does not exist", pluginsdk.ErrNotFound, adr.TrackID)
+	}
+
+	_, err = r.db.ExecContext(
+		ctx,
+		"INSERT INTO adrs (id, track_id, title, status, context, decision, consequences, alternatives, created_at, updated_at, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		adr.ID, adr.TrackID, adr.Title, adr.Status, adr.Context, adr.Decision, adr.Consequences, adr.Alternatives, adr.CreatedAt, adr.UpdatedAt, adr.SupersededBy,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert ADR: %w", err)
+	}
+
+	return nil
+}
+
+// GetADR retrieves an ADR by its ID.
+func (r *SQLiteRoadmapRepository) GetADR(ctx context.Context, id string) (*ADREntity, error) {
+	row := r.db.QueryRowContext(
+		ctx,
+		"SELECT id, track_id, title, status, context, decision, consequences, alternatives, created_at, updated_at, superseded_by FROM adrs WHERE id = ?",
+		id,
+	)
+
+	var adr ADREntity
+	var supersededBy sql.NullString
+	err := row.Scan(
+		&adr.ID, &adr.TrackID, &adr.Title, &adr.Status, &adr.Context, &adr.Decision, &adr.Consequences, &adr.Alternatives, &adr.CreatedAt, &adr.UpdatedAt, &supersededBy,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("%w: ADR %s not found", pluginsdk.ErrNotFound, id)
+		}
+		return nil, fmt.Errorf("failed to query ADR: %w", err)
+	}
+
+	if supersededBy.Valid {
+		adr.SupersededBy = &supersededBy.String
+	}
+
+	return &adr, nil
+}
+
+// ListADRs returns all ADRs, optionally filtered by track.
+func (r *SQLiteRoadmapRepository) ListADRs(ctx context.Context, trackID *string) ([]*ADREntity, error) {
+	query := "SELECT id, track_id, title, status, context, decision, consequences, alternatives, created_at, updated_at, superseded_by FROM adrs"
+	var args []interface{}
+
+	if trackID != nil {
+		query += " WHERE track_id = ?"
+		args = append(args, *trackID)
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ADRs: %w", err)
+	}
+	defer rows.Close()
+
+	var adrs []*ADREntity
+	for rows.Next() {
+		var adr ADREntity
+		var supersededBy sql.NullString
+		err := rows.Scan(
+			&adr.ID, &adr.TrackID, &adr.Title, &adr.Status, &adr.Context, &adr.Decision, &adr.Consequences, &adr.Alternatives, &adr.CreatedAt, &adr.UpdatedAt, &supersededBy,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan ADR: %w", err)
+		}
+
+		if supersededBy.Valid {
+			adr.SupersededBy = &supersededBy.String
+		}
+
+		adrs = append(adrs, &adr)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating ADRs: %w", err)
+	}
+
+	return adrs, nil
+}
+
+// UpdateADR updates an existing ADR.
+func (r *SQLiteRoadmapRepository) UpdateADR(ctx context.Context, adr *ADREntity) error {
+	// Check if ADR exists
+	var exists int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM adrs WHERE id = ?", adr.ID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check ADR existence: %w", err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("%w: ADR %s not found", pluginsdk.ErrNotFound, adr.ID)
+	}
+
+	_, err = r.db.ExecContext(
+		ctx,
+		"UPDATE adrs SET title = ?, status = ?, context = ?, decision = ?, consequences = ?, alternatives = ?, updated_at = ?, superseded_by = ? WHERE id = ?",
+		adr.Title, adr.Status, adr.Context, adr.Decision, adr.Consequences, adr.Alternatives, adr.UpdatedAt, adr.SupersededBy, adr.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update ADR: %w", err)
+	}
+
+	return nil
+}
+
+// SupersedeADR marks an ADR as superseded by another ADR.
+func (r *SQLiteRoadmapRepository) SupersedeADR(ctx context.Context, adrID, supersededByID string) error {
+	// Check if both ADRs exist
+	var exists int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM adrs WHERE id = ?", adrID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check ADR existence: %w", err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("%w: ADR %s not found", pluginsdk.ErrNotFound, adrID)
+	}
+
+	err = r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM adrs WHERE id = ?", supersededByID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check superseding ADR existence: %w", err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("%w: ADR %s not found", pluginsdk.ErrNotFound, supersededByID)
+	}
+
+	now := time.Now().UTC()
+	_, err = r.db.ExecContext(
+		ctx,
+		"UPDATE adrs SET status = ?, superseded_by = ?, updated_at = ? WHERE id = ?",
+		string(ADRStatusSuperseded), supersededByID, now, adrID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to supersede ADR: %w", err)
+	}
+
+	return nil
+}
+
+// DeprecateADR marks an ADR as deprecated.
+func (r *SQLiteRoadmapRepository) DeprecateADR(ctx context.Context, adrID string) error {
+	// Check if ADR exists
+	var exists int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM adrs WHERE id = ?", adrID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check ADR existence: %w", err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("%w: ADR %s not found", pluginsdk.ErrNotFound, adrID)
+	}
+
+	now := time.Now().UTC()
+	_, err = r.db.ExecContext(
+		ctx,
+		"UPDATE adrs SET status = ?, updated_at = ? WHERE id = ?",
+		string(ADRStatusDeprecated), now, adrID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to deprecate ADR: %w", err)
+	}
+
+	return nil
+}
+
+// GetADRsByTrack returns all ADRs for a specific track.
+func (r *SQLiteRoadmapRepository) GetADRsByTrack(ctx context.Context, trackID string) ([]*ADREntity, error) {
+	return r.ListADRs(ctx, &trackID)
+}
+
+// ============================================================================
+// Acceptance Criteria Operations
+// ============================================================================
+
+// SaveAC persists a new acceptance criterion to storage.
+func (r *SQLiteRoadmapRepository) SaveAC(ctx context.Context, ac *AcceptanceCriteriaEntity) error {
+	// Check if AC already exists
+	var exists int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM acceptance_criteria WHERE id = ?", ac.ID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check AC existence: %w", err)
+	}
+	if exists > 0 {
+		return fmt.Errorf("%w: AC %s already exists", pluginsdk.ErrAlreadyExists, ac.ID)
+	}
+
+	// Verify task exists
+	var taskExists int
+	err = r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE id = ?", ac.TaskID).Scan(&taskExists)
+	if err != nil {
+		return fmt.Errorf("failed to verify task: %w", err)
+	}
+	if taskExists == 0 {
+		return fmt.Errorf("%w: task %s not found", pluginsdk.ErrNotFound, ac.TaskID)
+	}
+
+	_, err = r.db.ExecContext(
+		ctx,
+		"INSERT INTO acceptance_criteria (id, task_id, description, verification_type, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		ac.ID, ac.TaskID, ac.Description, string(ac.VerificationType), string(ac.Status), ac.Notes, ac.CreatedAt, ac.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert AC: %w", err)
+	}
+
+	return nil
+}
+
+// GetAC retrieves an acceptance criterion by its ID.
+func (r *SQLiteRoadmapRepository) GetAC(ctx context.Context, id string) (*AcceptanceCriteriaEntity, error) {
+	var ac AcceptanceCriteriaEntity
+
+	err := r.db.QueryRowContext(
+		ctx,
+		"SELECT id, task_id, description, verification_type, status, notes, created_at, updated_at FROM acceptance_criteria WHERE id = ?",
+		id,
+	).Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("%w: AC %s not found", pluginsdk.ErrNotFound, id)
+		}
+		return nil, fmt.Errorf("failed to query AC: %w", err)
+	}
+
+	return &ac, nil
+}
+
+// ListAC returns all acceptance criteria for a task.
+func (r *SQLiteRoadmapRepository) ListAC(ctx context.Context, taskID string) ([]*AcceptanceCriteriaEntity, error) {
+	rows, err := r.db.QueryContext(
+		ctx,
+		"SELECT id, task_id, description, verification_type, status, notes, created_at, updated_at FROM acceptance_criteria WHERE task_id = ? ORDER BY created_at ASC",
+		taskID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ACs: %w", err)
+	}
+	defer rows.Close()
+
+	var acs []*AcceptanceCriteriaEntity
+	for rows.Next() {
+		var ac AcceptanceCriteriaEntity
+		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan AC: %w", err)
+		}
+		acs = append(acs, &ac)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating ACs: %w", err)
+	}
+
+	return acs, nil
+}
+
+// UpdateAC updates an existing acceptance criterion.
+func (r *SQLiteRoadmapRepository) UpdateAC(ctx context.Context, ac *AcceptanceCriteriaEntity) error {
+	result, err := r.db.ExecContext(
+		ctx,
+		"UPDATE acceptance_criteria SET task_id = ?, description = ?, verification_type = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?",
+		ac.TaskID, ac.Description, string(ac.VerificationType), string(ac.Status), ac.Notes, ac.UpdatedAt, ac.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update AC: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: AC %s not found", pluginsdk.ErrNotFound, ac.ID)
+	}
+
+	return nil
+}
+
+// DeleteAC removes an acceptance criterion from storage.
+func (r *SQLiteRoadmapRepository) DeleteAC(ctx context.Context, id string) error {
+	result, err := r.db.ExecContext(ctx, "DELETE FROM acceptance_criteria WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete AC: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: AC %s not found", pluginsdk.ErrNotFound, id)
+	}
+
+	return nil
+}
+
+// ListACByTrack returns all acceptance criteria for all tasks in a track.
+func (r *SQLiteRoadmapRepository) ListACByTrack(ctx context.Context, trackID string) ([]*AcceptanceCriteriaEntity, error) {
+	rows, err := r.db.QueryContext(
+		ctx,
+		`SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.created_at, ac.updated_at
+		 FROM acceptance_criteria ac
+		 JOIN tasks t ON ac.task_id = t.id
+		 WHERE t.track_id = ?
+		 ORDER BY ac.created_at ASC`,
+		trackID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ACs by track: %w", err)
+	}
+	defer rows.Close()
+
+	var acs []*AcceptanceCriteriaEntity
+	for rows.Next() {
+		var ac AcceptanceCriteriaEntity
+		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan AC: %w", err)
+		}
+		acs = append(acs, &ac)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating ACs: %w", err)
+	}
+
+	return acs, nil
+}
+
+// ListACByIteration returns all acceptance criteria for all tasks in an iteration.
+func (r *SQLiteRoadmapRepository) ListACByIteration(ctx context.Context, iterationNum int) ([]*AcceptanceCriteriaEntity, error) {
+	rows, err := r.db.QueryContext(
+		ctx,
+		`SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.created_at, ac.updated_at
+		 FROM acceptance_criteria ac
+		 JOIN tasks t ON ac.task_id = t.id
+		 JOIN iteration_tasks it ON t.id = it.task_id
+		 WHERE it.iteration_number = ?
+		 ORDER BY ac.created_at ASC`,
+		iterationNum,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ACs by iteration: %w", err)
+	}
+	defer rows.Close()
+
+	var acs []*AcceptanceCriteriaEntity
+	for rows.Next() {
+		var ac AcceptanceCriteriaEntity
+		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan AC: %w", err)
+		}
+		acs = append(acs, &ac)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating ACs: %w", err)
+	}
+
+	return acs, nil
+}

@@ -31,6 +31,8 @@ type TaskManagerPlugin struct {
 	eventBus    pluginsdk.EventBus
 	// Optional: Database repository for hierarchical roadmap model
 	repository RoadmapRepository
+	// Configuration for plugin behavior
+	config *Config
 }
 
 // NewTaskManagerPlugin creates a new task manager plugin with file-based storage
@@ -103,6 +105,12 @@ func NewTaskManagerPluginWithDatabase(
 		repository = NewEventEmittingRepository(baseRepository, eb, logger)
 	}
 
+	// Load configuration
+	config, err := LoadConfig(workingDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
+
 	plugin := &TaskManagerPlugin{
 		logger:      logger,
 		workingDir:  workingDir,
@@ -110,6 +118,7 @@ func NewTaskManagerPluginWithDatabase(
 		fileWatcher: fileWatcher,
 		eventBus:    eb,
 		repository:  repository,
+		config:      config,
 	}
 
 	// Migrate from old database location to project-based structure
@@ -124,6 +133,14 @@ func NewTaskManagerPluginWithDatabase(
 // Returns nil if the plugin was initialized without database support
 func (p *TaskManagerPlugin) GetRepository() RoadmapRepository {
 	return p.repository
+}
+
+// GetConfig returns the plugin configuration
+func (p *TaskManagerPlugin) GetConfig() *Config {
+	if p.config == nil {
+		return DefaultConfig()
+	}
+	return p.config
 }
 
 // GetInfo returns metadata about this plugin (SDK interface)
@@ -299,6 +316,15 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 		&TrackDeleteCommand{Plugin: p},
 		&TrackAddDependencyCommand{Plugin: p},
 		&TrackRemoveDependencyCommand{Plugin: p},
+		&TrackCheckCommand{Plugin: p},
+		&TrackListMissingADRsCommand{Plugin: p},
+		// ADR commands
+		&ADRCreateCommand{Plugin: p},
+		&ADRListCommand{Plugin: p},
+		&ADRShowCommand{Plugin: p},
+		&ADRUpdateCommand{Plugin: p},
+		&ADRSupersdeCommand{Plugin: p},
+		&ADRDeprecateCommand{Plugin: p},
 		// Task commands (database-backed hierarchical model)
 		&TaskCreateCommand{Plugin: p},
 		&TaskListCommand{Plugin: p},
@@ -307,6 +333,18 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 		&TaskDeleteCommand{Plugin: p},
 		&TaskMoveCommand{Plugin: p},
 		&TaskMigrateCommand{Plugin: p},
+		&TaskCheckReadyCommand{Plugin: p},
+		// Acceptance Criteria commands
+		&ACAddCommand{Plugin: p},
+		&ACListCommand{Plugin: p},
+		&ACVerifyCommand{Plugin: p},
+		&ACFailCommand{Plugin: p},
+		&ACUpdateCommand{Plugin: p},
+		&ACDeleteCommand{Plugin: p},
+		&ACVerifyAutoCommand{Plugin: p},
+		&ACRequestReviewCommand{Plugin: p},
+		&ACListIterationCommand{Plugin: p},
+		&ACListTrackCommand{Plugin: p},
 		// Iteration commands
 		&IterationCreateCommand{Plugin: p},
 		&IterationListCommand{Plugin: p},
@@ -320,6 +358,8 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 		&IterationCompleteCommand{Plugin: p},
 		// TUI command
 		&TUICommand{Plugin: p},
+		// Prompt command
+		&PromptCommand{Plugin: p},
 		// Migration commands
 		&MigrateIDsCommand{Plugin: p},
 	}

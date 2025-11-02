@@ -3,6 +3,9 @@ package task_manager_test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -261,70 +264,76 @@ func TestTaskListCommand_NoTasks(t *testing.T) {
 }
 
 func TestTaskListCommand_ListAllTasks(t *testing.T) {
-	plugin, tmpDir := setupTestPlugin(t)
+	tmpDir := t.TempDir()
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	plugin, err := task_manager.NewTaskManagerPlugin(
+		&stubLogger{},
+		tmpDir,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to create plugin: %v", err)
+	}
+
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
+	// Setup: Create roadmap and track using direct database
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
-	// Setup: Create roadmap and track using commands
-	roadmapCmd := &task_manager.RoadmapInitCommand{Plugin: plugin}
-	roadmapCtx := &mockCommandContext{
-		workingDir: tmpDir,
-		stdout:     &bytes.Buffer{},
-		logger:     &stubLogger{},
-	}
-	err := roadmapCmd.Execute(ctx, roadmapCtx, []string{
-		"--vision", "Test vision",
-		"--success-criteria", "Test criteria",
-	})
+	roadmap, err := task_manager.NewRoadmapEntity(
+		"roadmap-test",
+		"Test vision",
+		"Test criteria",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
 	if err != nil {
 		t.Fatalf("failed to create roadmap: %v", err)
 	}
-
-	trackCmd := &task_manager.TrackCreateCommand{Plugin: plugin}
-	trackCtx := &mockCommandContext{
-		workingDir: tmpDir,
-		stdout:     &bytes.Buffer{},
-		logger:     &stubLogger{},
+	if err := repo.SaveRoadmap(ctx, roadmap); err != nil {
+		t.Fatalf("failed to save roadmap: %v", err)
 	}
-	err = trackCmd.Execute(ctx, trackCtx, []string{
-		"--title", "Test Track",
-		"--description", "Test description",
-		"--priority", "high",
-	})
+
+	track, err := task_manager.NewTrackEntity(
+		"DW-track-1",
+		"roadmap-test",
+		"Test Track",
+		"Test description",
+		"not-started",
+		"high",
+		[]string{},
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
 	if err != nil {
 		t.Fatalf("failed to create track: %v", err)
 	}
-
-	// Extract track ID from output
-	trackOutput := trackCtx.stdout.String()
-	trackIDPrefix := "ID:"
-	trackIDStart := strings.Index(trackOutput, trackIDPrefix)
-	if trackIDStart == -1 {
-		t.Fatalf("failed to find track ID in output: %s", trackOutput)
+	if err := repo.SaveTrack(ctx, track); err != nil {
+		t.Fatalf("failed to save track: %v", err)
 	}
-	trackIDStart += len(trackIDPrefix)
-	trackIDEnd := strings.Index(trackOutput[trackIDStart:], "\n")
-	if trackIDEnd == -1 {
-		trackIDEnd = len(trackOutput)
-	} else {
-		trackIDEnd += trackIDStart
-	}
-	trackID := strings.TrimSpace(trackOutput[trackIDStart:trackIDEnd])
 
 	// Create multiple tasks
 	for i := 0; i < 3; i++ {
-		taskCmd := &task_manager.TaskCreateCommand{Plugin: plugin}
-		taskCtx := &mockCommandContext{
-			workingDir: tmpDir,
-			stdout:     &bytes.Buffer{},
-			logger:     &stubLogger{},
-		}
-		err = taskCmd.Execute(ctx, taskCtx, []string{
-			"--track", trackID,
-			"--title", "Task " + string(rune(i+49)),
-			"--priority", "medium",
-		})
-		if err != nil {
-			t.Fatalf("failed to create task: %v", err)
+		taskID := fmt.Sprintf("DW-task-%d", i+1)
+		task := task_manager.NewTaskEntity(
+			taskID,
+			"DW-track-1",
+			"Task "+string(rune(i+49)),
+			"",
+			"todo",
+			"medium",
+			"",
+			time.Now().UTC(),
+			time.Now().UTC(),
+		)
+		if err := repo.SaveTask(ctx, task); err != nil {
+			t.Fatalf("failed to save task: %v", err)
 		}
 	}
 
@@ -352,21 +361,25 @@ func TestTaskListCommand_ListAllTasks(t *testing.T) {
 
 func TestTaskListCommand_FilterByStatus(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
 	// Setup
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
 	roadmap, err := task_manager.NewRoadmapEntity(
@@ -404,8 +417,9 @@ func TestTaskListCommand_FilterByStatus(t *testing.T) {
 	// Create tasks with different statuses
 	statuses := []string{"todo", "in-progress", "done"}
 	for i, status := range statuses {
+		taskID := fmt.Sprintf("DEF-task-%d", i+1)
 		task := task_manager.NewTaskEntity(
-			"task-"+string(rune(i+49)),
+			taskID,
 			"track-test",
 			"Task "+string(rune(i+49)),
 			"",
@@ -444,21 +458,25 @@ func TestTaskListCommand_FilterByStatus(t *testing.T) {
 
 func TestTaskListCommand_FilterByTrack(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
 	// Setup
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
 	roadmap, err := task_manager.NewRoadmapEntity(
@@ -499,8 +517,9 @@ func TestTaskListCommand_FilterByTrack(t *testing.T) {
 	// Create tasks in different tracks
 	for i := 0; i < 2; i++ {
 		trackID := "track-test-" + string(rune(i+49))
+		taskID := fmt.Sprintf("DEF-task-%d", i+1)
 		task := task_manager.NewTaskEntity(
-			"task-"+string(rune(i+49)),
+			taskID,
 			trackID,
 			"Task "+string(rune(i+49)),
 			"",
@@ -540,21 +559,25 @@ func TestTaskListCommand_FilterByTrack(t *testing.T) {
 
 func TestTaskShowCommand_Success(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
 	// Setup
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
 	roadmap, err := task_manager.NewRoadmapEntity(
@@ -590,7 +613,7 @@ func TestTaskShowCommand_Success(t *testing.T) {
 	}
 
 	task := task_manager.NewTaskEntity(
-		"task-123",
+		"DEF-task-1",
 		"track-test",
 		"Test Task",
 		"Test description",
@@ -612,7 +635,7 @@ func TestTaskShowCommand_Success(t *testing.T) {
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{"task-123"})
+	err = cmd.Execute(ctx, cmdCtx, []string{"DEF-task-1"})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -667,21 +690,25 @@ func TestTaskShowCommand_NotFound(t *testing.T) {
 
 func TestTaskUpdateCommand_UpdateStatus(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
 	// Setup
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
 	roadmap, err := task_manager.NewRoadmapEntity(
@@ -717,7 +744,7 @@ func TestTaskUpdateCommand_UpdateStatus(t *testing.T) {
 	}
 
 	task := task_manager.NewTaskEntity(
-		"task-123",
+		"DEF-task-1",
 		"track-test",
 		"Test Task",
 		"",
@@ -739,7 +766,7 @@ func TestTaskUpdateCommand_UpdateStatus(t *testing.T) {
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{"task-123", "--status", "done"})
+	err = cmd.Execute(ctx, cmdCtx, []string{"DEF-task-1", "--status", "in-progress"})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -750,12 +777,12 @@ func TestTaskUpdateCommand_UpdateStatus(t *testing.T) {
 	}
 
 	// Verify update
-	updated, err := repo.GetTask(ctx, "task-123")
+	updated, err := repo.GetTask(ctx, "DEF-task-1")
 	if err != nil {
 		t.Fatalf("failed to get updated task: %v", err)
 	}
-	if updated.Status != "done" {
-		t.Errorf("expected status 'done', got '%s'", updated.Status)
+	if updated.Status != "in-progress" {
+		t.Errorf("expected status 'in-progress', got '%s'", updated.Status)
 	}
 }
 
@@ -829,21 +856,25 @@ func TestTaskUpdateCommand_NotFound(t *testing.T) {
 
 func TestTaskDeleteCommand_WithForce(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
 	// Setup
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
 	roadmap, err := task_manager.NewRoadmapEntity(
@@ -879,7 +910,7 @@ func TestTaskDeleteCommand_WithForce(t *testing.T) {
 	}
 
 	task := task_manager.NewTaskEntity(
-		"task-123",
+		"DEF-task-1",
 		"track-test",
 		"Test Task",
 		"",
@@ -901,7 +932,7 @@ func TestTaskDeleteCommand_WithForce(t *testing.T) {
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{"task-123", "--force"})
+	err = cmd.Execute(ctx, cmdCtx, []string{"DEF-task-1", "--force"})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -912,7 +943,7 @@ func TestTaskDeleteCommand_WithForce(t *testing.T) {
 	}
 
 	// Verify task was deleted
-	_, err = repo.GetTask(ctx, "task-123")
+	_, err = repo.GetTask(ctx, "DEF-task-1")
 	if err == nil {
 		t.Errorf("expected task to be deleted")
 	}
@@ -956,21 +987,25 @@ func TestTaskDeleteCommand_NotFound(t *testing.T) {
 
 func TestTaskMoveCommand_Success(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
 	// Setup
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
 	roadmap, err := task_manager.NewRoadmapEntity(
@@ -1010,7 +1045,7 @@ func TestTaskMoveCommand_Success(t *testing.T) {
 
 	// Create task in track 1
 	task := task_manager.NewTaskEntity(
-		"task-123",
+		"DEF-task-1",
 		"track-test-1",
 		"Test Task",
 		"",
@@ -1032,7 +1067,7 @@ func TestTaskMoveCommand_Success(t *testing.T) {
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{"task-123", "--track", "track-test-2"})
+	err = cmd.Execute(ctx, cmdCtx, []string{"DEF-task-1", "--track", "track-test-2"})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -1043,7 +1078,7 @@ func TestTaskMoveCommand_Success(t *testing.T) {
 	}
 
 	// Verify move
-	moved, err := repo.GetTask(ctx, "task-123")
+	moved, err := repo.GetTask(ctx, "DEF-task-1")
 	if err != nil {
 		t.Fatalf("failed to get moved task: %v", err)
 	}
@@ -1054,21 +1089,25 @@ func TestTaskMoveCommand_Success(t *testing.T) {
 
 func TestTaskMoveCommand_NewTrackNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
-	db := createRoadmapTestDB(t)
+	db := getProjectDB(t, tmpDir, "default")
 	defer db.Close()
 
-	plugin, err := task_manager.NewTaskManagerPluginWithDatabase(
+	plugin, err := task_manager.NewTaskManagerPlugin(
 		&stubLogger{},
 		tmpDir,
-		db,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("failed to create plugin: %v", err)
 	}
 
+	// Set active project (getProjectDB created the directory, but we need to set it as active)
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
 	// Setup
-	repo := plugin.GetRepository()
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 	ctx := context.Background()
 
 	roadmap, err := task_manager.NewRoadmapEntity(
@@ -1104,7 +1143,7 @@ func TestTaskMoveCommand_NewTrackNotFound(t *testing.T) {
 	}
 
 	task := task_manager.NewTaskEntity(
-		"task-123",
+		"DEF-task-1",
 		"track-test",
 		"Test Task",
 		"",
@@ -1126,7 +1165,7 @@ func TestTaskMoveCommand_NewTrackNotFound(t *testing.T) {
 		logger:     &stubLogger{},
 	}
 
-	err = cmd.Execute(ctx, cmdCtx, []string{"task-123", "--track", "nonexistent-track"})
+	err = cmd.Execute(ctx, cmdCtx, []string{"DEF-task-1", "--track", "nonexistent-track"})
 	if err == nil {
 		t.Errorf("expected error for nonexistent track")
 	}

@@ -37,5 +37,24 @@ const (
 	EventIterationUpdated   = "task-manager.iteration.updated"
 )
 
+// Acceptance Criteria Events
+const (
+	EventACCreated             = "task-manager.ac.created"
+	EventACUpdated             = "task-manager.ac.updated"
+	EventACVerified            = "task-manager.ac.verified"
+	EventACAutomaticallyVerified = "task-manager.ac.automatically_verified"
+	EventACPendingReview       = "task-manager.ac.pending_review"
+	EventACFailed              = "task-manager.ac.failed"
+	EventACDeleted             = "task-manager.ac.deleted"
+)
+
+// ADR Events
+const (
+	EventADRCreated    = "task-manager.adr.created"
+	EventADRUpdated    = "task-manager.adr.updated"
+	EventADRSuperseded = "task-manager.adr.superseded"
+	EventADRDeprecated = "task-manager.adr.deprecated"
+)
+
 // Plugin source name
 const PluginSourceName = "task-manager"

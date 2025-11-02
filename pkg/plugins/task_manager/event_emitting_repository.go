@@ -601,6 +601,125 @@ func (e *EventEmittingRepository) emitIterationCompletedEvent(ctx context.Contex
 	e.publishEvent(ctx, EventIterationCompleted, payload)
 }
 
+// ============================================================================
+// Acceptance Criteria Operations
+// ============================================================================
+
+// SaveAC persists a new acceptance criterion and emits EventACCreated.
+func (e *EventEmittingRepository) SaveAC(ctx context.Context, ac *AcceptanceCriteriaEntity) error {
+	if err := e.repo.SaveAC(ctx, ac); err != nil {
+		return err
+	}
+
+	e.emitACCreatedEvent(ctx, ac)
+	return nil
+}
+
+// GetAC retrieves an acceptance criterion by its ID (read-only, no event).
+func (e *EventEmittingRepository) GetAC(ctx context.Context, id string) (*AcceptanceCriteriaEntity, error) {
+	return e.repo.GetAC(ctx, id)
+}
+
+// ListAC returns all acceptance criteria for a task (read-only, no event).
+func (e *EventEmittingRepository) ListAC(ctx context.Context, taskID string) ([]*AcceptanceCriteriaEntity, error) {
+	return e.repo.ListAC(ctx, taskID)
+}
+
+// UpdateAC updates an existing acceptance criterion and emits EventACUpdated.
+func (e *EventEmittingRepository) UpdateAC(ctx context.Context, ac *AcceptanceCriteriaEntity) error {
+	if err := e.repo.UpdateAC(ctx, ac); err != nil {
+		return err
+	}
+
+	e.emitACUpdatedEvent(ctx, ac)
+	return nil
+}
+
+// DeleteAC removes an acceptance criterion and emits EventACDeleted.
+func (e *EventEmittingRepository) DeleteAC(ctx context.Context, id string) error {
+	if err := e.repo.DeleteAC(ctx, id); err != nil {
+		return err
+	}
+
+	e.emitACDeletedEvent(ctx, id)
+	return nil
+}
+
+// ListACByTrack returns all acceptance criteria for all tasks in a track (read-only, no event).
+func (e *EventEmittingRepository) ListACByTrack(ctx context.Context, trackID string) ([]*AcceptanceCriteriaEntity, error) {
+	return e.repo.ListACByTrack(ctx, trackID)
+}
+
+// ListACByIteration returns all acceptance criteria for all tasks in an iteration (read-only, no event).
+func (e *EventEmittingRepository) ListACByIteration(ctx context.Context, iterationNum int) ([]*AcceptanceCriteriaEntity, error) {
+	return e.repo.ListACByIteration(ctx, iterationNum)
+}
+
+// emitACCreatedEvent emits EventACCreated to the event bus.
+func (e *EventEmittingRepository) emitACCreatedEvent(ctx context.Context, ac *AcceptanceCriteriaEntity) {
+	if e.eventBus == nil {
+		return
+	}
+
+	payload := map[string]interface{}{
+		"id":                 ac.ID,
+		"task_id":            ac.TaskID,
+		"description":        ac.Description,
+		"verification_type":  string(ac.VerificationType),
+		"status":             string(ac.Status),
+		"created_at":         ac.CreatedAt,
+	}
+
+	e.publishEvent(ctx, EventACCreated, payload)
+}
+
+// emitACUpdatedEvent emits EventACUpdated to the event bus.
+func (e *EventEmittingRepository) emitACUpdatedEvent(ctx context.Context, ac *AcceptanceCriteriaEntity) {
+	if e.eventBus == nil {
+		return
+	}
+
+	// Emit status-specific events based on the current status
+	var statusEvent string
+	switch ac.Status {
+	case ACStatusVerified:
+		statusEvent = EventACVerified
+	case ACStatusAutomaticallyVerified:
+		statusEvent = EventACAutomaticallyVerified
+	case ACStatusPendingHumanReview:
+		statusEvent = EventACPendingReview
+	case ACStatusFailed:
+		statusEvent = EventACFailed
+	default:
+		statusEvent = EventACUpdated
+	}
+
+	payload := map[string]interface{}{
+		"id":                 ac.ID,
+		"task_id":            ac.TaskID,
+		"description":        ac.Description,
+		"verification_type":  string(ac.VerificationType),
+		"status":             string(ac.Status),
+		"notes":              ac.Notes,
+		"updated_at":         ac.UpdatedAt,
+	}
+
+	e.publishEvent(ctx, statusEvent, payload)
+}
+
+// emitACDeletedEvent emits EventACDeleted to the event bus.
+func (e *EventEmittingRepository) emitACDeletedEvent(ctx context.Context, acID string) {
+	if e.eventBus == nil {
+		return
+	}
+
+	payload := map[string]interface{}{
+		"id": acID,
+	}
+
+	e.publishEvent(ctx, EventACDeleted, payload)
+}
+
 // publishEvent publishes an event to the event bus with error handling.
 func (e *EventEmittingRepository) publishEvent(ctx context.Context, eventType string, payload interface{}) {
 	if e.eventBus == nil {
@@ -627,4 +746,75 @@ func (e *EventEmittingRepository) publishEvent(ctx context.Context, eventType st
 	} else {
 		e.logger.Debug("published event", "type", eventType, "payload", payload)
 	}
+}
+
+// ============================================================================
+// ADR Operations
+// ============================================================================
+
+// SaveADR persists a new ADR and emits EventADRCreated.
+func (e *EventEmittingRepository) SaveADR(ctx context.Context, adr *ADREntity) error {
+	if err := e.repo.SaveADR(ctx, adr); err != nil {
+		return err
+	}
+
+	e.publishEvent(ctx, EventADRCreated, map[string]interface{}{
+		"id":       adr.ID,
+		"track_id": adr.TrackID,
+		"title":    adr.Title,
+		"status":   adr.Status,
+	})
+	return nil
+}
+
+// GetADR retrieves an ADR by its ID (read-only, no event).
+func (e *EventEmittingRepository) GetADR(ctx context.Context, id string) (*ADREntity, error) {
+	return e.repo.GetADR(ctx, id)
+}
+
+// ListADRs returns all ADRs, optionally filtered by track (read-only, no event).
+func (e *EventEmittingRepository) ListADRs(ctx context.Context, trackID *string) ([]*ADREntity, error) {
+	return e.repo.ListADRs(ctx, trackID)
+}
+
+// UpdateADR updates an existing ADR and emits EventADRUpdated.
+func (e *EventEmittingRepository) UpdateADR(ctx context.Context, adr *ADREntity) error {
+	if err := e.repo.UpdateADR(ctx, adr); err != nil {
+		return err
+	}
+
+	e.publishEvent(ctx, EventADRUpdated, map[string]interface{}{
+		"id": adr.ID,
+	})
+	return nil
+}
+
+// SupersedeADR marks an ADR as superseded and emits EventADRSuperseded.
+func (e *EventEmittingRepository) SupersedeADR(ctx context.Context, adrID, supersededByID string) error {
+	if err := e.repo.SupersedeADR(ctx, adrID, supersededByID); err != nil {
+		return err
+	}
+
+	e.publishEvent(ctx, EventADRSuperseded, map[string]interface{}{
+		"id":             adrID,
+		"superseded_by":  supersededByID,
+	})
+	return nil
+}
+
+// DeprecateADR marks an ADR as deprecated and emits EventADRDeprecated.
+func (e *EventEmittingRepository) DeprecateADR(ctx context.Context, adrID string) error {
+	if err := e.repo.DeprecateADR(ctx, adrID); err != nil {
+		return err
+	}
+
+	e.publishEvent(ctx, EventADRDeprecated, map[string]interface{}{
+		"id": adrID,
+	})
+	return nil
+}
+
+// GetADRsByTrack returns all ADRs for a specific track (read-only, no event).
+func (e *EventEmittingRepository) GetADRsByTrack(ctx context.Context, trackID string) ([]*ADREntity, error) {
+	return e.repo.GetADRsByTrack(ctx, trackID)
 }

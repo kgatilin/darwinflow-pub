@@ -239,6 +239,64 @@ func (m *MockRepository) GetNextSequenceNumber(ctx context.Context, entityType s
 	}
 }
 
+// Acceptance Criteria stub methods
+func (m *MockRepository) SaveAC(ctx context.Context, ac *tm.AcceptanceCriteriaEntity) error {
+	return nil
+}
+
+func (m *MockRepository) GetAC(ctx context.Context, id string) (*tm.AcceptanceCriteriaEntity, error) {
+	return nil, pluginsdk.ErrNotFound
+}
+
+func (m *MockRepository) ListAC(ctx context.Context, taskID string) ([]*tm.AcceptanceCriteriaEntity, error) {
+	return []*tm.AcceptanceCriteriaEntity{}, nil
+}
+
+func (m *MockRepository) UpdateAC(ctx context.Context, ac *tm.AcceptanceCriteriaEntity) error {
+	return nil
+}
+
+func (m *MockRepository) DeleteAC(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *MockRepository) ListACByTrack(ctx context.Context, trackID string) ([]*tm.AcceptanceCriteriaEntity, error) {
+	return []*tm.AcceptanceCriteriaEntity{}, nil
+}
+
+func (m *MockRepository) ListACByIteration(ctx context.Context, iterationNum int) ([]*tm.AcceptanceCriteriaEntity, error) {
+	return []*tm.AcceptanceCriteriaEntity{}, nil
+}
+
+// ADR stub methods
+func (m *MockRepository) SaveADR(ctx context.Context, adr *tm.ADREntity) error {
+	return nil
+}
+
+func (m *MockRepository) GetADR(ctx context.Context, id string) (*tm.ADREntity, error) {
+	return nil, pluginsdk.ErrNotFound
+}
+
+func (m *MockRepository) ListADRs(ctx context.Context, trackID *string) ([]*tm.ADREntity, error) {
+	return []*tm.ADREntity{}, nil
+}
+
+func (m *MockRepository) UpdateADR(ctx context.Context, adr *tm.ADREntity) error {
+	return nil
+}
+
+func (m *MockRepository) SupersedeADR(ctx context.Context, adrID, supersededByID string) error {
+	return nil
+}
+
+func (m *MockRepository) DeprecateADR(ctx context.Context, adrID string) error {
+	return nil
+}
+
+func (m *MockRepository) GetADRsByTrack(ctx context.Context, trackID string) ([]*tm.ADREntity, error) {
+	return []*tm.ADREntity{}, nil
+}
+
 // NewMockLogger creates a new mock logger
 func NewMockLogger() *MockLogger {
 	return &MockLogger{}

@@ -818,3 +818,178 @@ func (c *TrackRemoveDependencyCommand) Execute(ctx context.Context, cmdCtx plugi
 	return nil
 }
 
+// ============================================================================
+// TrackCheckCommand verifies that a track has an ADR
+// ============================================================================
+
+type TrackCheckCommand struct {
+	Plugin  *TaskManagerPlugin
+	project string
+	trackID string
+}
+
+func (c *TrackCheckCommand) GetName() string {
+	return "track check"
+}
+
+func (c *TrackCheckCommand) GetDescription() string {
+	return "Check if track has required ADR"
+}
+
+func (c *TrackCheckCommand) GetUsage() string {
+	return "dw task-manager track check <track-id>"
+}
+
+func (c *TrackCheckCommand) GetHelp() string {
+	return `Verifies that a track has at least one Architecture Decision Record.
+
+Examples:
+  # Check if track has ADR
+  dw task-manager track check track-1`
+}
+
+func (c *TrackCheckCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	// Parse args
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		default:
+			if !strings.HasPrefix(args[i], "--") && c.trackID == "" {
+				c.trackID = args[i]
+			}
+		}
+	}
+
+	if c.trackID == "" {
+		return fmt.Errorf("track ID is required")
+	}
+
+	// Get repository for project
+	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Check if track exists
+	_, err = repo.GetTrack(ctx, c.trackID)
+	if err != nil {
+		return err
+	}
+
+	// Get ADRs for track
+	adrs, err := repo.GetADRsByTrack(ctx, c.trackID)
+	if err != nil {
+		return err
+	}
+
+	if len(adrs) == 0 {
+		return fmt.Errorf("track %s has no ADRs. Create one with: dw task-manager adr create %s --title \"...\" --context \"...\" --decision \"...\" --consequences \"...\"", c.trackID, c.trackID)
+	}
+
+	fmt.Printf("Track %s has %d ADR(s):\n", c.trackID, len(adrs))
+	for _, adr := range adrs {
+		statusIcon := "○"
+		switch adr.Status {
+		case string(ADRStatusAccepted):
+			statusIcon = "✓"
+		case string(ADRStatusDeprecated):
+			statusIcon = "✗"
+		case string(ADRStatusSuperseded):
+			statusIcon = "⤳"
+		}
+		fmt.Printf("%s %s: %s\n", statusIcon, adr.ID, adr.Title)
+	}
+
+	return nil
+}
+
+// ============================================================================
+// TrackListMissingADRsCommand lists tracks without ADRs
+// ============================================================================
+
+type TrackListMissingADRsCommand struct {
+	Plugin  *TaskManagerPlugin
+	project string
+}
+
+func (c *TrackListMissingADRsCommand) GetName() string {
+	return "track list-missing-adrs"
+}
+
+func (c *TrackListMissingADRsCommand) GetDescription() string {
+	return "List all tracks without ADRs"
+}
+
+func (c *TrackListMissingADRsCommand) GetUsage() string {
+	return "dw task-manager track list-missing-adrs"
+}
+
+func (c *TrackListMissingADRsCommand) GetHelp() string {
+	return `Lists all tracks that don't have any Architecture Decision Records.
+
+Examples:
+  # List tracks missing ADRs
+  dw task-manager track list-missing-adrs`
+}
+
+func (c *TrackListMissingADRsCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	// Parse args
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--project" && i+1 < len(args) {
+			c.project = args[i+1]
+			i++
+		}
+	}
+
+	// Get repository for project
+	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Get active roadmap
+	roadmap, err := repo.GetActiveRoadmap(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Get all tracks
+	tracks, err := repo.ListTracks(ctx, roadmap.ID, TrackFilters{})
+	if err != nil {
+		return err
+	}
+
+	// Filter tracks without ADRs
+	var tracksWithoutADRs []*TrackEntity
+	for _, track := range tracks {
+		adrs, err := repo.GetADRsByTrack(ctx, track.ID)
+		if err != nil {
+			return err
+		}
+		if len(adrs) == 0 {
+			tracksWithoutADRs = append(tracksWithoutADRs, track)
+		}
+	}
+
+	if len(tracksWithoutADRs) == 0 {
+		fmt.Println("All tracks have ADRs!")
+		return nil
+	}
+
+	fmt.Printf("Found %d track(s) without ADRs:\n\n", len(tracksWithoutADRs))
+	for _, track := range tracksWithoutADRs {
+		fmt.Printf("• %s: %s\n", track.ID, track.Title)
+		fmt.Printf("  Status: %s\n", track.Status)
+		fmt.Printf("  To add an ADR: dw task-manager adr create %s --title \"...\" --context \"...\" --decision \"...\" --consequences \"...\"\n", track.ID)
+		fmt.Println()
+	}
+
+	return nil
+}
+
