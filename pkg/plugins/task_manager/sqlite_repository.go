@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
@@ -1210,10 +1211,14 @@ func (r *SQLiteRoadmapRepository) GetNextSequenceNumber(ctx context.Context, ent
 
 		// Parse the numeric part from IDs like "DW-task-123" or "DW-track-5"
 		// Format: {CODE}-{entity}-{number}
-		var num int
-		_, err := fmt.Sscanf(id, "%*[^-]-%*[^-]-%d", &num)
-		if err == nil && num > maxNum {
-			maxNum = num
+		// Split by "-" and parse the last part
+		parts := strings.Split(id, "-")
+		if len(parts) >= 3 {
+			var num int
+			_, err := fmt.Sscanf(parts[len(parts)-1], "%d", &num)
+			if err == nil && num > maxNum {
+				maxNum = num
+			}
 		}
 	}
 
