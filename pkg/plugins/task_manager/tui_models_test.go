@@ -797,3 +797,199 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+// TestACListDisplay tests that AC list displays full text and task ID
+func TestACListDisplay(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMockRepository()
+	logger := NewMockLogger()
+
+	model := tm.NewAppModel(ctx, repo, logger)
+	model.SetCurrentView(tm.ViewACList)
+	
+	// Set up test ACs with long descriptions
+	acs := []*tm.AcceptanceCriteriaEntity{
+		{
+			ID:               "ac-1",
+			TaskID:           "TM-task-1",
+			Description:      "This is a very long acceptance criterion description that should be displayed in full without any truncation",
+			VerificationType: tm.VerificationTypeManual,
+			Status:           tm.ACStatusNotStarted,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		},
+		{
+			ID:               "ac-2",
+			TaskID:           "TM-task-2",
+			Description:      "Another acceptance criterion with a long description",
+			VerificationType: tm.VerificationTypeAutomated,
+			Status:           tm.ACStatusPendingHumanReview,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		},
+	}
+	
+	// Set up track
+	track := &tm.TrackEntity{
+		ID:          "TM-track-1",
+		RoadmapID:   "roadmap-1",
+		Title:       "Test Track",
+		Description: "Test Description",
+		Status:      "in-progress",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	
+	model.SetCurrentTrack(track)
+	model.SetACs(acs)
+	
+	// Render the view
+	view := model.View()
+	
+	// Check that full description is displayed (not truncated)
+	if len(view) == 0 {
+		t.Fatal("View should not be empty")
+	}
+	
+	// Check that task IDs are displayed
+	if !contains(view, "TM-task-1") {
+		t.Error("View should display task ID TM-task-1")
+	}
+	
+	if !contains(view, "TM-task-2") {
+		t.Error("View should display task ID TM-task-2")
+	}
+	
+	// Check that full descriptions are present (not truncated)
+	if !contains(view, "This is a very long acceptance criterion description that should be displayed in full without any truncation") {
+		t.Error("View should display full AC description without truncation")
+	}
+	
+	// Check that space bar help text is shown
+	if !contains(view, "space: Verify selected AC") {
+		t.Error("View should show space bar help text")
+	}
+}
+
+// TestACSpaceBarVerification tests that space bar verifies selected AC
+func TestACSpaceBarVerification(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMockRepository()
+	logger := NewMockLogger()
+
+	model := tm.NewAppModel(ctx, repo, logger)
+	model.SetCurrentView(tm.ViewACList)
+	
+	// Set up test ACs
+	acs := []*tm.AcceptanceCriteriaEntity{
+		{
+			ID:               "ac-1",
+			TaskID:           "TM-task-1",
+			Description:      "Test AC 1",
+			VerificationType: tm.VerificationTypeManual,
+			Status:           tm.ACStatusNotStarted,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		},
+		{
+			ID:               "ac-2",
+			TaskID:           "TM-task-2",
+			Description:      "Test AC 2",
+			VerificationType: tm.VerificationTypeManual,
+			Status:           tm.ACStatusPendingHumanReview,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		},
+	}
+	
+	// Set up track
+	track := &tm.TrackEntity{
+		ID:          "TM-track-1",
+		RoadmapID:   "roadmap-1",
+		Title:       "Test Track",
+		Description: "Test Description",
+		Status:      "in-progress",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	
+	model.SetCurrentTrack(track)
+	model.SetACs(acs)
+	model.SetSelectedACIdx(0)
+	
+	// Press space bar to verify
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	
+	// Should return a command to reload ACs
+	if cmd == nil {
+		t.Error("Expected command to reload ACs after verification")
+	}
+	
+	// Verify that the AC status was updated
+	if acs[0].Status != tm.ACStatusVerified {
+		t.Errorf("Expected AC status to be Verified, got %s", acs[0].Status)
+	}
+}
+
+// TestACSpaceBarNoOpOnVerified tests that space bar does nothing on already verified AC
+func TestACSpaceBarNoOpOnVerified(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMockRepository()
+	logger := NewMockLogger()
+
+	model := tm.NewAppModel(ctx, repo, logger)
+	model.SetCurrentView(tm.ViewACList)
+	
+	// Set up test AC that's already verified
+	acs := []*tm.AcceptanceCriteriaEntity{
+		{
+			ID:               "ac-1",
+			TaskID:           "TM-task-1",
+			Description:      "Test AC 1",
+			VerificationType: tm.VerificationTypeManual,
+			Status:           tm.ACStatusVerified,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		},
+	}
+	
+	// Set up track
+	track := &tm.TrackEntity{
+		ID:          "TM-track-1",
+		RoadmapID:   "roadmap-1",
+		Title:       "Test Track",
+		Description:      "Test Description",
+		Status:      "in-progress",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	
+	model.SetCurrentTrack(track)
+	model.SetACs(acs)
+	model.SetSelectedACIdx(0)
+	
+	originalStatus := acs[0].Status
+	
+	// Press space bar
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	
+	// Should not return a command since AC is already verified
+	if cmd != nil {
+		t.Error("Expected no command when AC is already verified")
+	}
+	
+	// Verify that the status didn't change
+	if acs[0].Status != originalStatus {
+		t.Error("AC status should not change when already verified")
+	}
+}
+
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

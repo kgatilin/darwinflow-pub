@@ -18,6 +18,7 @@ type ViewMode int
 const (
 	ViewRoadmapList   ViewMode = iota
 	ViewTrackDetail
+	ViewTaskDetail
 	ViewIterationList
 	ViewIterationDetail
 	ViewADRList
@@ -42,6 +43,7 @@ type AppModel struct {
 	tracks      []*TrackEntity
 	currentTrack *TrackEntity
 	tasks       []*TaskEntity
+	currentTask *TaskEntity
 
 	// Data - Iteration views
 	iterations       []*IterationEntity
@@ -65,6 +67,11 @@ type AppModel struct {
 	width                int
 	height               int
 
+	// View mode toggles
+	showFullRoadmap      bool // Toggle between tracks-only and full roadmap view
+	showCompletedTracks  bool // Toggle showing completed tracks
+	showCompletedIters   bool // Toggle showing completed iterations
+
 	// Timestamps for debouncing
 	lastUpdate time.Time
 }
@@ -72,14 +79,20 @@ type AppModel struct {
 // Message types for Bubble Tea
 
 type RoadmapLoadedMsg struct {
-	Roadmap *RoadmapEntity
-	Tracks  []*TrackEntity
-	Error   error
+	Roadmap    *RoadmapEntity
+	Tracks     []*TrackEntity
+	Iterations []*IterationEntity
+	Error      error
 }
 
 type TrackDetailLoadedMsg struct {
 	Track *TrackEntity
 	Tasks []*TaskEntity
+	Error error
+}
+
+type TaskDetailLoadedMsg struct {
+	Task *TaskEntity
 	Error error
 }
 
@@ -164,9 +177,17 @@ func (m *AppModel) loadRoadmap() tea.Msg {
 		return RoadmapLoadedMsg{Error: err}
 	}
 
+	// Also load iterations for display on main view
+	iterations, err := m.repository.ListIterations(m.ctx)
+	if err != nil {
+		// Don't fail if iterations can't be loaded
+		iterations = []*IterationEntity{}
+	}
+
 	return RoadmapLoadedMsg{
-		Roadmap: roadmap,
-		Tracks:  tracks,
+		Roadmap:    roadmap,
+		Tracks:     tracks,
+		Iterations: iterations,
 	}
 }
 
@@ -231,6 +252,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "esc":
 			switch m.currentView {
+			case ViewTaskDetail:
+				m.currentView = ViewTrackDetail
+				return m, nil
 			case ViewTrackDetail:
 				m.currentView = ViewRoadmapList
 				m.selectedTaskIdx = 0
@@ -282,6 +306,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.roadmap = msg.Roadmap
 		m.tracks = msg.Tracks
+		m.iterations = msg.Iterations
 		m.currentView = ViewRoadmapList
 		m.selectedTrackIdx = 0
 		m.lastUpdate = time.Now()
@@ -296,6 +321,16 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tasks = msg.Tasks
 		m.currentView = ViewTrackDetail
 		m.selectedTaskIdx = 0
+		m.lastUpdate = time.Now()
+
+	case TaskDetailLoadedMsg:
+		if msg.Error != nil {
+			m.currentView = ViewError
+			m.error = msg.Error
+			return m, nil
+		}
+		m.currentTask = msg.Task
+		m.currentView = ViewTaskDetail
 		m.lastUpdate = time.Now()
 
 	case IterationsLoadedMsg:
@@ -361,6 +396,23 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selectedTrackIdx > 0 {
 			m.selectedTrackIdx--
 		}
+	case " ": // Space bar - verify selected AC
+		if m.selectedACIdx < len(m.acs) {
+			ac := m.acs[m.selectedACIdx]
+			// Only verify if not already verified
+			if ac.Status != ACStatusVerified && ac.Status != ACStatusAutomaticallyVerified {
+				ac.Status = ACStatusVerified
+				ac.UpdatedAt = time.Now()
+				
+				// Update in repository
+				if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+					m.logger.Error("Failed to verify AC", "error", err)
+				} else {
+					// Reload ACs to reflect the change
+					return m, m.loadACs(m.currentTrack.ID)
+				}
+			}
+		}
 	case "enter":
 		if m.selectedTrackIdx < len(m.tracks) {
 			trackID := m.tracks[m.selectedTrackIdx].ID
@@ -373,6 +425,15 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i":
 		m.currentView = ViewLoading
 		return m, m.loadIterations
+	case "v":
+		// Toggle full roadmap view
+		m.showFullRoadmap = !m.showFullRoadmap
+	case "t":
+		// Toggle completed tracks view
+		m.showCompletedTracks = !m.showCompletedTracks
+	case "c":
+		// Toggle completed iterations view
+		m.showCompletedIters = !m.showCompletedIters
 	}
 	return m, nil
 }
@@ -387,6 +448,30 @@ func (m *AppModel) handleTrackDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		if m.selectedTaskIdx > 0 {
 			m.selectedTaskIdx--
+		}
+	case " ": // Space bar - verify selected AC
+		if m.selectedACIdx < len(m.acs) {
+			ac := m.acs[m.selectedACIdx]
+			// Only verify if not already verified
+			if ac.Status != ACStatusVerified && ac.Status != ACStatusAutomaticallyVerified {
+				ac.Status = ACStatusVerified
+				ac.UpdatedAt = time.Now()
+				
+				// Update in repository
+				if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+					m.logger.Error("Failed to verify AC", "error", err)
+				} else {
+					// Reload ACs to reflect the change
+					return m, m.loadACs(m.currentTrack.ID)
+				}
+			}
+		}
+	case "enter":
+		// Navigate into selected task
+		if m.selectedTaskIdx < len(m.tasks) {
+			taskID := m.tasks[m.selectedTaskIdx].ID
+			m.currentView = ViewLoading
+			return m, m.loadTaskDetail(taskID)
 		}
 	case "a":
 		// View ADRs for the current track
@@ -417,6 +502,23 @@ func (m *AppModel) handleIterationListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		if m.selectedIterationIdx > 0 {
 			m.selectedIterationIdx--
 		}
+	case " ": // Space bar - verify selected AC
+		if m.selectedACIdx < len(m.acs) {
+			ac := m.acs[m.selectedACIdx]
+			// Only verify if not already verified
+			if ac.Status != ACStatusVerified && ac.Status != ACStatusAutomaticallyVerified {
+				ac.Status = ACStatusVerified
+				ac.UpdatedAt = time.Now()
+				
+				// Update in repository
+				if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+					m.logger.Error("Failed to verify AC", "error", err)
+				} else {
+					// Reload ACs to reflect the change
+					return m, m.loadACs(m.currentTrack.ID)
+				}
+			}
+		}
 	case "enter":
 		if m.selectedIterationIdx < len(m.iterations) {
 			iterNum := m.iterations[m.selectedIterationIdx].Number
@@ -427,6 +529,12 @@ func (m *AppModel) handleIterationListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		m.currentView = ViewLoading
 		return m, m.loadIterations
 	}
+	return m, nil
+}
+
+// handleTaskDetailKeys processes key presses on task detail view
+func (m *AppModel) handleTaskDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Task detail is read-only, navigation handled by esc in main Update
 	return m, nil
 }
 
@@ -447,6 +555,8 @@ func (m *AppModel) View() string {
 		return m.renderRoadmapList()
 	case ViewTrackDetail:
 		return m.renderTrackDetail()
+	case ViewTaskDetail:
+		return m.renderTaskDetail()
 	case ViewIterationList:
 		return m.renderIterationList()
 	case ViewIterationDetail:
@@ -504,23 +614,75 @@ func (m *AppModel) renderRoadmapList() string {
 	// Project header
 	s += titleStyle.Render(fmt.Sprintf("Project: %s", m.projectName)) + "\n\n"
 
-	// Header
-	if m.roadmap != nil {
-		s += fmt.Sprintf("Roadmap: %s\n", m.roadmap.ID)
-		s += fmt.Sprintf("Vision: %s\n", m.roadmap.Vision)
-		s += fmt.Sprintf("Success Criteria: %s\n", m.roadmap.SuccessCriteria)
+	// TM-task-45: Vision and success criteria with formatting (hide roadmap ID)
+	if m.roadmap != nil && m.showFullRoadmap {
+		fieldLabelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+		fieldValueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+
+		availableWidth := m.width
+		if availableWidth <= 0 {
+			availableWidth = 80
+		}
+		contentWidth := availableWidth - 10
+
+		visionLabel := fieldLabelStyle.Render("Vision:")
+		visionText := wrapText(m.roadmap.Vision, contentWidth)
+		s += visionLabel + " " + fieldValueStyle.Render(visionText) + "\n"
+
+		criteriaLabel := fieldLabelStyle.Render("Success Criteria:")
+		criteriaText := wrapText(m.roadmap.SuccessCriteria, contentWidth)
+		s += criteriaLabel + " " + fieldValueStyle.Render(criteriaText) + "\n\n"
+	}
+
+	// TM-task-48: Show non-completed iterations on main view
+	sectionHeaderStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("141")).MarginTop(1)
+	completedStyle := lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("240"))
+
+	nonCompletedIterations := []*IterationEntity{}
+	completedIterations := []*IterationEntity{}
+	for _, iter := range m.iterations {
+		if iter.Status == "complete" {
+			completedIterations = append(completedIterations, iter)
+		} else {
+			nonCompletedIterations = append(nonCompletedIterations, iter)
+		}
+	}
+
+	if len(nonCompletedIterations) > 0 {
+		s += sectionHeaderStyle.Render("Active Iterations:") + "\n"
+		for _, iter := range nonCompletedIterations {
+			statusIcon := m.formatIterationStatus(iter.Status)
+			s += trackItemStyle.Render(fmt.Sprintf("%s Iteration %d: %s (%d tasks)",
+				statusIcon, iter.Number, iter.Name, len(iter.TaskIDs))) + "\n"
+		}
 		s += "\n"
 	}
 
-	// Tracks
-	s += "Tracks:\n"
-	if len(m.tracks) == 0 {
-		s += "  No tracks yet\n"
-	} else {
-		for i, track := range m.tracks {
+	if m.showCompletedIters && len(completedIterations) > 0 {
+		s += sectionHeaderStyle.Render("Completed Iterations:") + "\n"
+		for _, iter := range completedIterations {
+			s += completedStyle.Render(fmt.Sprintf("✓ Iteration %d: %s", iter.Number, iter.Name)) + "\n"
+		}
+		s += "\n"
+	}
+
+	// TM-task-47: Better track status visualization with separation
+	activeTracks := []*TrackEntity{}
+	completedTracks := []*TrackEntity{}
+	for _, track := range m.tracks {
+		if track.Status == "complete" || track.Status == "done" {
+			completedTracks = append(completedTracks, track)
+		} else {
+			activeTracks = append(activeTracks, track)
+		}
+	}
+
+	// Active tracks
+	if len(activeTracks) > 0 {
+		s += sectionHeaderStyle.Render("Active Tracks:") + "\n"
+		for i, track := range activeTracks {
 			statusIcon := getStatusIcon(track.Status)
 			priorityIcon := getPriorityIcon(track.Priority)
-
 			line := fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, track.ID, track.Title)
 
 			if i == m.selectedTrackIdx {
@@ -529,11 +691,27 @@ func (m *AppModel) renderRoadmapList() string {
 				s += trackItemStyle.Render(line) + "\n"
 			}
 		}
+	} else {
+		s += sectionHeaderStyle.Render("Active Tracks:") + "\n"
+		s += "  No active tracks\n"
 	}
 
-	// Help text
+	// Completed tracks (TM-task-47: optional view)
+	if m.showCompletedTracks && len(completedTracks) > 0 {
+		s += "\n" + sectionHeaderStyle.Render("Completed Tracks:") + "\n"
+		for _, track := range completedTracks {
+			s += completedStyle.Render(fmt.Sprintf("✓ %s - %s", track.ID, track.Title)) + "\n"
+		}
+	}
+
+	// TM-task-46: Help text with view toggle indicators
 	s += "\n"
-	s += helpStyle.Render("Navigation: j/k or ↑/↓ | Enter: View track | r: Refresh | q: Quit")
+	viewMode := "Tracks"
+	if m.showFullRoadmap {
+		viewMode = "Full"
+	}
+	helpText := fmt.Sprintf("j/k↑/↓:Nav | Enter:View | i:Iters | v:Toggle %s | t:CompletedTracks | c:CompletedIters | r:Refresh | q:Quit", viewMode)
+	s += helpStyle.Render(helpText)
 
 	return s
 }
@@ -644,7 +822,103 @@ func (m *AppModel) renderTrackDetail() string {
 
 	// Help
 	s += "\n"
-	s += helpStyle.Render("Navigation: j/k or ↑/↓ | a: ADRs | c: Acceptance Criteria | esc: Back | q: Quit")
+	s += helpStyle.Render("Navigation: j/k or ↑/↓ | Enter: View task | a: ADRs | c: Acceptance Criteria | esc: Back | q: Quit")
+
+	return s
+}
+
+// loadTaskDetail loads task details (stub for future implementation)
+func (m *AppModel) loadTaskDetail(taskID string) tea.Cmd {
+	return func() tea.Msg {
+		// For now, just return to track detail view
+		// This can be implemented later to show full task details
+		return BackMsg{}
+	}
+}
+
+// renderTaskDetail renders the task detail view
+func (m *AppModel) renderTaskDetail() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("205")).
+		MarginBottom(1)
+
+	sectionStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("86")).
+		MarginTop(1).
+		MarginBottom(0)
+
+	contentStyle := lipgloss.NewStyle().
+		PaddingLeft(2).
+		MarginBottom(0)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("244")).
+		Italic(true).
+		MarginTop(1)
+
+	var s string
+
+	if m.currentTask == nil {
+		return "Loading task details..."
+	}
+
+	// Header
+	statusIcon := getStatusIcon(m.currentTask.Status)
+	priorityIcon := getPriorityIcon(m.currentTask.Priority)
+	s += titleStyle.Render(fmt.Sprintf("%s %s Task: %s", statusIcon, priorityIcon, m.currentTask.ID)) + "\n"
+
+	// Title
+	s += sectionStyle.Render("Title") + "\n"
+	s += contentStyle.Render(m.currentTask.Title) + "\n"
+
+	// Description
+	if m.currentTask.Description != "" {
+		s += "\n" + sectionStyle.Render("Description") + "\n"
+		s += contentStyle.Render(m.currentTask.Description) + "\n"
+	}
+
+	// Status
+	s += "\n" + sectionStyle.Render("Status") + "\n"
+	s += contentStyle.Render(m.currentTask.Status) + "\n"
+
+	// Priority
+	s += "\n" + sectionStyle.Render("Priority") + "\n"
+	s += contentStyle.Render(m.currentTask.Priority) + "\n"
+
+	// Track
+	s += "\n" + sectionStyle.Render("Track") + "\n"
+	s += contentStyle.Render(m.currentTask.TrackID) + "\n"
+
+	// Branch (if set)
+	if m.currentTask.Branch != "" {
+		s += "\n" + sectionStyle.Render("Branch") + "\n"
+		s += contentStyle.Render(m.currentTask.Branch) + "\n"
+	}
+
+	// Acceptance Criteria
+	acs, err := m.repository.ListAC(m.ctx, m.currentTask.ID)
+	if err == nil && len(acs) > 0 {
+		s += "\n" + sectionStyle.Render(fmt.Sprintf("Acceptance Criteria (%d)", len(acs))) + "\n"
+		for _, ac := range acs {
+			acIcon := getACStatusIcon(string(ac.Status))
+			typeStr := "manual"
+			if ac.VerificationType == VerificationTypeAutomated {
+				typeStr = "auto"
+			}
+			s += contentStyle.Render(fmt.Sprintf("%s [%s] (%s) %s", acIcon, ac.ID, typeStr, ac.Description)) + "\n"
+		}
+	}
+
+	// Timestamps
+	s += "\n" + sectionStyle.Render("Timestamps") + "\n"
+	s += contentStyle.Render(fmt.Sprintf("Created: %s", m.currentTask.CreatedAt.Format("2006-01-02 15:04:05"))) + "\n"
+	s += contentStyle.Render(fmt.Sprintf("Updated: %s", m.currentTask.UpdatedAt.Format("2006-01-02 15:04:05"))) + "\n"
+
+	// Help
+	s += "\n"
+	s += helpStyle.Render("Navigation: esc: Back to track | q: Quit")
 
 	return s
 }
@@ -1013,6 +1287,23 @@ func (m *AppModel) handleADRListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selectedADRIdx > 0 {
 			m.selectedADRIdx--
 		}
+	case " ": // Space bar - verify selected AC
+		if m.selectedACIdx < len(m.acs) {
+			ac := m.acs[m.selectedACIdx]
+			// Only verify if not already verified
+			if ac.Status != ACStatusVerified && ac.Status != ACStatusAutomaticallyVerified {
+				ac.Status = ACStatusVerified
+				ac.UpdatedAt = time.Now()
+				
+				// Update in repository
+				if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+					m.logger.Error("Failed to verify AC", "error", err)
+				} else {
+					// Reload ACs to reflect the change
+					return m, m.loadACs(m.currentTrack.ID)
+				}
+			}
+		}
 	}
 	return m, nil
 }
@@ -1059,11 +1350,11 @@ func (m *AppModel) renderACList() string {
 
 	acItemStyle := lipgloss.NewStyle().
 		PaddingLeft(2).
-		MarginBottom(0)
+		MarginBottom(1)
 
 	selectedACStyle := lipgloss.NewStyle().
 		PaddingLeft(2).
-		MarginBottom(0).
+		MarginBottom(1).
 		Background(lipgloss.Color("240")).
 		Foreground(lipgloss.Color("229"))
 
@@ -1088,7 +1379,7 @@ func (m *AppModel) renderACList() string {
 			if ac.VerificationType == VerificationTypeAutomated {
 				typeStr = "auto"
 			}
-			line := fmt.Sprintf("%s [%s] (%s) %s", statusIcon, ac.ID, typeStr, truncateString(ac.Description, 60))
+			line := fmt.Sprintf("%s [%s] Task: %s (%s)\n  %s", statusIcon, ac.ID, ac.TaskID, typeStr, ac.Description)
 
 			if i == m.selectedACIdx {
 				s += selectedACStyle.Render(line) + "\n"
@@ -1100,7 +1391,7 @@ func (m *AppModel) renderACList() string {
 
 	// Help
 	s += "\n"
-	s += helpStyle.Render("Navigation: j/k or ↑/↓ | esc: Back | q: Quit")
+	s += helpStyle.Render("Navigation: j/k or ↑/↓ | space: Verify selected AC | esc: Back | q: Quit")
 
 	return s
 }
@@ -1115,6 +1406,23 @@ func (m *AppModel) handleACListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		if m.selectedACIdx > 0 {
 			m.selectedACIdx--
+		}
+	case " ": // Space bar - verify selected AC
+		if m.selectedACIdx < len(m.acs) {
+			ac := m.acs[m.selectedACIdx]
+			// Only verify if not already verified
+			if ac.Status != ACStatusVerified && ac.Status != ACStatusAutomaticallyVerified {
+				ac.Status = ACStatusVerified
+				ac.UpdatedAt = time.Now()
+				
+				// Update in repository
+				if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+					m.logger.Error("Failed to verify AC", "error", err)
+				} else {
+					// Reload ACs to reflect the change
+					return m, m.loadACs(m.currentTrack.ID)
+				}
+			}
 		}
 	}
 	return m, nil
@@ -1164,5 +1472,59 @@ func getACStatusIcon(status string) string {
 		return "○"
 	default:
 		return "?"
+	}
+}
+
+// wrapText wraps text to fit within the specified width
+func wrapText(text string, width int) string {
+	if len(text) <= width {
+		return text
+	}
+
+	var result strings.Builder
+	words := strings.Fields(text)
+	lineLen := 0
+
+	for _, word := range words {
+		wordLen := len(word)
+
+		if lineLen == 0 {
+			result.WriteString(word)
+			lineLen = wordLen
+		} else if lineLen+1+wordLen <= width {
+			result.WriteString(" ")
+			result.WriteString(word)
+			lineLen += 1 + wordLen
+		} else {
+			result.WriteString("\n")
+			result.WriteString(word)
+			lineLen = wordLen
+		}
+	}
+
+	return result.String()
+}
+
+// SetACs sets the ACs for testing
+func (m *AppModel) SetACs(acs []*AcceptanceCriteriaEntity) {
+	m.acs = acs
+}
+
+// SetSelectedACIdx sets the selected AC index for testing
+func (m *AppModel) SetSelectedACIdx(idx int) {
+	m.selectedACIdx = idx
+}
+
+// rankToPriority converts rank (1-1000) to priority string for display
+func rankToPriority(rank int) string {
+	switch {
+	case rank <= 100:
+		return "critical"
+	case rank <= 300:
+		return "high"
+	case rank <= 600:
+		return "medium"
+	default:
+		return "low"
 	}
 }
