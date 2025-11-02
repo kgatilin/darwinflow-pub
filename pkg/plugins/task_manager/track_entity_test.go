@@ -16,7 +16,7 @@ func TestNewTrackEntity(t *testing.T) {
 		name        string
 		id          string
 		status      string
-		priority    string
+		rank        int
 		deps        []string
 		expectedErr bool
 	}{
@@ -24,7 +24,7 @@ func TestNewTrackEntity(t *testing.T) {
 			name:        "valid track",
 			id:          "track-framework-core",
 			status:      "not-started",
-			priority:    "critical",
+			rank:        100,
 			deps:        []string{},
 			expectedErr: false,
 		},
@@ -32,7 +32,7 @@ func TestNewTrackEntity(t *testing.T) {
 			name:        "invalid track ID format",
 			id:          "framework-core", // missing "track-" prefix
 			status:      "not-started",
-			priority:    "critical",
+			rank:        100,
 			deps:        []string{},
 			expectedErr: true,
 		},
@@ -40,15 +40,15 @@ func TestNewTrackEntity(t *testing.T) {
 			name:        "invalid status",
 			id:          "track-framework-core",
 			status:      "unknown",
-			priority:    "critical",
+			rank:        100,
 			deps:        []string{},
 			expectedErr: true,
 		},
 		{
-			name:        "invalid priority",
+			name:        "invalid rank",
 			id:          "track-framework-core",
 			status:      "not-started",
-			priority:    "urgent", // not a valid priority
+			rank:        -1, // negative rank is invalid
 			deps:        []string{},
 			expectedErr: true,
 		},
@@ -56,7 +56,7 @@ func TestNewTrackEntity(t *testing.T) {
 			name:        "self-dependency",
 			id:          "track-framework-core",
 			status:      "not-started",
-			priority:    "critical",
+			rank:        100,
 			deps:        []string{"track-framework-core"},
 			expectedErr: true,
 		},
@@ -64,7 +64,7 @@ func TestNewTrackEntity(t *testing.T) {
 			name:        "valid with dependencies",
 			id:          "track-plugin-system",
 			status:      "not-started",
-			priority:    "high",
+			rank:        200,
 			deps:        []string{"track-framework-core", "track-database"},
 			expectedErr: false,
 		},
@@ -78,7 +78,7 @@ func TestNewTrackEntity(t *testing.T) {
 				"Test Track",
 				"Test Description",
 				tt.status,
-				tt.priority,
+				tt.rank,
 				tt.deps,
 				now,
 				now,
@@ -108,7 +108,7 @@ func TestTrackEntityGetters(t *testing.T) {
 		"Framework Core",
 		"Core framework work",
 		"in-progress",
-		"critical",
+		100,
 		[]string{},
 		now,
 		now,
@@ -157,7 +157,7 @@ func TestTrackEntityProgress(t *testing.T) {
 			"Test",
 			"Test",
 			tt.status,
-			"medium",
+			300,
 			[]string{},
 			now,
 			now,
@@ -183,7 +183,7 @@ func TestTrackEntityIsBlocked(t *testing.T) {
 		"Blocked Track",
 		"Test",
 		"blocked",
-		"critical",
+		100,
 		[]string{},
 		now,
 		now,
@@ -202,7 +202,7 @@ func TestTrackEntityIsBlocked(t *testing.T) {
 		"Active Track",
 		"Test",
 		"in-progress",
-		"critical",
+		100,
 		[]string{},
 		now,
 		now,
@@ -226,7 +226,7 @@ func TestTrackEntityDependencies(t *testing.T) {
 		"Plugin System",
 		"Test",
 		"not-started",
-		"high",
+		200,
 		[]string{"track-framework-core"},
 		now,
 		now,
@@ -293,7 +293,7 @@ func TestTrackEntityITrackable(t *testing.T) {
 		"Test Track",
 		"Test",
 		"in-progress",
-		"critical",
+		100,
 		[]string{},
 		now,
 		now,
@@ -334,7 +334,7 @@ func TestTrackEntityFields(t *testing.T) {
 		"Test Track",
 		"Test Description",
 		"in-progress",
-		"high",
+		200,
 		[]string{"track-dep"},
 		now,
 		now,
@@ -347,7 +347,7 @@ func TestTrackEntityFields(t *testing.T) {
 
 	expectedFields := []string{
 		"id", "roadmap_id", "title", "description",
-		"status", "priority", "dependencies",
+		"status", "rank", "dependencies",
 		"created_at", "updated_at", "progress", "is_blocked",
 	}
 
@@ -394,7 +394,7 @@ func TestTrackIDValidation(t *testing.T) {
 				"Test",
 				"Test",
 				"not-started",
-				"medium",
+				300,
 				[]string{},
 				now,
 				now,
@@ -410,30 +410,30 @@ func TestTrackIDValidation(t *testing.T) {
 	}
 }
 
-// TestTrackEntityValidPriorities tests all valid priority values
-func TestTrackEntityValidPriorities(t *testing.T) {
+// TestTrackEntityValidRanks tests all valid rank values
+func TestTrackEntityValidRanks(t *testing.T) {
 	now := time.Now().UTC()
-	priorities := []string{"critical", "high", "medium", "low"}
+	ranks := []int{100, 200, 300, 400}
 
-	for _, priority := range priorities {
-		t.Run(priority, func(t *testing.T) {
+	for _, rank := range ranks {
+		t.Run(string(rune(rank)), func(t *testing.T) {
 			track, err := task_manager.NewTrackEntity(
 				"track-test",
 				"roadmap-001",
 				"Test",
 				"Test",
 				"not-started",
-				priority,
+				rank,
 				[]string{},
 				now,
 				now,
 			)
 
 			if err != nil {
-				t.Errorf("failed to create track with priority %q: %v", priority, err)
+				t.Errorf("failed to create track with rank %d: %v", rank, err)
 			}
 			if track == nil {
-				t.Errorf("track is nil for priority %q", priority)
+				t.Errorf("track is nil for rank %d", rank)
 			}
 		})
 	}
@@ -452,7 +452,7 @@ func TestTrackEntityValidStatuses(t *testing.T) {
 				"Test",
 				"Test",
 				status,
-				"medium",
+				300,
 				[]string{},
 				now,
 				now,

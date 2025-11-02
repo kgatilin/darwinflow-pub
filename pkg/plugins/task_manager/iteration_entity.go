@@ -16,6 +16,7 @@ type IterationEntity struct {
 	Goal        string     `json:"goal"`
 	TaskIDs     []string   `json:"task_ids"`
 	Status      string     `json:"status"` // planned, current, complete
+	Rank        int        `json:"rank"` // 1-1000 (lower = higher priority)
 	Deliverable string     `json:"deliverable"`
 	StartedAt   *time.Time `json:"started_at"`
 	CompletedAt *time.Time `json:"completed_at"`
@@ -31,7 +32,7 @@ var validIterationStatuses = map[string]bool{
 }
 
 // NewIterationEntity creates a new iteration entity with validation
-func NewIterationEntity(number int, name, goal, deliverable string, taskIDs []string, status string, startedAt, completedAt, createdAt, updatedAt time.Time) (*IterationEntity, error) {
+func NewIterationEntity(number int, name, goal, deliverable string, taskIDs []string, status string, rank int, startedAt, completedAt, createdAt, updatedAt time.Time) (*IterationEntity, error) {
 	// Validate number is positive
 	if number <= 0 {
 		return nil, fmt.Errorf("%w: iteration number must be positive", pluginsdk.ErrInvalidArgument)
@@ -40,6 +41,11 @@ func NewIterationEntity(number int, name, goal, deliverable string, taskIDs []st
 	// Validate status
 	if !validIterationStatuses[status] {
 		return nil, fmt.Errorf("%w: invalid iteration status: must be one of planned, current, complete", pluginsdk.ErrInvalidArgument)
+	}
+
+	// Validate rank
+	if rank < 1 || rank > 1000 {
+		return nil, fmt.Errorf("%w: invalid iteration rank: must be between 1 and 1000", pluginsdk.ErrInvalidArgument)
 	}
 
 	if taskIDs == nil {
@@ -60,6 +66,7 @@ func NewIterationEntity(number int, name, goal, deliverable string, taskIDs []st
 		Goal:        goal,
 		TaskIDs:     taskIDs,
 		Status:      status,
+		Rank:        rank,
 		Deliverable: deliverable,
 		StartedAt:   startedAtPtr,
 		CompletedAt: completedAtPtr,
@@ -100,6 +107,7 @@ func (i *IterationEntity) GetAllFields() map[string]interface{} {
 		"goal":         i.Goal,
 		"task_ids":     i.TaskIDs,
 		"status":       i.Status,
+		"rank":         i.Rank,
 		"deliverable":  i.Deliverable,
 		"started_at":   i.StartedAt,
 		"completed_at": i.CompletedAt,

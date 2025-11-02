@@ -115,7 +115,7 @@ func TestTaskEntityGetters(t *testing.T) {
 		"Test Task",
 		"Test Description",
 		"todo",
-		"high",
+		200,
 		"",
 		now,
 		now,
@@ -153,7 +153,7 @@ func TestTaskEntityProgress(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		entity := task_manager.NewTaskEntity("id", "track-test", "title", "desc", test.status, "medium", "", now, now)
+		entity := task_manager.NewTaskEntity("id", "track-test", "title", "desc", test.status, 300, "", now, now)
 		progress := entity.GetProgress()
 		if progress != test.expected {
 			t.Errorf("for status %q, expected progress %.1f, got %.1f", test.status, test.expected, progress)
@@ -223,7 +223,7 @@ func TestCreateCommandExecution(t *testing.T) {
 		stdout:     stdout,
 	}
 
-	args := []string{"Test Task", "--priority", "high"}
+	args := []string{"Test Task", "--rank", "200"}
 	err = createCmd.Execute(context.Background(), mockCmdCtx, args)
 	if err != nil {
 		t.Fatalf("create command failed: %v", err)
@@ -306,7 +306,7 @@ func TestEventEmissionOnTaskCreation(t *testing.T) {
 
 	// Write a task file directly
 	taskFile := filepath.Join(tasksDir, "task-test.json")
-	taskData := `{"id":"task-test","title":"Test Task","status":"todo","priority":"medium","created_at":"2025-10-22T00:00:00Z","updated_at":"2025-10-22T00:00:00Z"}`
+	taskData := `{"id":"task-test","title":"Test Task","status":"todo","priority":300,"created_at":"2025-10-22T00:00:00Z","updated_at":"2025-10-22T00:00:00Z"}`
 	err = os.WriteFile(taskFile, []byte(taskData), 0644)
 	if err != nil {
 		t.Fatalf("failed to write task file: %v", err)
@@ -392,7 +392,7 @@ func TestUpdateCommand(t *testing.T) {
 	taskID := "task-456"
 	taskFile := filepath.Join(tasksDir, taskID+".json")
 	now := time.Now().UTC()
-	task := task_manager.NewTaskEntity(taskID, "track-test", "Test Task", "Description", "todo", "medium", "", now, now)
+	task := task_manager.NewTaskEntity(taskID, "track-test", "Test Task", "Description", "todo", 300, "", now, now)
 
 	data, err := task_manager.MarshalTask(task)
 	if err != nil {
@@ -501,7 +501,7 @@ func TestUpdateEntity(t *testing.T) {
 	taskID := "task-123"
 	taskFile := filepath.Join(tasksDir, taskID+".json")
 	now := time.Now().UTC()
-	task := task_manager.NewTaskEntity(taskID, "track-test", "Test Task", "Description", "todo", "medium", "", now, now)
+	task := task_manager.NewTaskEntity(taskID, "track-test", "Test Task", "Description", "todo", 300, "", now, now)
 
 	data, err := task_manager.MarshalTask(task)
 	if err != nil {

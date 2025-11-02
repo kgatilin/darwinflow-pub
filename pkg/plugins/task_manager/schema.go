@@ -288,7 +288,7 @@ func MigrateFromFileStorage(db *sql.DB, tasksDir string) error {
 			"Legacy Tasks",
 			"Tasks migrated from file-based storage",
 			"not-started",
-			"low",
+			300, // low priority = 300 rank
 			[]string{},
 			GetCurrentTime(),
 			GetCurrentTime(),
@@ -299,7 +299,7 @@ func MigrateFromFileStorage(db *sql.DB, tasksDir string) error {
 
 		_, err = db.Exec(
 			"INSERT INTO tracks (id, roadmap_id, title, description, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			track.ID, track.RoadmapID, track.Title, track.Description, track.Status, track.Priority, track.CreatedAt, track.UpdatedAt,
+			track.ID, track.RoadmapID, track.Title, track.Description, track.Status, track.Rank, track.CreatedAt, track.UpdatedAt,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert legacy track: %w", err)
@@ -328,7 +328,7 @@ func MigrateFromFileStorage(db *sql.DB, tasksDir string) error {
 		// Insert into database (force legacy track assignment)
 		_, err = db.Exec(
 			"INSERT INTO tasks (id, track_id, title, description, status, priority, branch, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			oldTask.ID, legacyTrackID, oldTask.Title, oldTask.Description, oldTask.Status, oldTask.Priority, oldTask.Branch, oldTask.CreatedAt, oldTask.UpdatedAt,
+			oldTask.ID, legacyTrackID, oldTask.Title, oldTask.Description, oldTask.Status, oldTask.Rank, oldTask.Branch, oldTask.CreatedAt, oldTask.UpdatedAt,
 		)
 		if err != nil {
 			// Log error but continue

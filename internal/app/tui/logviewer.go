@@ -163,6 +163,20 @@ func (m LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scrollToCurrentMatch()
 			}
 			return m, nil
+
+		// Vim-style navigation
+		case "j":
+			// Move down (let viewport handle it)
+		case "k":
+			// Move up (let viewport handle it)
+		case "g":
+			// Go to top
+			m.viewport.GotoTop()
+			return m, nil
+		case "G":
+			// Go to bottom
+			m.viewport.GotoBottom()
+			return m, nil
 		}
 	}
 
@@ -332,38 +346,59 @@ func (m LogViewerModel) searchPanelView() string {
 }
 
 func (m LogViewerModel) headerView() string {
+	// Breadcrumb
+	breadcrumb := RenderBreadcrumb([]string{"Sessions", m.sessionID[:8], "Log"})
+
+	// Title with search info
 	title := fmt.Sprintf("Session Log: %s", m.sessionID[:8])
 	if m.searchQuery != "" && len(m.matchLines) > 0 {
 		title += fmt.Sprintf(" (match %d/%d)", m.currentMatch+1, len(m.matchLines))
 	} else if m.searchQuery != "" {
 		title += " (no matches)"
 	}
-	return viewerTitleStyle.Render(title)
+	titleRendered := PageTitleStyle.Render(title)
+
+	return breadcrumb + "\n\n" + titleRendered
 }
 
 func (m LogViewerModel) footerView() string {
-	info := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(
+	// Scroll percentage
+	scrollInfo := SubtleTextStyle.Render(
 		fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100),
 	)
 
-	var actions string
+	// Build help line based on current mode
+	var helpLine string
 	if m.searchMode {
 		matchInfo := ""
 		if len(m.matchLines) > 0 {
 			matchInfo = fmt.Sprintf(" (%d matches)", len(m.matchLines))
 		}
-		actions = actionStyle.Render(fmt.Sprintf("[Enter] Done • [Esc] Cancel%s", matchInfo))
+		helpLine = RenderHelpLine(
+			RenderKeyHelp("Enter", "done"),
+			RenderKeyHelp("Esc", "cancel"),
+		) + HelpTextStyle.Render(matchInfo)
 	} else if m.searchQuery != "" {
-		actions = actionStyle.Render("[↑/↓] Scroll • [n/N] Next/Prev • [/] Edit Search • [Esc] Clear")
+		helpLine = RenderHelpLine(
+			RenderKeyHelp("j/k", "scroll"),
+			RenderKeyHelp("n/N", "next/prev match"),
+			RenderKeyHelp("/", "edit search"),
+			RenderKeyHelp("Esc", "clear"),
+		)
 	} else {
-		actions = actionStyle.Render("[↑/↓] Scroll • [/] Search • [Esc] Back")
+		helpLine = RenderHelpLine(
+			RenderKeyHelp("j/k or ↑/↓", "scroll"),
+			RenderKeyHelp("/", "search"),
+			RenderKeyHelp("?", "help"),
+			RenderKeyHelp("Esc", "back"),
+		)
 	}
 
-	line := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Render(strings.Repeat("─", max(0, m.width-lipgloss.Width(info))))
+	// Divider
+	dividerWidth := max(0, m.width-lipgloss.Width(scrollInfo)-2)
+	divider := RenderDivider(dividerWidth)
 
-	return fmt.Sprintf("\n%s\n%s %s", line, actions, info)
+	return fmt.Sprintf("\n%s %s\n%s", divider, scrollInfo, helpLine)
 }
 
 // renderAndSetContent renders the markdown and sets it in the viewport

@@ -11,18 +11,6 @@ import (
 	"github.com/kgatilin/darwinflow-pub/internal/domain"
 )
 
-var (
-	viewerTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("170")).
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderBottom(true).
-				BorderForeground(lipgloss.Color("240")).
-				PaddingBottom(1).
-				MarginBottom(1).
-				Align(lipgloss.Left)
-)
-
 // AnalysisViewerModel displays the full analysis in a scrollable view
 type AnalysisViewerModel struct {
 	analysis *domain.Analysis
@@ -79,6 +67,20 @@ func (m AnalysisViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				return BackToDetailMsg{}
 			}
+
+		// Vim-style navigation
+		case "j", "down":
+			// Let viewport handle scrolling
+		case "k", "up":
+			// Let viewport handle scrolling
+		case "g":
+			// Go to top
+			m.viewport.GotoTop()
+			return m, nil
+		case "G":
+			// Go to bottom
+			m.viewport.GotoBottom()
+			return m, nil
 		}
 	}
 
@@ -98,36 +100,47 @@ func (m AnalysisViewerModel) View() string {
 }
 
 func (m AnalysisViewerModel) headerView() string {
-	// For session analyses, display session ID. For other views, display view type
+	// Breadcrumb
 	var viewInfo string
 	if m.analysis.ViewType == "session" {
 		viewInfo = m.analysis.ViewID[:8]
 	} else {
 		viewInfo = fmt.Sprintf("%s: %s", m.analysis.ViewType, m.analysis.ViewID)
 	}
-	title := fmt.Sprintf("Analysis: %s (%s)", viewInfo, m.analysis.PromptUsed)
-	return viewerTitleStyle.Render(title)
+	breadcrumb := RenderBreadcrumb([]string{"Sessions", viewInfo, "Analysis"})
+
+	// Title
+	title := PageTitleStyle.Render(fmt.Sprintf("Analysis: %s (%s)", viewInfo, m.analysis.PromptUsed))
+
+	return breadcrumb + "\n\n" + title
 }
 
 func (m AnalysisViewerModel) footerView() string {
-	info := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(
+	// Scroll percentage
+	scrollInfo := SubtleTextStyle.Render(
 		fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100),
 	)
 
-	actions := actionStyle.Render("[↑/↓] Scroll • [Esc] Back")
+	// Help hints
+	helpLine := RenderHelpLine(
+		RenderKeyHelp("j/k or ↑/↓", "scroll"),
+		RenderKeyHelp("g/G", "top/bottom"),
+		RenderKeyHelp("?", "help"),
+		RenderKeyHelp("Esc", "back"),
+	)
 
-	line := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Render(strings.Repeat("─", max(0, m.width-lipgloss.Width(info))))
+	// Divider
+	dividerWidth := max(0, m.width-lipgloss.Width(scrollInfo)-2)
+	divider := RenderDivider(dividerWidth)
 
-	return fmt.Sprintf("\n%s\n%s %s", line, actions, info)
+	return fmt.Sprintf("\n%s %s\n%s", divider, scrollInfo, helpLine)
 }
 
 func (m AnalysisViewerModel) renderContent() string {
 	var b strings.Builder
 
 	// Metadata header
-	b.WriteString(detailHeaderStyle.Render("Metadata") + "\n\n")
+	b.WriteString(SectionTitleStyle.Render("Metadata") + "\n\n")
 	b.WriteString(fmt.Sprintf("View ID:     %s\n", m.analysis.ViewID))
 	b.WriteString(fmt.Sprintf("View Type:   %s\n", m.analysis.ViewType))
 	b.WriteString(fmt.Sprintf("Prompt:      %s\n", m.analysis.PromptUsed))
@@ -144,7 +157,7 @@ func (m AnalysisViewerModel) renderContent() string {
 	b.WriteString("\n")
 
 	// Render analysis content as markdown
-	b.WriteString(detailHeaderStyle.Render("Analysis Result") + "\n\n")
+	b.WriteString(SectionTitleStyle.Render("Analysis Result") + "\n\n")
 
 	// Use glamour to render the markdown with dark style for better visibility
 	renderer, err := glamour.NewTermRenderer(
@@ -158,11 +171,13 @@ func (m AnalysisViewerModel) renderContent() string {
 			b.WriteString(renderedMarkdown)
 		} else {
 			// Fallback to raw text if rendering fails
-			b.WriteString(fmt.Sprintf("[Render error: %v]\n%s", err, m.analysis.Result))
+			errorMsg := ErrorStyle.Render(fmt.Sprintf("Render error: %v", err))
+			b.WriteString(errorMsg + "\n\n" + m.analysis.Result)
 		}
 	} else {
 		// Fallback to raw text if renderer creation fails
-		b.WriteString(fmt.Sprintf("[Renderer creation error: %v]\n%s", err, m.analysis.Result))
+		errorMsg := ErrorStyle.Render(fmt.Sprintf("Renderer creation error: %v", err))
+		b.WriteString(errorMsg + "\n\n" + m.analysis.Result)
 	}
 
 	b.WriteString("\n")

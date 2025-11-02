@@ -672,7 +672,7 @@ func TestRoadmapFullCommand_BasicExecution(t *testing.T) {
 		"--track", trackID,
 		"--title", "Test Task",
 		"--description", "Test description",
-		"--priority", "high",
+		"--rank", "200",
 	})
 	if err != nil {
 		t.Fatalf("failed to create task: %v", err)
@@ -725,7 +725,7 @@ func TestRoadmapFullCommand_VerboseFlag(t *testing.T) {
 		"--track", trackID,
 		"--title", "Test Task",
 		"--description", "Detailed task description",
-		"--priority", "high",
+		"--rank", "200",
 	})
 	if err != nil {
 		t.Fatalf("failed to create task: %v", err)
@@ -800,7 +800,7 @@ func TestRoadmapFullCommand_WithIteration(t *testing.T) {
 	err := taskCmd.Execute(ctx, taskCtx, []string{
 		"--track", trackID,
 		"--title", "Test Task",
-		"--priority", "high",
+		"--rank", "200",
 	})
 	if err != nil {
 		t.Fatalf("failed to create task: %v", err)

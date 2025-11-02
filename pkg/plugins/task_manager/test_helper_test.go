@@ -90,7 +90,7 @@ func setupTestWithRoadmapAndTrack(t *testing.T) (*task_manager.TaskManagerPlugin
 	err = trackCmd.Execute(ctx, trackCtx, []string{
 		"--title", "Test Track",
 		"--description", "Test description",
-		"--priority", "high",
+		"--rank", "200",
 	})
 	if err != nil {
 		t.Fatalf("failed to create track: %v", err)

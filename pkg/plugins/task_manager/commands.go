@@ -142,7 +142,7 @@ func (c *CreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandCon
 		Title:       title,
 		Description: description,
 		Status:      "todo",
-		Priority:    priority,
+		Rank:        100, // Default rank for legacy tasks
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -261,11 +261,11 @@ func (c *ListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandConte
 		task := entity.(*TaskEntity)
 		fmt.Fprintf(
 			cmdCtx.GetStdout(),
-			"%-20s %-30s %-15s %-10s\n",
+			"%-20s %-30s %-15s %-10d\n",
 			task.ID[:20],
 			truncateString(task.Title, 30),
 			task.Status,
-			task.Priority,
+			task.Rank,
 		)
 	}
 

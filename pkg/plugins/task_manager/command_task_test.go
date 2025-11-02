@@ -46,7 +46,7 @@ func TestTaskCreateCommand_Success(t *testing.T) {
 	err = trackCmd.Execute(ctx, trackCtx, []string{
 		"--title", "Test Track",
 		"--description", "Test description",
-		"--priority", "high",
+		"--rank", "200",
 	})
 	if err != nil {
 		t.Fatalf("failed to create track: %v", err)
@@ -80,7 +80,7 @@ func TestTaskCreateCommand_Success(t *testing.T) {
 		"--track", trackID,
 		"--title", "Implement feature",
 		"--description", "Add new feature",
-		"--priority", "high",
+		"--rank", "200",
 	})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -111,8 +111,8 @@ func TestTaskCreateCommand_Success(t *testing.T) {
 		if tasks[0].Title != "Implement feature" {
 			t.Errorf("expected title 'Implement feature', got '%s'", tasks[0].Title)
 		}
-		if tasks[0].Priority != "high" {
-			t.Errorf("expected priority 'high', got '%s'", tasks[0].Priority)
+		if tasks[0].Rank != 200 {
+			t.Errorf("expected rank 200, got %d", tasks[0].Rank)
 		}
 		if tasks[0].Status != "todo" {
 			t.Errorf("expected status 'todo', got '%s'", tasks[0].Status)
@@ -306,7 +306,7 @@ func TestTaskListCommand_ListAllTasks(t *testing.T) {
 		"Test Track",
 		"Test description",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -327,7 +327,7 @@ func TestTaskListCommand_ListAllTasks(t *testing.T) {
 			"Task "+string(rune(i+49)),
 			"",
 			"todo",
-			"medium",
+			300,
 			"",
 			time.Now().UTC(),
 			time.Now().UTC(),
@@ -402,7 +402,7 @@ func TestTaskListCommand_FilterByStatus(t *testing.T) {
 		"Test Track",
 		"Test description",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -424,7 +424,7 @@ func TestTaskListCommand_FilterByStatus(t *testing.T) {
 			"Task "+string(rune(i+49)),
 			"",
 			status,
-			"medium",
+			300,
 			"",
 			time.Now().UTC(),
 			time.Now().UTC(),
@@ -501,7 +501,7 @@ func TestTaskListCommand_FilterByTrack(t *testing.T) {
 			"Track "+string(rune(i+49)),
 			"",
 			"not-started",
-			"high",
+			200,
 			[]string{},
 			time.Now().UTC(),
 			time.Now().UTC(),
@@ -524,7 +524,7 @@ func TestTaskListCommand_FilterByTrack(t *testing.T) {
 			"Task "+string(rune(i+49)),
 			"",
 			"todo",
-			"medium",
+			300,
 			"",
 			time.Now().UTC(),
 			time.Now().UTC(),
@@ -600,7 +600,7 @@ func TestTaskShowCommand_Success(t *testing.T) {
 		"Test Track",
 		"Test description",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -618,7 +618,7 @@ func TestTaskShowCommand_Success(t *testing.T) {
 		"Test Task",
 		"Test description",
 		"in-progress",
-		"high",
+		200,
 		"feat/test",
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -731,7 +731,7 @@ func TestTaskUpdateCommand_UpdateStatus(t *testing.T) {
 		"Test Track",
 		"",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -749,7 +749,7 @@ func TestTaskUpdateCommand_UpdateStatus(t *testing.T) {
 		"Test Task",
 		"",
 		"todo",
-		"medium",
+		300,
 		"",
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -897,7 +897,7 @@ func TestTaskDeleteCommand_WithForce(t *testing.T) {
 		"Test Track",
 		"",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -915,7 +915,7 @@ func TestTaskDeleteCommand_WithForce(t *testing.T) {
 		"Test Task",
 		"",
 		"todo",
-		"medium",
+		300,
 		"",
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -1030,7 +1030,7 @@ func TestTaskMoveCommand_Success(t *testing.T) {
 			"Track "+string(rune(i+49)),
 			"",
 			"not-started",
-			"high",
+			200,
 			[]string{},
 			time.Now().UTC(),
 			time.Now().UTC(),
@@ -1050,7 +1050,7 @@ func TestTaskMoveCommand_Success(t *testing.T) {
 		"Test Task",
 		"",
 		"todo",
-		"medium",
+		300,
 		"",
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -1130,7 +1130,7 @@ func TestTaskMoveCommand_NewTrackNotFound(t *testing.T) {
 		"Test Track",
 		"",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -1148,7 +1148,7 @@ func TestTaskMoveCommand_NewTrackNotFound(t *testing.T) {
 		"Test Task",
 		"",
 		"todo",
-		"medium",
+		300,
 		"",
 		time.Now().UTC(),
 		time.Now().UTC(),

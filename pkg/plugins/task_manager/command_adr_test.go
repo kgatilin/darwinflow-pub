@@ -60,7 +60,7 @@ func TestADRCreateCommand_Success(t *testing.T) {
 		"Core Framework",
 		"Test description",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -135,7 +135,7 @@ func TestADRCreateCommand_WithAlternatives(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Execute command with alternatives
@@ -406,7 +406,7 @@ func TestADRListCommand_ListAll(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create ADRs
@@ -485,7 +485,7 @@ func TestADRListCommand_FilterByTrack(t *testing.T) {
 			"Track "+string(rune(48+i)),
 			"",
 			"not-started",
-			"high",
+			200,
 			[]string{},
 			time.Now().UTC(),
 			time.Now().UTC(),
@@ -566,7 +566,7 @@ func TestADRShowCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create ADR
@@ -668,7 +668,7 @@ func TestADRUpdateCommand_UpdateTitle(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create ADR
@@ -740,7 +740,7 @@ func TestADRUpdateCommand_MultipleFields(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create ADR
@@ -852,7 +852,7 @@ func TestADRSupersdeCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create ADRs
@@ -962,7 +962,7 @@ func TestADRDeprecateCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-core", "roadmap-test", "Core Framework", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create ADR

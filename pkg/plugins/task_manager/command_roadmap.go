@@ -470,7 +470,7 @@ func (c *RoadmapFullCommand) outputMarkdown(ctx context.Context, cmdCtx pluginsd
 		for _, track := range tracks {
 			statusIcon := getStatusIcon(track.Status)
 			fmt.Fprintf(stdout, "### %s %s\n", statusIcon, track.Title)
-			fmt.Fprintf(stdout, "**ID**: %s | **Status**: %s | **Priority**: %s\n", track.ID, track.Status, track.Priority)
+			fmt.Fprintf(stdout, "**ID**: %s | **Status**: %s | **Rank**: %d\n", track.ID, track.Status, track.Rank)
 
 			if c.verbose && track.Description != "" {
 				fmt.Fprintf(stdout, "**Description**: %s\n", track.Description)

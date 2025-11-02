@@ -16,7 +16,7 @@ type TrackEntity struct {
 	Title        string    `json:"title"`
 	Description  string    `json:"description"`
 	Status       string    `json:"status"` // not-started, in-progress, complete, blocked, waiting
-	Priority     string    `json:"priority"` // critical, high, medium, low
+	Rank         int       `json:"rank"` // 1-1000 (lower = higher priority)
 	Dependencies []string  `json:"dependencies"` // Track IDs this depends on
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -31,16 +31,8 @@ var validTrackStatuses = map[string]bool{
 	"waiting":     true,
 }
 
-// Valid priority values for tracks
-var validPriorities = map[string]bool{
-	"critical": true,
-	"high":     true,
-	"medium":   true,
-	"low":      true,
-}
-
 // NewTrackEntity creates a new track entity with validation
-func NewTrackEntity(id, roadmapID, title, description, status, priority string, dependencies []string, createdAt, updatedAt time.Time) (*TrackEntity, error) {
+func NewTrackEntity(id, roadmapID, title, description, status string, rank int, dependencies []string, createdAt, updatedAt time.Time) (*TrackEntity, error) {
 	// Validate track ID format
 	if !isValidTrackID(id) {
 		return nil, fmt.Errorf("%w: track ID must follow convention: track-<slug>", pluginsdk.ErrInvalidArgument)
@@ -51,9 +43,9 @@ func NewTrackEntity(id, roadmapID, title, description, status, priority string, 
 		return nil, fmt.Errorf("%w: invalid track status: must be one of not-started, in-progress, complete, blocked, waiting", pluginsdk.ErrInvalidArgument)
 	}
 
-	// Validate priority
-	if !validPriorities[priority] {
-		return nil, fmt.Errorf("%w: invalid track priority: must be one of critical, high, medium, low", pluginsdk.ErrInvalidArgument)
+	// Validate rank
+	if rank < 1 || rank > 1000 {
+		return nil, fmt.Errorf("%w: invalid track rank: must be between 1 and 1000", pluginsdk.ErrInvalidArgument)
 	}
 
 	// Check for self-dependency
@@ -73,7 +65,7 @@ func NewTrackEntity(id, roadmapID, title, description, status, priority string, 
 		Title:        title,
 		Description:  description,
 		Status:       status,
-		Priority:     priority,
+		Rank:         rank,
 		Dependencies: dependencies,
 		CreatedAt:    createdAt,
 		UpdatedAt:    updatedAt,
@@ -127,7 +119,7 @@ func (t *TrackEntity) GetAllFields() map[string]interface{} {
 		"title":        t.Title,
 		"description":  t.Description,
 		"status":       t.Status,
-		"priority":     t.Priority,
+		"rank":         t.Rank,
 		"dependencies": t.Dependencies,
 		"created_at":   t.CreatedAt,
 		"updated_at":   t.UpdatedAt,

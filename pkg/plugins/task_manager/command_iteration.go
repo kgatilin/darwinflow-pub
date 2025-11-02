@@ -130,6 +130,7 @@ func (c *IterationCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.C
 		c.deliverable,
 		[]string{},
 		"planned",
+		500, // default rank (medium priority)
 		time.Time{},
 		time.Time{},
 		now,

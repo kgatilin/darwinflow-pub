@@ -151,7 +151,7 @@ func (r *SQLiteRoadmapRepository) SaveTrack(ctx context.Context, track *TrackEnt
 	_, err = tx.ExecContext(
 		ctx,
 		"INSERT INTO tracks (id, roadmap_id, title, description, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		track.ID, track.RoadmapID, track.Title, track.Description, track.Status, track.Priority, track.CreatedAt, track.UpdatedAt,
+		track.ID, track.RoadmapID, track.Title, track.Description, track.Status, track.Rank, track.CreatedAt, track.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert track: %w", err)
@@ -184,7 +184,7 @@ func (r *SQLiteRoadmapRepository) GetTrack(ctx context.Context, id string) (*Tra
 		ctx,
 		"SELECT id, roadmap_id, title, description, status, priority, created_at, updated_at FROM tracks WHERE id = ?",
 		id,
-	).Scan(&track.ID, &track.RoadmapID, &track.Title, &track.Description, &track.Status, &track.Priority, &track.CreatedAt, &track.UpdatedAt)
+	).Scan(&track.ID, &track.RoadmapID, &track.Title, &track.Description, &track.Status, &track.Rank, &track.CreatedAt, &track.UpdatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -245,7 +245,7 @@ func (r *SQLiteRoadmapRepository) ListTracks(ctx context.Context, roadmapID stri
 	var tracks []*TrackEntity
 	for rows.Next() {
 		var track TrackEntity
-		err := rows.Scan(&track.ID, &track.RoadmapID, &track.Title, &track.Description, &track.Status, &track.Priority, &track.CreatedAt, &track.UpdatedAt)
+		err := rows.Scan(&track.ID, &track.RoadmapID, &track.Title, &track.Description, &track.Status, &track.Rank, &track.CreatedAt, &track.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan track: %w", err)
 		}
@@ -280,7 +280,7 @@ func (r *SQLiteRoadmapRepository) UpdateTrack(ctx context.Context, track *TrackE
 	result, err := tx.ExecContext(
 		ctx,
 		"UPDATE tracks SET title = ?, description = ?, status = ?, priority = ?, updated_at = ? WHERE id = ?",
-		track.Title, track.Description, track.Status, track.Priority, track.UpdatedAt, track.ID,
+		track.Title, track.Description, track.Status, track.Rank, track.UpdatedAt, track.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update track: %w", err)
@@ -496,7 +496,7 @@ func (r *SQLiteRoadmapRepository) SaveTask(ctx context.Context, task *TaskEntity
 	_, err = r.db.ExecContext(
 		ctx,
 		"INSERT INTO tasks (id, track_id, title, description, status, priority, branch, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		task.ID, task.TrackID, task.Title, task.Description, task.Status, task.Priority, task.Branch, task.CreatedAt, task.UpdatedAt,
+		task.ID, task.TrackID, task.Title, task.Description, task.Status, task.Rank, task.Branch, task.CreatedAt, task.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert task: %w", err)
@@ -514,7 +514,7 @@ func (r *SQLiteRoadmapRepository) GetTask(ctx context.Context, id string) (*Task
 		ctx,
 		"SELECT id, track_id, title, description, status, priority, branch, created_at, updated_at FROM tasks WHERE id = ?",
 		id,
-	).Scan(&task.ID, &task.TrackID, &task.Title, &task.Description, &task.Status, &task.Priority, &branch, &task.CreatedAt, &task.UpdatedAt)
+	).Scan(&task.ID, &task.TrackID, &task.Title, &task.Description, &task.Status, &task.Rank, &branch, &task.CreatedAt, &task.UpdatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -580,7 +580,7 @@ func (r *SQLiteRoadmapRepository) ListTasks(ctx context.Context, filters TaskFil
 		var task TaskEntity
 		var branch sql.NullString
 
-		err := rows.Scan(&task.ID, &task.TrackID, &task.Title, &task.Description, &task.Status, &task.Priority, &branch, &task.CreatedAt, &task.UpdatedAt)
+		err := rows.Scan(&task.ID, &task.TrackID, &task.Title, &task.Description, &task.Status, &task.Rank, &branch, &task.CreatedAt, &task.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan task: %w", err)
 		}
@@ -604,7 +604,7 @@ func (r *SQLiteRoadmapRepository) UpdateTask(ctx context.Context, task *TaskEnti
 	result, err := r.db.ExecContext(
 		ctx,
 		"UPDATE tasks SET track_id = ?, title = ?, description = ?, status = ?, priority = ?, branch = ?, updated_at = ? WHERE id = ?",
-		task.TrackID, task.Title, task.Description, task.Status, task.Priority, task.Branch, task.UpdatedAt, task.ID,
+		task.TrackID, task.Title, task.Description, task.Status, task.Rank, task.Branch, task.UpdatedAt, task.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update task: %w", err)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,7 +22,7 @@ type TaskCreateCommand struct {
 	trackID     string
 	title       string
 	description string
-	priority    string
+	rank        int
 }
 
 func (c *TaskCreateCommand) GetName() string {
@@ -33,7 +34,7 @@ func (c *TaskCreateCommand) GetDescription() string {
 }
 
 func (c *TaskCreateCommand) GetUsage() string {
-	return "dw task-manager task create --track <track-id> --title <title> [--description <desc>] [--priority <priority>]"
+	return "dw task-manager task create --track <track-id> --title <title> [--description <desc>] [--rank <rank>]"
 }
 
 func (c *TaskCreateCommand) GetHelp() string {
@@ -46,8 +47,8 @@ Flags:
   --track <track-id>        Track ID to create task in (required)
   --title <title>           Task title (required)
   --description <desc>      Task description (optional)
-  --priority <priority>     Task priority (optional, default: medium)
-                           Values: critical, high, medium, low
+  --rank <rank>             Task rank (optional, default: 500)
+                           Range: 1-1000 (lower = higher priority)
 
 Examples:
   # Create a basic task
@@ -55,12 +56,12 @@ Examples:
     --track track-plugin-system \
     --title "Implement plugin registry"
 
-  # Create with full details
+  # Create with custom rank
   dw task-manager task create \
     --track track-plugin-system \
     --title "Implement plugin registry" \
     --description "Create registry to discover and load plugins" \
-    --priority high
+    --rank 100
 
 Notes:
   - Track must exist (create with 'dw task-manager track create')
@@ -70,7 +71,7 @@ Notes:
 
 func (c *TaskCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	// Parse flags FIRST to get project name
-	c.priority = "medium" // default
+	c.rank = 500 // default (medium priority)
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--project":
@@ -93,9 +94,13 @@ func (c *TaskCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 				c.description = args[i+1]
 				i++
 			}
-		case "--priority":
+		case "--rank":
 			if i+1 < len(args) {
-				c.priority = args[i+1]
+				var err error
+				c.rank, err = strconv.Atoi(args[i+1])
+				if err != nil || c.rank < 1 || c.rank > 1000 {
+					return fmt.Errorf("invalid rank: must be between 1 and 1000")
+				}
 				i++
 			}
 		}
@@ -139,7 +144,7 @@ func (c *TaskCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 		c.title,
 		c.description,
 		"todo",         // initial status
-		c.priority,
+		c.rank,
 		"",             // no branch initially
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -171,7 +176,6 @@ type TaskListCommand struct {
 	project string
 	track    string
 	status   string
-	priority string
 }
 
 func (c *TaskListCommand) GetName() string {
@@ -183,18 +187,18 @@ func (c *TaskListCommand) GetDescription() string {
 }
 
 func (c *TaskListCommand) GetUsage() string {
-	return "dw task-manager task list [--track <track-id>] [--status <status>] [--priority <priority>]"
+	return "dw task-manager task list [--track <track-id>] [--status <status>]"
 }
 
 func (c *TaskListCommand) GetHelp() string {
-	return `Lists all tasks, optionally filtered by track, status, or priority.
+	return `Lists all tasks, optionally filtered by track or status.
+
+Tasks are displayed sorted by rank within each track (lower ranks first).
 
 Flags:
   --track <track-id>        Filter by track ID (optional)
   --status <status>         Filter by status (optional, comma-separated)
                            Values: todo, in-progress, done
-  --priority <priority>     Filter by priority (optional, comma-separated)
-                           Values: critical, high, medium, low
 
 Examples:
   # List all tasks
@@ -209,12 +213,10 @@ Examples:
   # List in-progress or done tasks
   dw task-manager task list --status in-progress,done
 
-  # List critical and high priority tasks
-  dw task-manager task list --priority critical,high
-
 Notes:
-  - Status and priority filters accept comma-separated values
-  - All filters are optional and can be combined`
+  - Status filter accepts comma-separated values
+  - All filters are optional and can be combined
+  - Tasks are ordered by rank (1=highest priority, 1000=lowest)`
 }
 
 func (c *TaskListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -236,11 +238,6 @@ func (c *TaskListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 				c.status = args[i+1]
 				i++
 			}
-		case "--priority":
-			if i+1 < len(args) {
-				c.priority = args[i+1]
-				i++
-			}
 		}
 	}
 
@@ -260,10 +257,6 @@ func (c *TaskListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 		filters.Status = strings.Split(c.status, ",")
 	}
 
-	if c.priority != "" {
-		filters.Priority = strings.Split(c.priority, ",")
-	}
-
 	// List tasks
 	tasks, err := repo.ListTasks(ctx, filters)
 	if err != nil {
@@ -280,7 +273,7 @@ func (c *TaskListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 
 	// Print header
 	fmt.Fprintf(stdout, "%-20s %-40s %-12s %-8s %-20s\n",
-		"ID", "Title", "Status", "Priority", "Track")
+		"ID", "Title", "Status", "Rank", "Track")
 	fmt.Fprintf(stdout, "%s %s %s %s %s\n",
 		strings.Repeat("-", 20), strings.Repeat("-", 40),
 		strings.Repeat("-", 12), strings.Repeat("-", 8), strings.Repeat("-", 20))
@@ -300,8 +293,8 @@ func (c *TaskListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 			abbrevID = abbrevID[:17] + "..."
 		}
 
-		fmt.Fprintf(stdout, "%-20s %-40s %-12s %-8s %-20s\n",
-			abbrevID, task.Title, task.Status, task.Priority, trackName)
+		fmt.Fprintf(stdout, "%-20s %-40s %-12s %-8d %-20s\n",
+			abbrevID, task.Title, task.Status, task.Rank, trackName)
 	}
 
 	fmt.Fprintf(stdout, "\nTotal: %d task(s)\n", len(tasks))
@@ -388,7 +381,7 @@ func (c *TaskShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 	fmt.Fprintf(stdout, "ID:          %s\n", task.ID)
 	fmt.Fprintf(stdout, "Title:       %s\n", task.Title)
 	fmt.Fprintf(stdout, "Status:      %s\n", task.Status)
-	fmt.Fprintf(stdout, "Priority:    %s\n", task.Priority)
+	fmt.Fprintf(stdout, "Rank:        %d\n", task.Rank)
 
 	if task.Description != "" {
 		fmt.Fprintf(stdout, "Description: %s\n", task.Description)
@@ -417,9 +410,10 @@ type TaskUpdateCommand struct {
 	title       string
 	description string
 	status      string
-	priority    string
+	rank        int
 	branch      string
 	hasUpdates  bool
+	hasRank     bool
 }
 
 func (c *TaskUpdateCommand) GetName() string {
@@ -431,7 +425,7 @@ func (c *TaskUpdateCommand) GetDescription() string {
 }
 
 func (c *TaskUpdateCommand) GetUsage() string {
-	return "dw task-manager task update <task-id> [--title <title>] [--description <desc>] [--status <status>] [--priority <priority>] [--branch <branch>]"
+	return "dw task-manager task update <task-id> [--title <title>] [--description <desc>] [--status <status>] [--rank <rank>] [--branch <branch>]"
 }
 
 func (c *TaskUpdateCommand) GetHelp() string {
@@ -445,8 +439,7 @@ Flags:
   --description <desc>      New task description (optional)
   --status <status>         New task status (optional)
                            Values: todo, in-progress, done
-  --priority <priority>     New task priority (optional)
-                           Values: critical, high, medium, low
+  --rank <rank>             New task rank (optional, 1-1000)
   --branch <branch>         Git branch name (optional)
 
 Examples:
@@ -456,7 +449,7 @@ Examples:
   # Update multiple fields
   dw task-manager task update task-123 \
     --status done \
-    --priority critical
+    --rank 100
 
   # Set a git branch
   dw task-manager task update task-123 --branch feat/new-feature
@@ -464,7 +457,8 @@ Examples:
 Notes:
   - At least one flag must be provided
   - Use --branch to associate a git branch
-  - Use --status to change task progress`
+  - Use --status to change task progress
+  - Rank determines ordering (1=highest priority, 1000=lowest)`
 }
 
 func (c *TaskUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -495,10 +489,15 @@ func (c *TaskUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 				c.hasUpdates = true
 				i++
 			}
-		case "--priority":
+		case "--rank":
 			if i+1 < len(args) {
-				c.priority = args[i+1]
+				var err error
+				c.rank, err = strconv.Atoi(args[i+1])
+				if err != nil || c.rank < 1 || c.rank > 1000 {
+					return fmt.Errorf("invalid rank: must be between 1 and 1000")
+				}
 				c.hasUpdates = true
+				c.hasRank = true
 				i++
 			}
 		case "--branch":
@@ -594,8 +593,8 @@ func (c *TaskUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 	if c.status != "" {
 		task.Status = c.status
 	}
-	if c.priority != "" {
-		task.Priority = c.priority
+	if c.hasRank {
+		task.Rank = c.rank
 	}
 	if c.branch != "" {
 		task.Branch = c.branch

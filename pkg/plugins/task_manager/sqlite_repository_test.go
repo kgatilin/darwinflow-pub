@@ -198,7 +198,7 @@ func TestSaveAndGetTrack(t *testing.T) {
 		"Core Features",
 		"Essential features",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -237,7 +237,7 @@ func TestListTracks(t *testing.T) {
 	// Create tracks
 	for i := 1; i <= 3; i++ {
 		id := "track-" + string(rune(48+i))
-		track, _ := task_manager.NewTrackEntity(id, "roadmap-1", "Track "+string(rune(48+i)), "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+		track, _ := task_manager.NewTrackEntity(id, "roadmap-1", "Track "+string(rune(48+i)), "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 		repo.SaveTrack(ctx, track)
 	}
 
@@ -264,8 +264,8 @@ func TestListTracksWithFilters(t *testing.T) {
 	repo.SaveRoadmap(ctx, roadmap)
 
 	// Create tracks with different statuses
-	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
-	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "in-progress", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "in-progress", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveTrack(ctx, track1)
 	repo.SaveTrack(ctx, track2)
@@ -292,8 +292,8 @@ func TestTrackDependencies(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
-	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveTrack(ctx, track1)
 	repo.SaveTrack(ctx, track2)
@@ -335,9 +335,9 @@ func TestValidateNoCycles(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
-	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
-	track3, _ := task_manager.NewTrackEntity("track-3", "roadmap-1", "Track 3", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	track3, _ := task_manager.NewTrackEntity("track-3", "roadmap-1", "Track 3", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveTrack(ctx, track1)
 	repo.SaveTrack(ctx, track2)
@@ -372,11 +372,11 @@ func TestSaveAndGetTask(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create and save task
-	task := task_manager.NewTaskEntity("task-1", "track-1", "Implement feature", "Do something", "todo", "high", "feat/impl", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("task-1", "track-1", "Implement feature", "Do something", "todo", 200, "feat/impl", time.Now().UTC(), time.Now().UTC())
 
 	if err := repo.SaveTask(ctx, task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
@@ -407,13 +407,13 @@ func TestListTasks(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create multiple tasks
 	for i := 1; i <= 3; i++ {
 		id := "task-" + string(rune(48+i))
-		task := task_manager.NewTaskEntity(id, "track-1", "Task "+string(rune(48+i)), "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+		task := task_manager.NewTaskEntity(id, "track-1", "Task "+string(rune(48+i)), "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 		repo.SaveTask(ctx, task)
 	}
 
@@ -439,12 +439,12 @@ func TestListTasksWithFilters(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create tasks with different statuses
-	task1 := task_manager.NewTaskEntity("task-1", "track-1", "Task 1", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
-	task2 := task_manager.NewTaskEntity("task-2", "track-1", "Task 2", "", "done", "high", "", time.Now().UTC(), time.Now().UTC())
+	task1 := task_manager.NewTaskEntity("task-1", "track-1", "Task 1", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
+	task2 := task_manager.NewTaskEntity("task-2", "track-1", "Task 2", "", "done", 200, "", time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveTask(ctx, task1)
 	repo.SaveTask(ctx, task2)
@@ -471,13 +471,13 @@ func TestMoveTaskToTrack(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
-	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track1, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track 1", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	track2, _ := task_manager.NewTrackEntity("track-2", "roadmap-1", "Track 2", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveTrack(ctx, track1)
 	repo.SaveTrack(ctx, track2)
 
-	task := task_manager.NewTaskEntity("task-1", "track-1", "Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("task-1", "track-1", "Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	// Move task to track-2
@@ -511,6 +511,7 @@ func TestSaveAndGetIteration(t *testing.T) {
 		"",
 		[]string{},
 		"planned",
+		500,
 		time.Time{},
 		time.Time{},
 		time.Now().UTC(),
@@ -544,17 +545,17 @@ func TestIterationTaskManagement(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup iteration
-	iteration, _ := task_manager.NewIterationEntity(1, "Sprint 1", "Goal", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iteration, _ := task_manager.NewIterationEntity(1, "Sprint 1", "Goal", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveIteration(ctx, iteration)
 
 	// Setup task
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("task-1", "track-1", "Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("task-1", "track-1", "Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	// Add task to iteration
@@ -591,7 +592,7 @@ func TestStartAndCompleteIteration(t *testing.T) {
 	ctx := context.Background()
 
 	// Create iteration
-	iteration, _ := task_manager.NewIterationEntity(1, "Sprint 1", "Goal", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iteration, _ := task_manager.NewIterationEntity(1, "Sprint 1", "Goal", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveIteration(ctx, iteration)
 
 	// Start iteration
@@ -631,8 +632,8 @@ func TestGetCurrentIteration(t *testing.T) {
 	ctx := context.Background()
 
 	// Create iterations
-	iter1, _ := task_manager.NewIterationEntity(1, "Sprint 1", "Goal", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
-	iter2, _ := task_manager.NewIterationEntity(2, "Sprint 2", "Goal", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter1, _ := task_manager.NewIterationEntity(1, "Sprint 1", "Goal", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter2, _ := task_manager.NewIterationEntity(2, "Sprint 2", "Goal", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveIteration(ctx, iter1)
 	repo.SaveIteration(ctx, iter2)
@@ -660,7 +661,7 @@ func TestListIterations(t *testing.T) {
 
 	// Create multiple iterations
 	for i := 1; i <= 3; i++ {
-		iter, _ := task_manager.NewIterationEntity(i, "Sprint "+string(rune(48+i)), "Goal", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+		iter, _ := task_manager.NewIterationEntity(i, "Sprint "+string(rune(48+i)), "Goal", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 		repo.SaveIteration(ctx, iter)
 	}
 
@@ -705,7 +706,7 @@ func TestSelfDependency(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Try self dependency
@@ -754,7 +755,7 @@ func TestGetRoadmapWithTracks(t *testing.T) {
 			"Track "+string(rune(48+i)),
 			"",
 			"not-started",
-			"high",
+			200,
 			[]string{},
 			time.Now().UTC(),
 			time.Now().UTC(),
@@ -784,7 +785,7 @@ func TestGetTrackWithTasks(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-1", "vision", "criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("track-1", "roadmap-1", "Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
 	// Create tasks
@@ -795,7 +796,7 @@ func TestGetTrackWithTasks(t *testing.T) {
 			"Task "+string(rune(48+i)),
 			"",
 			"todo",
-			"high",
+			200,
 			"",
 			time.Now().UTC(),
 			time.Now().UTC(),

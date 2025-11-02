@@ -533,10 +533,6 @@ func (m *AppModel) handleIterationListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 }
 
 // handleTaskDetailKeys processes key presses on task detail view
-func (m *AppModel) handleTaskDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Task detail is read-only, navigation handled by esc in main Update
-	return m, nil
-}
 
 // handleIterationDetailKeys processes key presses on iteration detail view
 func (m *AppModel) handleIterationDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -682,7 +678,7 @@ func (m *AppModel) renderRoadmapList() string {
 		s += sectionHeaderStyle.Render("Active Tracks:") + "\n"
 		for i, track := range activeTracks {
 			statusIcon := getStatusIcon(track.Status)
-			priorityIcon := getPriorityIcon(track.Priority)
+			priorityIcon := getPriorityIcon(track.Rank)
 			line := fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, track.ID, track.Title)
 
 			if i == m.selectedTrackIdx {
@@ -753,7 +749,7 @@ func (m *AppModel) renderTrackDetail() string {
 	s += titleStyle.Render(fmt.Sprintf("Track: %s", m.currentTrack.ID)) + "\n"
 	s += fmt.Sprintf("Title: %s\n", m.currentTrack.Title)
 	s += fmt.Sprintf("Description: %s\n", m.currentTrack.Description)
-	s += fmt.Sprintf("Status: %s | Priority: %s\n", m.currentTrack.Status, m.currentTrack.Priority)
+	s += fmt.Sprintf("Status: %s | Rank: %d %s\n", m.currentTrack.Status, m.currentTrack.Rank, getPriorityIcon(m.currentTrack.Rank))
 
 	// ADR Status
 	if adrs, err := m.repository.ListADRs(m.ctx, &m.currentTrack.ID); err == nil {
@@ -808,7 +804,7 @@ func (m *AppModel) renderTrackDetail() string {
 	} else {
 		for i, task := range m.tasks {
 			statusIcon := getStatusIcon(task.Status)
-			priorityIcon := getPriorityIcon(task.Priority)
+			priorityIcon := getPriorityIcon(task.Rank)
 
 			line := fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title)
 
@@ -866,7 +862,7 @@ func (m *AppModel) renderTaskDetail() string {
 
 	// Header
 	statusIcon := getStatusIcon(m.currentTask.Status)
-	priorityIcon := getPriorityIcon(m.currentTask.Priority)
+	priorityIcon := getPriorityIcon(m.currentTask.Rank)
 	s += titleStyle.Render(fmt.Sprintf("%s %s Task: %s", statusIcon, priorityIcon, m.currentTask.ID)) + "\n"
 
 	// Title
@@ -883,9 +879,9 @@ func (m *AppModel) renderTaskDetail() string {
 	s += "\n" + sectionStyle.Render("Status") + "\n"
 	s += contentStyle.Render(m.currentTask.Status) + "\n"
 
-	// Priority
-	s += "\n" + sectionStyle.Render("Priority") + "\n"
-	s += contentStyle.Render(m.currentTask.Priority) + "\n"
+	// Rank
+	s += "\n" + sectionStyle.Render("Rank") + "\n"
+	s += contentStyle.Render(fmt.Sprintf("%d %s", m.currentTask.Rank, getPriorityIcon(m.currentTask.Rank))) + "\n"
 
 	// Track
 	s += "\n" + sectionStyle.Render("Track") + "\n"
@@ -1137,18 +1133,16 @@ func getStatusIcon(status string) string {
 	}
 }
 
-func getPriorityIcon(priority string) string {
-	switch priority {
-	case "critical":
-		return "🔴"
-	case "high":
-		return "🟠"
-	case "medium":
-		return "🟡"
-	case "low":
-		return "🟢"
-	default:
-		return "⚪"
+func getPriorityIcon(rank int) string {
+	// Convert rank to icon: 1-100=critical (red), 101-200=high (orange), 201-300=medium (yellow), 301+=low (green)
+	if rank <= 100 {
+		return "🔴" // critical
+	} else if rank <= 200 {
+		return "🟠" // high
+	} else if rank <= 300 {
+		return "🟡" // medium
+	} else {
+		return "🟢" // low
 	}
 }
 
@@ -1516,15 +1510,3 @@ func (m *AppModel) SetSelectedACIdx(idx int) {
 }
 
 // rankToPriority converts rank (1-1000) to priority string for display
-func rankToPriority(rank int) string {
-	switch {
-	case rank <= 100:
-		return "critical"
-	case rank <= 300:
-		return "high"
-	case rank <= 600:
-		return "medium"
-	default:
-		return "low"
-	}
-}

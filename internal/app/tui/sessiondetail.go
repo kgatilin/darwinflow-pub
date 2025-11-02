@@ -9,33 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	detailTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("170")).
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderBottom(true).
-				BorderForeground(lipgloss.Color("240")).
-				PaddingBottom(1).
-				MarginBottom(1)
-
-	detailHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("105")).
-				Align(lipgloss.Left)
-
-	actionStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("42")).
-			Bold(true)
-
-	previewStyle = lipgloss.NewStyle().
-			MarginTop(1).
-			Padding(1).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Align(lipgloss.Left)
-)
-
 // SessionDetailModel shows detailed information about a session
 type SessionDetailModel struct {
 	session  *SessionInfo
@@ -122,6 +95,20 @@ func (m SessionDetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				return ViewLogMsg{SessionID: m.session.SessionID}
 			}
+
+		// Vim-style navigation
+		case "j", "down":
+			// Let viewport handle scrolling
+		case "k", "up":
+			// Let viewport handle scrolling
+		case "g":
+			// Go to top
+			m.viewport.GotoTop()
+			return m, nil
+		case "G":
+			// Go to bottom
+			m.viewport.GotoBottom()
+			return m, nil
 		}
 	}
 
@@ -141,51 +128,59 @@ func (m SessionDetailModel) View() string {
 }
 
 func (m SessionDetailModel) headerView() string {
-	title := fmt.Sprintf("Session Details: %s", m.session.ShortID)
-	return detailTitleStyle.Render(title)
+	// Breadcrumb
+	breadcrumb := RenderBreadcrumb([]string{"Sessions", m.session.ShortID})
+
+	// Title
+	title := PageTitleStyle.Render(fmt.Sprintf("Session Details: %s", m.session.ShortID))
+
+	return breadcrumb + "\n\n" + title
 }
 
 func (m SessionDetailModel) footerView() string {
-	info := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(
+	// Scroll percentage
+	scrollInfo := SubtleTextStyle.Render(
 		fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100),
 	)
 
-	actions := []string{
-		"[a] Analyze",
-		"[r] Re-analyze",
-		"[s] Save",
-		"[v] View",
-		"[l] Log",
-		"[Esc] Back",
-	}
-
-	if !m.session.HasAnalysis {
+	// Build action list based on session state
+	var actions []string
+	if m.session.HasAnalysis {
 		actions = []string{
-			"[a] Analyze",
-			"[l] Log",
-			"[Esc] Back",
+			RenderKeyHelp("v", "view analysis"),
+			RenderKeyHelp("r", "re-analyze"),
+			RenderKeyHelp("l", "logs"),
+			RenderKeyHelp("s", "save"),
+			RenderKeyHelp("Esc", "back"),
+		}
+	} else {
+		actions = []string{
+			RenderKeyHelp("a", "analyze"),
+			RenderKeyHelp("l", "logs"),
+			RenderKeyHelp("Esc", "back"),
 		}
 	}
 
-	actionsStr := actionStyle.Render(strings.Join(actions, " • "))
+	helpLine := RenderHelpLine(actions...)
 
-	line := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Render(strings.Repeat("─", max(0, m.width-lipgloss.Width(info))))
+	// Divider
+	dividerWidth := max(0, m.width-lipgloss.Width(scrollInfo)-2)
+	divider := RenderDivider(dividerWidth)
 
-	return fmt.Sprintf("\n%s\n%s %s", line, actionsStr, info)
+	return fmt.Sprintf("\n%s %s\n%s", divider, scrollInfo, helpLine)
 }
 
 func (m SessionDetailModel) renderContent() string {
 	var b strings.Builder
 
 	// Session metadata
-	b.WriteString(detailHeaderStyle.Render("Session Information") + "\n")
+	b.WriteString(SectionTitleStyle.Render("Session Information") + "\n")
 	b.WriteString(fmt.Sprintf("  ID: %s\n", m.session.SessionID))
 	b.WriteString(fmt.Sprintf("  Time Range: %s - %s\n",
 		m.session.FirstEvent.Format("2006-01-02 15:04:05"),
 		m.session.LastEvent.Format("15:04:05")))
-	b.WriteString(fmt.Sprintf("  Event Count: %d\n", m.session.EventCount))
+	b.WriteString(fmt.Sprintf("  Event Count: %s\n",
+		InfoStyle.Render(fmt.Sprintf("%d", m.session.EventCount))))
 
 	// Display token count with formatting
 	if m.session.TokenCount > 0 {
@@ -195,12 +190,15 @@ func (m SessionDetailModel) renderContent() string {
 	b.WriteString("\n")
 
 	// Analysis information
-	b.WriteString(detailHeaderStyle.Render("Analysis Status") + "\n")
+	b.WriteString(SectionTitleStyle.Render("Analysis Status") + "\n")
 	if m.session.HasAnalysis {
-		b.WriteString(analyzedStyle.Render(fmt.Sprintf("  ✓ %d analysis/analyses found\n", m.session.AnalysisCount)))
+		statusLine := SuccessStyle.Render(fmt.Sprintf("%s %d analysis/analyses found",
+			IconAnalyzed, m.session.AnalysisCount))
+		b.WriteString("  " + statusLine + "\n")
 
 		for i, analysis := range m.session.Analyses {
-			b.WriteString(fmt.Sprintf("\n  %d. View Type: %s\n", i+1, analysis.ViewType))
+			b.WriteString(fmt.Sprintf("\n  %s Analysis %d\n", IconInfo, i+1))
+			b.WriteString(fmt.Sprintf("     View Type: %s\n", analysis.ViewType))
 			b.WriteString(fmt.Sprintf("     Prompt: %s\n", analysis.PromptUsed))
 			b.WriteString(fmt.Sprintf("     Model: %s\n", analysis.ModelUsed))
 			b.WriteString(fmt.Sprintf("     Analyzed: %s\n", analysis.Timestamp.Format("2006-01-02 15:04:05")))
@@ -211,10 +209,16 @@ func (m SessionDetailModel) renderContent() string {
 				preview = preview[:300] + "..."
 			}
 			b.WriteString("\n     Preview:\n")
-			b.WriteString(previewStyle.Render(preview) + "\n")
+			previewBox := BoxStyle.
+				MarginLeft(4).
+				Width(min(m.width-8, 80)).
+				Render(preview)
+			b.WriteString(previewBox + "\n")
 		}
 	} else {
-		b.WriteString(unanalyzedStyle.Render("  ✗ Not analyzed\n"))
+		statusLine := WarningStyle.Render(fmt.Sprintf("%s Not analyzed", IconUnanalyzed))
+		b.WriteString("  " + statusLine + "\n")
+		b.WriteString("\n  " + HelpTextStyle.Render("Press 'a' to analyze this session") + "\n")
 	}
 
 	return b.String()
@@ -222,6 +226,13 @@ func (m SessionDetailModel) renderContent() string {
 
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

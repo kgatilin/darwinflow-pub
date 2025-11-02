@@ -196,7 +196,7 @@ func TestIterationListCommand_Success(t *testing.T) {
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iterations
-	iter1, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter1, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestIterationShowCommand_Success(t *testing.T) {
 	}
 
 	// Create track
-	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", "medium", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", 300, []string{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create track: %v", err)
 	}
@@ -290,13 +290,13 @@ func TestIterationShowCommand_Success(t *testing.T) {
 	}
 
 	// Create task
-	task := task_manager.NewTaskEntity("task-fc-001", "track-test", "Test Task", "Description", "todo", "medium", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("task-fc-001", "track-test", "Test Task", "Description", "todo", 300, "", time.Now().UTC(), time.Now().UTC())
 	if err := repo.SaveTask(ctx, task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
 	}
 
 	// Create iteration
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -378,7 +378,7 @@ func TestIterationCurrentCommand_Success(t *testing.T) {
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestIterationUpdateCommand_UpdateName(t *testing.T) {
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -507,7 +507,7 @@ func TestIterationUpdateCommand_NoFlags(t *testing.T) {
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -545,7 +545,7 @@ func TestIterationDeleteCommand_ForceDelete(t *testing.T) {
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -635,7 +635,7 @@ func TestIterationAddTaskCommand_SingleTask(t *testing.T) {
 		t.Fatalf("failed to save roadmap: %v", err)
 	}
 
-	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", "medium", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", 300, []string{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create track: %v", err)
 	}
@@ -643,12 +643,12 @@ func TestIterationAddTaskCommand_SingleTask(t *testing.T) {
 		t.Fatalf("failed to save track: %v", err)
 	}
 
-	task := task_manager.NewTaskEntity("task-fc-001", "track-test", "Test Task", "Description", "todo", "medium", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("task-fc-001", "track-test", "Test Task", "Description", "todo", 300, "", time.Now().UTC(), time.Now().UTC())
 	if err := repo.SaveTask(ctx, task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
 	}
 
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -695,7 +695,7 @@ func TestIterationAddTaskCommand_MultipleTasksSuccess(t *testing.T) {
 		t.Fatalf("failed to save roadmap: %v", err)
 	}
 
-	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", "medium", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", 300, []string{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create track: %v", err)
 	}
@@ -706,13 +706,13 @@ func TestIterationAddTaskCommand_MultipleTasksSuccess(t *testing.T) {
 	// Create tasks
 	for i := 1; i <= 3; i++ {
 		id := "task-fc-" + string(rune('0'+byte(i)))
-		task := task_manager.NewTaskEntity(id, "track-test", "Task "+string(rune('0'+byte(i))), "Description", "todo", "medium", "", time.Now().UTC(), time.Now().UTC())
+		task := task_manager.NewTaskEntity(id, "track-test", "Task "+string(rune('0'+byte(i))), "Description", "todo", 300, "", time.Now().UTC(), time.Now().UTC())
 		if err := repo.SaveTask(ctx, task); err != nil {
 			t.Fatalf("failed to save task: %v", err)
 		}
 	}
 
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -750,7 +750,7 @@ func TestIterationAddTaskCommand_TaskNotFound(t *testing.T) {
 	// Create repository for setup
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -800,7 +800,7 @@ func TestIterationRemoveTaskCommand_Success(t *testing.T) {
 		t.Fatalf("failed to save roadmap: %v", err)
 	}
 
-	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", "medium", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, err := task_manager.NewTrackEntity("track-test", roadmap.ID, "Test Track", "Description", "not-started", 300, []string{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create track: %v", err)
 	}
@@ -808,12 +808,12 @@ func TestIterationRemoveTaskCommand_Success(t *testing.T) {
 		t.Fatalf("failed to save track: %v", err)
 	}
 
-	task := task_manager.NewTaskEntity("task-fc-001", "track-test", "Test Task", "Description", "todo", "medium", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("task-fc-001", "track-test", "Test Task", "Description", "todo", 300, "", time.Now().UTC(), time.Now().UTC())
 	if err := repo.SaveTask(ctx, task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
 	}
 
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -859,7 +859,7 @@ func TestIterationStartCommand_Success(t *testing.T) {
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}
@@ -911,7 +911,7 @@ func TestIterationCompleteCommand_Success(t *testing.T) {
 	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
 
 	// Create iteration
-	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("failed to create iteration: %v", err)
 	}

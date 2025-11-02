@@ -356,7 +356,7 @@ func TestAppModelRoadmapListView(t *testing.T) {
 			Title:       "Track 1",
 			Description: "Description 1",
 			Status:      "in-progress",
-			Priority:    "high",
+			Rank:        200,
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		},
@@ -386,7 +386,7 @@ func TestAppModelTrackDetailView(t *testing.T) {
 		Title:       "Track 1",
 		Description: "Description 1",
 		Status:      "in-progress",
-		Priority:    "high",
+		Rank:        200,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	})
@@ -397,7 +397,7 @@ func TestAppModelTrackDetailView(t *testing.T) {
 			Title:       "Task 1",
 			Description: "Description 1",
 			Status:      "todo",
-			Priority:    "medium",
+			Rank:        300,
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		},
@@ -438,7 +438,7 @@ func TestAppModelKeyNavigation(t *testing.T) {
 			Title:       "Track 1",
 			Description: "Description 1",
 			Status:      "in-progress",
-			Priority:    "high",
+			Rank:        200,
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		},
@@ -448,7 +448,7 @@ func TestAppModelKeyNavigation(t *testing.T) {
 			Title:       "Track 2",
 			Description: "Description 2",
 			Status:      "todo",
-			Priority:    "low",
+			Rank:        400,
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		},
@@ -519,8 +519,8 @@ func TestIterationListView(t *testing.T) {
 	logger := NewMockLogger()
 
 	now := time.Now()
-	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{"task-1", "task-2"}, "complete", now, now.AddDate(0, 0, 7), now, now)
-	iter2, _ := tm.NewIterationEntity(2, "Sprint 2", "Features", "New features", []string{"task-3"}, "current", now.AddDate(0, 0, 7), time.Time{}, now.AddDate(0, 0, 7), now.AddDate(0, 0, 7))
+	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{"task-1", "task-2"}, "complete", 500, now, now.AddDate(0, 0, 7), now, now)
+	iter2, _ := tm.NewIterationEntity(2, "Sprint 2", "Features", "New features", []string{"task-3"}, "current", 500, now.AddDate(0, 0, 7), time.Time{}, now.AddDate(0, 0, 7), now.AddDate(0, 0, 7))
 
 	repo.iterations = []*tm.IterationEntity{iter1, iter2}
 
@@ -578,12 +578,12 @@ func TestIterationDetailView(t *testing.T) {
 	now := time.Now()
 
 	// Create tasks
-	task1 := tm.NewTaskEntity("task-1", "track-1", "Task 1", "Description 1", "done", "high", "", now, now)
-	task2 := tm.NewTaskEntity("task-2", "track-1", "Task 2", "Description 2", "in-progress", "medium", "", now, now)
-	task3 := tm.NewTaskEntity("task-3", "track-1", "Task 3", "Description 3", "todo", "low", "", now, now)
+	task1 := tm.NewTaskEntity("task-1", "track-1", "Task 1", "Description 1", "done", 200, "", now, now)
+	task2 := tm.NewTaskEntity("task-2", "track-1", "Task 2", "Description 2", "in-progress", 300, "", now, now)
+	task3 := tm.NewTaskEntity("task-3", "track-1", "Task 3", "Description 3", "todo", 400, "", now, now)
 
 	// Create iteration with tasks
-	iter, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{"task-1", "task-2", "task-3"}, "current", now, time.Time{}, now, now)
+	iter, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{"task-1", "task-2", "task-3"}, "current", 500, now, time.Time{}, now, now)
 
 	repo.tasks = []*tm.TaskEntity{task1, task2, task3}
 
@@ -633,7 +633,7 @@ func TestIterationDetailViewNoTasks(t *testing.T) {
 	logger := NewMockLogger()
 
 	now := time.Now()
-	iter, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "planned", time.Time{}, time.Time{}, now, now)
+	iter, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "planned", 500, time.Time{}, time.Time{}, now, now)
 
 	model := tm.NewAppModel(ctx, repo, logger)
 	model.SetCurrentIteration(iter)
@@ -656,7 +656,7 @@ func TestNavigationToIterationList(t *testing.T) {
 	logger := NewMockLogger()
 
 	now := time.Now()
-	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", now, now, now, now)
+	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", 500, now, now, now, now)
 	repo.iterations = []*tm.IterationEntity{iter1}
 
 	model := tm.NewAppModel(ctx, repo, logger)
@@ -685,8 +685,8 @@ func TestNavigationFromIterationListToDetail(t *testing.T) {
 	logger := NewMockLogger()
 
 	now := time.Now()
-	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", now, now, now, now)
-	iter2, _ := tm.NewIterationEntity(2, "Sprint 2", "Features", "New features", []string{}, "current", now, time.Time{}, now, now)
+	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", 500, now, now, now, now)
+	iter2, _ := tm.NewIterationEntity(2, "Sprint 2", "Features", "New features", []string{}, "current", 500, now, time.Time{}, now, now)
 	repo.iterations = []*tm.IterationEntity{iter1, iter2}
 
 	model := tm.NewAppModel(ctx, repo, logger)
@@ -709,7 +709,7 @@ func TestNavigationFromIterationDetailBack(t *testing.T) {
 	logger := NewMockLogger()
 
 	now := time.Now()
-	iter, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", now, now, now, now)
+	iter, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", 500, now, now, now, now)
 
 	model := tm.NewAppModel(ctx, repo, logger)
 	model.SetCurrentIteration(iter)
@@ -730,9 +730,9 @@ func TestIterationListNavigation(t *testing.T) {
 	logger := NewMockLogger()
 
 	now := time.Now()
-	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", now, now, now, now)
-	iter2, _ := tm.NewIterationEntity(2, "Sprint 2", "Features", "New features", []string{}, "current", now, time.Time{}, now, now)
-	iter3, _ := tm.NewIterationEntity(3, "Sprint 3", "Polish", "Final touches", []string{}, "planned", time.Time{}, time.Time{}, now, now)
+	iter1, _ := tm.NewIterationEntity(1, "Sprint 1", "Foundation", "Core features", []string{}, "complete", 500, now, now, now, now)
+	iter2, _ := tm.NewIterationEntity(2, "Sprint 2", "Features", "New features", []string{}, "current", 500, now, time.Time{}, now, now)
+	iter3, _ := tm.NewIterationEntity(3, "Sprint 3", "Polish", "Final touches", []string{}, "planned", 500, time.Time{}, time.Time{}, now, now)
 
 	repo.iterations = []*tm.IterationEntity{iter1, iter2, iter3}
 
@@ -985,11 +985,3 @@ func TestACSpaceBarNoOpOnVerified(t *testing.T) {
 }
 
 
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

@@ -6,17 +6,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-)
-
-// Styles for the session list
-var (
-	titleStyle        = lipgloss.NewStyle().MarginLeft(2).Bold(true).Foreground(lipgloss.Color("170"))
-	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
-	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
-	analyzedStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green for analyzed
-	unanalyzedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("208")) // Orange for unanalyzed
-	multiAnalysisStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("51")) // Cyan for multiple analyses
 )
 
 // SessionItem implements list.Item for the Bubble Tea list component
@@ -27,16 +16,16 @@ type SessionItem struct {
 func (i SessionItem) FilterValue() string { return i.session.SessionID }
 
 func (i SessionItem) Title() string {
-	statusIcon := "✗"
-	statusStyle := unanalyzedStyle
+	statusIcon := IconUnanalyzed
+	statusStyle := WarningStyle
 
 	if i.session.HasAnalysis {
 		if i.session.AnalysisCount > 1 {
-			statusIcon = fmt.Sprintf("⟳%d", i.session.AnalysisCount)
-			statusStyle = multiAnalysisStyle
+			statusIcon = fmt.Sprintf("%s%d", IconMultiAnalysis, i.session.AnalysisCount)
+			statusStyle = InfoStyle
 		} else {
-			statusIcon = "✓"
-			statusStyle = analyzedStyle
+			statusIcon = IconAnalyzed
+			statusStyle = SuccessStyle
 		}
 	}
 
@@ -58,10 +47,10 @@ func (i SessionItem) Description() string {
 
 // SessionListModel is the Bubble Tea model for the session list view
 type SessionListModel struct {
-	list         list.Model
-	sessions     []*SessionInfo
-	width        int
-	height       int
+	list          list.Model
+	sessions      []*SessionInfo
+	width         int
+	height        int
 	newEventCount int // Number of unread events from dispatcher
 }
 
@@ -78,9 +67,9 @@ func NewSessionListModel(sessions []*SessionInfo) SessionListModel {
 	l.Title = "DarwinFlow Sessions"
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
-	l.Styles.Title = titleStyle
-	l.Styles.PaginationStyle = paginationStyle
-	l.Styles.HelpStyle = helpStyle
+	l.Styles.Title = BaseTitleStyle.MarginLeft(2)
+	l.Styles.PaginationStyle = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
+	l.Styles.HelpStyle = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 
 	return SessionListModel{
 		list:     l,
@@ -100,12 +89,12 @@ func (m SessionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.list.SetWidth(msg.Width)
-		m.list.SetHeight(msg.Height - 2)
+		m.list.SetHeight(msg.Height - 6) // Account for breadcrumb and footer
 		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc":
+		case "esc", "q":
 			return m, tea.Quit
 
 		case "enter":
@@ -131,6 +120,22 @@ func (m SessionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Filter to unanalyzed only
 			m.list.SetFilteringEnabled(true)
 			return m, nil
+
+		// Vim-style navigation
+		case "j":
+			// Move down (let list handle it)
+		case "k":
+			// Move up (let list handle it)
+		case "g":
+			// Go to top
+			m.list.Select(0)
+			return m, nil
+		case "G":
+			// Go to bottom
+			if len(m.sessions) > 0 {
+				m.list.Select(len(m.sessions) - 1)
+			}
+			return m, nil
 		}
 	}
 
@@ -141,15 +146,28 @@ func (m SessionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the view
 func (m SessionListModel) View() string {
+	// Build breadcrumb
+	breadcrumb := RenderBreadcrumb([]string{"Sessions"})
+
 	// Build the title with event counter if there are new events
 	title := "DarwinFlow Sessions"
 	if m.newEventCount > 0 {
-		newEventStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("226")) // Yellow for new events
-		title = fmt.Sprintf("%s %s", title, newEventStyle.Render(fmt.Sprintf("(+%d new)", m.newEventCount)))
+		title = fmt.Sprintf("%s %s",
+			title,
+			InfoStyle.Render(fmt.Sprintf("(+%d new)", m.newEventCount)))
 	}
 	m.list.Title = title
 
-	return "\n" + m.list.View()
+	// Footer with help hints
+	helpHints := RenderHelpLine(
+		RenderKeyHelp("?", "help"),
+		RenderKeyHelp("Enter", "view"),
+		RenderKeyHelp("r", "refresh"),
+		RenderKeyHelp("j/k", "navigate"),
+		RenderKeyHelp("Ctrl+C", "quit"),
+	)
+
+	return "\n" + breadcrumb + "\n\n" + m.list.View() + "\n\n" + helpHints
 }
 
 // SetNewEventCount updates the counter of unread events

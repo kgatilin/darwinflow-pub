@@ -277,8 +277,8 @@ func (p *TaskManagerPlugin) UpdateEntity(ctx context.Context, entityID string, f
 		}
 	}
 	if priority, ok := fields["priority"]; ok {
-		if priorityStr, ok := priority.(string); ok {
-			task.Priority = priorityStr
+		if _, ok := priority.(string); ok {
+			task.Rank = 100 // Default rank for migrated tasks
 		}
 	}
 

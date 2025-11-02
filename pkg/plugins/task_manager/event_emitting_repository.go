@@ -392,7 +392,7 @@ func (e *EventEmittingRepository) emitTrackCreatedEvent(ctx context.Context, tra
 		"title":      track.Title,
 		"description": track.Description,
 		"status":     track.Status,
-		"priority":   track.Priority,
+		"rank":       track.Rank,
 		"created_at": track.CreatedAt,
 	}
 
@@ -411,7 +411,7 @@ func (e *EventEmittingRepository) emitTrackUpdatedEvent(ctx context.Context, tra
 		"title":      track.Title,
 		"description": track.Description,
 		"status":     track.Status,
-		"priority":   track.Priority,
+		"rank":       track.Rank,
 		"updated_at": track.UpdatedAt,
 	}
 
@@ -478,7 +478,7 @@ func (e *EventEmittingRepository) emitTaskCreatedEvent(ctx context.Context, task
 		"title":     task.Title,
 		"description": task.Description,
 		"status":    task.Status,
-		"priority":  task.Priority,
+		"rank":      task.Rank,
 		"branch":    task.Branch,
 		"created_at": task.CreatedAt,
 	}
@@ -498,7 +498,7 @@ func (e *EventEmittingRepository) emitTaskUpdatedEvent(ctx context.Context, task
 		"title":     task.Title,
 		"description": task.Description,
 		"status":    task.Status,
-		"priority":  task.Priority,
+		"rank":      task.Rank,
 		"branch":    task.Branch,
 		"updated_at": task.UpdatedAt,
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,7 +22,7 @@ type TrackCreateCommand struct {
 	id          string
 	title       string
 	description string
-	priority    string
+	rank        int
 }
 
 func (c *TrackCreateCommand) GetName() string {
@@ -33,7 +34,7 @@ func (c *TrackCreateCommand) GetDescription() string {
 }
 
 func (c *TrackCreateCommand) GetUsage() string {
-	return "dw task-manager track create --title <title> [--description <desc>] [--priority <priority>]"
+	return "dw task-manager track create --title <title> [--description <desc>] [--rank <rank>]"
 }
 
 func (c *TrackCreateCommand) GetHelp() string {
@@ -46,29 +47,30 @@ All tracks must belong to an active roadmap - create one first with
 Flags:
   --title <title>          Track title (required)
   --description <desc>     Track description (optional)
-  --priority <priority>    Track priority (optional, default: medium)
-                          Values: critical, high, medium, low
+  --rank <rank>            Track rank (optional, default: 500)
+                          Range: 1-1000 (lower = higher priority)
 
 Examples:
   # Create a basic track
   dw task-manager track create --title "Plugin System"
 
-  # Create with full details
+  # Create with custom rank
   dw task-manager track create \
     --title "Plugin System" \
     --description "Implement extensible plugin architecture" \
-    --priority high
+    --rank 100
 
 Notes:
   - Track ID is auto-generated in format: <PROJECT_CODE>-track-<number> (e.g., DW-track-1)
   - An active roadmap must exist (create with 'dw task-manager roadmap init')
   - Initial status is automatically set to 'not-started'
-  - No dependencies are added initially (use track add-dependency)`
+  - No dependencies are added initially (use track add-dependency)
+  - Rank determines ordering: lower values appear first (1=highest, 1000=lowest)`
 }
 
 func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	// Parse flags
-	c.priority = "medium" // default
+	c.rank = 500 // default (medium priority)
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--project":
@@ -86,9 +88,13 @@ func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 				c.description = args[i+1]
 				i++
 			}
-		case "--priority":
+		case "--rank":
 			if i+1 < len(args) {
-				c.priority = args[i+1]
+				var err error
+				c.rank, err = strconv.Atoi(args[i+1])
+				if err != nil || c.rank < 1 || c.rank > 1000 {
+					return fmt.Errorf("invalid rank: must be between 1 and 1000")
+				}
 				i++
 			}
 		}
@@ -131,7 +137,7 @@ func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 		c.title,
 		c.description,
 		"not-started",
-		c.priority,
+		c.rank,
 		[]string{}, // no dependencies initially
 		now,
 		now,
@@ -153,7 +159,7 @@ func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 		fmt.Fprintf(cmdCtx.GetStdout(), "Description: %s\n", track.Description)
 	}
 	fmt.Fprintf(cmdCtx.GetStdout(), "Status:      %s\n", track.Status)
-	fmt.Fprintf(cmdCtx.GetStdout(), "Priority:    %s\n", track.Priority)
+	fmt.Fprintf(cmdCtx.GetStdout(), "Rank:        %d\n", track.Rank)
 	fmt.Fprintf(cmdCtx.GetStdout(), "Roadmap:     %s\n", track.RoadmapID)
 
 	return nil
@@ -164,10 +170,9 @@ func (c *TrackCreateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 // ============================================================================
 
 type TrackListCommand struct {
-	Plugin   *TaskManagerPlugin
+	Plugin  *TaskManagerPlugin
 	project string
-	status   string
-	priority string
+	status  string
 }
 
 func (c *TrackListCommand) GetName() string {
@@ -179,17 +184,17 @@ func (c *TrackListCommand) GetDescription() string {
 }
 
 func (c *TrackListCommand) GetUsage() string {
-	return "dw task-manager track list [--status <status>] [--priority <priority>]"
+	return "dw task-manager track list [--status <status>]"
 }
 
 func (c *TrackListCommand) GetHelp() string {
 	return `Lists all tracks in the active roadmap with optional filtering.
 
+Tracks are displayed sorted by rank (lower ranks first).
+
 Flags:
   --status <status>      Filter by status (can be comma-separated)
                          Values: not-started, in-progress, complete, blocked, waiting
-  --priority <priority>  Filter by priority (can be comma-separated)
-                         Values: critical, high, medium, low
 
 Examples:
   # List all tracks
@@ -198,14 +203,12 @@ Examples:
   # List in-progress tracks
   dw task-manager track list --status in-progress
 
-  # List critical and high priority tracks
-  dw task-manager track list --priority critical,high
-
-  # Combine filters
-  dw task-manager track list --status in-progress,blocked --priority critical
+  # List multiple status values
+  dw task-manager track list --status in-progress,blocked
 
 Output:
-  A table showing: ID, Title, Status, Priority, Dependencies count`
+  A table showing: ID, Title, Status, Rank, Dependencies count
+  Tracks are ordered by rank (1=highest priority, 1000=lowest)`
 }
 
 func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -220,11 +223,6 @@ func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 		case "--status":
 			if i+1 < len(args) {
 				c.status = args[i+1]
-				i++
-			}
-		case "--priority":
-			if i+1 < len(args) {
-				c.priority = args[i+1]
 				i++
 			}
 		}
@@ -255,12 +253,6 @@ func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 			filters.Status[i] = strings.TrimSpace(s)
 		}
 	}
-	if c.priority != "" {
-		filters.Priority = strings.Split(strings.TrimSpace(c.priority), ",")
-		for i, p := range filters.Priority {
-			filters.Priority[i] = strings.TrimSpace(p)
-		}
-	}
 
 	// List tracks
 	tracks, err := repo.ListTracks(ctx, roadmap.ID, filters)
@@ -275,8 +267,8 @@ func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	}
 
 	// Print header
-	fmt.Fprintf(cmdCtx.GetStdout(), "%-25s %-30s %-12s %-10s %s\n",
-		"ID", "Title", "Status", "Priority", "Dependencies")
+	fmt.Fprintf(cmdCtx.GetStdout(), "%-25s %-30s %-12s %-6s %s\n",
+		"ID", "Title", "Status", "Rank", "Dependencies")
 	fmt.Fprintf(cmdCtx.GetStdout(), "%s\n",
 		strings.Repeat("-", 90))
 
@@ -284,8 +276,8 @@ func (c *TrackListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	for _, track := range tracks {
 		depCount := len(track.Dependencies)
 		depStr := fmt.Sprintf("%d", depCount)
-		fmt.Fprintf(cmdCtx.GetStdout(), "%-25s %-30s %-12s %-10s %s\n",
-			track.ID, truncateString(track.Title, 29), track.Status, track.Priority, depStr)
+		fmt.Fprintf(cmdCtx.GetStdout(), "%-25s %-30s %-12s %-6d %s\n",
+			track.ID, truncateString(track.Title, 29), track.Status, track.Rank, depStr)
 	}
 
 	fmt.Fprintf(cmdCtx.GetStdout(), "\nTotal: %d track(s)\n", len(tracks))
@@ -362,7 +354,7 @@ func (c *TrackShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 		fmt.Fprintf(cmdCtx.GetStdout(), "  Description: %s\n", track.Description)
 	}
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Status:      %s\n", track.Status)
-	fmt.Fprintf(cmdCtx.GetStdout(), "  Priority:    %s\n", track.Priority)
+	fmt.Fprintf(cmdCtx.GetStdout(), "  Rank:        %d\n", track.Rank)
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Roadmap:     %s\n", track.RoadmapID)
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Created:     %s\n", track.CreatedAt.Format(time.RFC3339))
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Updated:     %s\n", track.UpdatedAt.Format(time.RFC3339))
@@ -391,7 +383,7 @@ type TrackUpdateCommand struct {
 	title       *string
 	description *string
 	status      *string
-	priority    *string
+	rank        *int
 }
 
 func (c *TrackUpdateCommand) GetName() string {
@@ -403,7 +395,7 @@ func (c *TrackUpdateCommand) GetDescription() string {
 }
 
 func (c *TrackUpdateCommand) GetUsage() string {
-	return "dw task-manager track update <track-id> [--title <title>] [--description <desc>] [--status <status>] [--priority <priority>]"
+	return "dw task-manager track update <track-id> [--title <title>] [--description <desc>] [--status <status>] [--rank <rank>]"
 }
 
 func (c *TrackUpdateCommand) GetHelp() string {
@@ -417,8 +409,7 @@ Flags:
   --description <desc>   New track description
   --status <status>      New track status
                          Values: not-started, in-progress, complete, blocked, waiting
-  --priority <priority>  New track priority
-                         Values: critical, high, medium, low
+  --rank <rank>          New track rank (1-1000, lower = higher priority)
 
 Examples:
   # Update title
@@ -430,7 +421,7 @@ Examples:
   # Update multiple fields
   dw task-manager track update track-plugin-system \
     --status in-progress \
-    --priority critical
+    --rank 100
 
 Notes:
   - At least one flag must be provided
@@ -461,17 +452,21 @@ func (c *TrackUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 				c.status = &args[i+1]
 				i++
 			}
-		case "--priority":
+		case "--rank":
 			if i+1 < len(args) {
-				c.priority = &args[i+1]
+				rankVal, err := strconv.Atoi(args[i+1])
+				if err != nil || rankVal < 1 || rankVal > 1000 {
+					return fmt.Errorf("invalid rank: must be between 1 and 1000")
+				}
+				c.rank = &rankVal
 				i++
 			}
 		}
 	}
 
 	// At least one flag must be provided
-	if c.title == nil && c.description == nil && c.status == nil && c.priority == nil {
-		return fmt.Errorf("at least one flag must be provided (--title, --description, --status, or --priority)")
+	if c.title == nil && c.description == nil && c.status == nil && c.rank == nil {
+		return fmt.Errorf("at least one flag must be provided (--title, --description, --status, or --rank)")
 	}
 
 	// Get repository for project
@@ -501,8 +496,8 @@ func (c *TrackUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 	if c.status != nil {
 		track.Status = *c.status
 	}
-	if c.priority != nil {
-		track.Priority = *c.priority
+	if c.rank != nil {
+		track.Rank = *c.rank
 	}
 	track.UpdatedAt = time.Now().UTC()
 
@@ -519,7 +514,7 @@ func (c *TrackUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comma
 		fmt.Fprintf(cmdCtx.GetStdout(), "Description: %s\n", track.Description)
 	}
 	fmt.Fprintf(cmdCtx.GetStdout(), "Status:      %s\n", track.Status)
-	fmt.Fprintf(cmdCtx.GetStdout(), "Priority:    %s\n", track.Priority)
+	fmt.Fprintf(cmdCtx.GetStdout(), "Rank:        %d\n", track.Rank)
 	fmt.Fprintf(cmdCtx.GetStdout(), "Updated:     %s\n", track.UpdatedAt.Format(time.RFC3339))
 
 	return nil

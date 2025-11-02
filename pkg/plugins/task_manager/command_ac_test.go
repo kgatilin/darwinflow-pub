@@ -60,7 +60,7 @@ func TestACAddCommand_Success(t *testing.T) {
 		"Test Track",
 		"Test description",
 		"not-started",
-		"high",
+		200,
 		[]string{},
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -78,7 +78,7 @@ func TestACAddCommand_Success(t *testing.T) {
 		"Test Task",
 		"Test description",
 		"todo",
-		"high",
+		200,
 		"",
 		time.Now().UTC(),
 		time.Now().UTC(),
@@ -159,10 +159,10 @@ func TestACAddCommand_AutomatedType(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	// Execute command with automated type
@@ -361,10 +361,10 @@ func TestACListCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	// Create ACs
@@ -430,10 +430,10 @@ func TestACListCommand_NoACs(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	// Execute command
@@ -549,10 +549,10 @@ func TestACVerifyCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	ac := task_manager.NewAcceptanceCriteriaEntity(
@@ -619,10 +619,10 @@ func TestACVerifyCommand_WithNotes(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	ac := task_manager.NewAcceptanceCriteriaEntity(
@@ -723,10 +723,10 @@ func TestACFailCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	ac := task_manager.NewAcceptanceCriteriaEntity(
@@ -832,10 +832,10 @@ func TestACUpdateCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	ac := task_manager.NewAcceptanceCriteriaEntity(
@@ -944,10 +944,10 @@ func TestACDeleteCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	ac := task_manager.NewAcceptanceCriteriaEntity(
@@ -1047,10 +1047,10 @@ func TestACVerifyAutoCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	ac := task_manager.NewAcceptanceCriteriaEntity(
@@ -1121,10 +1121,10 @@ func TestACRequestReviewCommand_Success(t *testing.T) {
 	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
 	repo.SaveRoadmap(ctx, roadmap)
 
-	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", "high", []string{}, time.Now().UTC(), time.Now().UTC())
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
 	repo.SaveTrack(ctx, track)
 
-	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", "high", "", time.Now().UTC(), time.Now().UTC())
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
 	repo.SaveTask(ctx, task)
 
 	ac := task_manager.NewAcceptanceCriteriaEntity(
