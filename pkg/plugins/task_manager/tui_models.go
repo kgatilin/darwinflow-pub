@@ -1074,28 +1074,94 @@ func (m *AppModel) handleIterationDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd
 			return m, m.loadTaskDetail(taskID)
 		}
 	case " ": // Space bar
-		if m.iterationDetailFocusAC && m.selectedIterationACIdx < len(m.acs) {
-			// Verify selected AC
-			ac := m.acs[m.selectedIterationACIdx]
-			if ac.Status != ACStatusVerified {
-				ac.Status = ACStatusVerified
-				ac.UpdatedAt = time.Now()
-				if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+		if m.iterationDetailFocusAC {
+			// Find the AC at the selected index using the same grouping logic as rendering
+			acsByTask := make(map[string][]*AcceptanceCriteriaEntity)
+			for _, ac := range m.acs {
+				acsByTask[ac.TaskID] = append(acsByTask[ac.TaskID], ac)
+			}
+
+			// Track cumulative AC index (same as rendering)
+			acIdx := 0
+			var selectedAC *AcceptanceCriteriaEntity
+
+			for _, task := range m.iterationTasks {
+				acs, hasACs := acsByTask[task.ID]
+				if !hasACs || len(acs) == 0 {
+					continue
+				}
+
+				for _, ac := range acs {
+					if acIdx == m.selectedIterationACIdx {
+						selectedAC = ac
+						break
+					}
+					acIdx++
+				}
+				if selectedAC != nil {
+					break
+				}
+			}
+
+			// Toggle verification status
+			if selectedAC != nil {
+				if selectedAC.Status == ACStatusVerified {
+					// Unverify
+					selectedAC.Status = ACStatusNotStarted
+				} else {
+					// Verify
+					selectedAC.Status = ACStatusVerified
+				}
+				selectedAC.UpdatedAt = time.Now()
+
+				if err := m.repository.UpdateAC(m.ctx, selectedAC); err != nil {
 					m.error = err
 					m.currentView = ViewError
 					return m, nil
 				}
+
 				// Reload iteration detail to refresh display
 				return m, m.loadIterationDetail(m.currentIteration.Number)
 			}
 		}
 	case "f":
-		if m.iterationDetailFocusAC && m.selectedIterationACIdx < len(m.acs) {
+		if m.iterationDetailFocusAC {
+			// Find the AC at the selected index using the same grouping logic
+			acsByTask := make(map[string][]*AcceptanceCriteriaEntity)
+			for _, ac := range m.acs {
+				acsByTask[ac.TaskID] = append(acsByTask[ac.TaskID], ac)
+			}
+
+			acIdx := 0
+			var selectedAC *AcceptanceCriteriaEntity
+
+			for _, task := range m.iterationTasks {
+				acs, hasACs := acsByTask[task.ID]
+				if !hasACs || len(acs) == 0 {
+					continue
+				}
+
+				for _, ac := range acs {
+					if acIdx == m.selectedIterationACIdx {
+						selectedAC = ac
+						break
+					}
+					acIdx++
+				}
+				if selectedAC != nil {
+					break
+				}
+			}
+
 			// Fail selected AC with feedback
-			m.feedbackInput.SetValue("")
-			m.feedbackInput.Focus()
-			m.previousViewMode = ViewIterationDetail
-			m.currentView = ViewACFailInput
+			if selectedAC != nil {
+				// Store selected AC in a way we can retrieve it later
+				m.selectedACIdx = m.selectedIterationACIdx
+				m.feedbackInput.SetValue("")
+				m.feedbackInput.Focus()
+				m.previousViewMode = ViewIterationDetail
+				m.currentView = ViewACFailInput
+			}
 		}
 	}
 	return m, nil
@@ -1861,7 +1927,7 @@ func (m *AppModel) renderIterationDetail() string {
 	s += "\n"
 	if len(m.acs) > 0 {
 		if m.iterationDetailFocusAC {
-			s += helpStyle.Render("j/k/↑/↓: Navigate ACs | space: Verify | f: Fail | tab: Switch to Tasks | esc: Back | q: Quit")
+			s += helpStyle.Render("j/k/↑/↓: Navigate ACs | space: Toggle Verify | f: Fail | tab: Switch to Tasks | esc: Back | q: Quit")
 		} else {
 			s += helpStyle.Render("j/k/↑/↓: Navigate Tasks | Enter: View Details | tab: Switch to ACs | esc: Back | q: Quit")
 		}
@@ -2262,17 +2328,50 @@ func (m *AppModel) handleACFailInputKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
 		// Submit the feedback and mark AC as failed
-		if m.selectedACIdx < len(m.acs) {
-			ac := m.acs[m.selectedACIdx]
+		var selectedAC *AcceptanceCriteriaEntity
+
+		if m.previousViewMode == ViewIterationDetail {
+			// Use grouping logic for iteration view
+			acsByTask := make(map[string][]*AcceptanceCriteriaEntity)
+			for _, ac := range m.acs {
+				acsByTask[ac.TaskID] = append(acsByTask[ac.TaskID], ac)
+			}
+
+			acIdx := 0
+			for _, task := range m.iterationTasks {
+				acs, hasACs := acsByTask[task.ID]
+				if !hasACs || len(acs) == 0 {
+					continue
+				}
+
+				for _, ac := range acs {
+					if acIdx == m.selectedACIdx {
+						selectedAC = ac
+						break
+					}
+					acIdx++
+				}
+				if selectedAC != nil {
+					break
+				}
+			}
+		} else {
+			// Use flat list for AC list view
+			if m.selectedACIdx < len(m.acs) {
+				selectedAC = m.acs[m.selectedACIdx]
+			}
+		}
+
+		if selectedAC != nil {
 			feedback := m.feedbackInput.Value()
 
 			// Update AC status to failed with feedback
-			ac.Status = ACStatusFailed
-			ac.Notes = feedback
-			ac.UpdatedAt = time.Now()
+			selectedAC.Status = ACStatusFailed
+			selectedAC.Notes = feedback
+			selectedAC.UpdatedAt = time.Now()
 
 			// Update in repository
-			if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+			if err := m.repository.UpdateAC(m.ctx, selectedAC); err != nil {
 				m.logger.Error("Failed to mark AC as failed", "error", err)
 			} else {
 				// Clear input and return to previous view
