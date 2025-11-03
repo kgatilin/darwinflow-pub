@@ -101,6 +101,39 @@ dw task-manager iteration add-task <iter-num> TM-task-1 TM-task-2
 dw task-manager iteration start <iter-num>
 ```
 
+**Architecture Decision Records (ADRs):**
+
+```bash
+# Create ADR for a track
+dw task-manager adr create <track-id> \
+  --title "..." \
+  --context "..." \
+  --decision "..." \
+  --consequences "..." \
+  --alternatives "..."
+
+# List all ADRs
+dw task-manager adr list
+
+# Show ADR details
+dw task-manager adr show TM-adr-X
+
+# Update ADR (change status to accepted)
+dw task-manager adr update TM-adr-X --status accepted
+
+# Mark ADR as superseded
+dw task-manager adr supersede TM-adr-X --superseded-by TM-adr-Y
+
+# Mark ADR as deprecated
+dw task-manager adr deprecate TM-adr-X
+
+# Check if track has required ADR
+dw task-manager track check <track-id>
+
+# List tracks without ADRs
+dw task-manager track list-missing-adrs
+```
+
 **Priority Guidance**: Work on current iteration first → critical/high priority tracks → planned iterations.
 
 **Best Practices**:
@@ -108,6 +141,8 @@ dw task-manager iteration start <iter-num>
 - Verify all acceptance criteria before marking task "done"
 - Use `dw task-manager iteration current` to stay focused
 - Check track dependencies before starting new tracks
+- Create ADR for each track documenting key architectural decisions
+- Update ADR status to 'accepted' once decision is finalized
 
 ---
 
@@ -235,6 +270,7 @@ For substantial refactorings or multi-package features:
 - [ ] Update README.md (if commands/features changed)
 - [ ] Update CLAUDE.md (if workflow/architecture changed)
 - [ ] Run `go-arch-lint docs` (if architecture/API changed)
+- [ ] Create/update ADR if architectural decisions were made
 - [ ] Commit with concise message
 
 ### Roadmap Tracking
@@ -408,6 +444,7 @@ go-arch-lint docs  # Regenerates docs/arch-index.md
 - [ ] README.md updated (if user-facing changes)
 - [ ] CLAUDE.md updated (if workflow changes)
 - [ ] Package CLAUDE.md updated (if package responsibilities changed)
+- [ ] ADR created/updated (if architectural decisions made)
 - [ ] Architecture docs regenerated (if needed)
 - [ ] All tests pass
 - [ ] Linter passes (zero violations)
