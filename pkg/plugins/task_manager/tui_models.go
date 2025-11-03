@@ -94,6 +94,8 @@ type AppModel struct {
 	selectedIterationIdx int
 	selectedBacklogIdx       int
 	selectedIterationTaskIdx int // For navigating tasks in iteration detail view
+	selectedIterationACIdx   int // For navigating ACs in iteration detail view
+	iterationDetailFocusAC   bool // True = focus on ACs, False = focus on tasks
 	selectedItemType     ItemSelectionType // Tracks which list is active for selection (tracks vs iterations vs backlog)
 	width                int
 	height               int
@@ -639,7 +641,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			statusOrder := map[string]int{"todo": 0, "in-progress": 1, "done": 2}
 			return statusOrder[m.iterationTasks[i].Status] < statusOrder[m.iterationTasks[j].Status]
 		})
-		m.selectedIterationTaskIdx = 0 // Reset selection
+		m.selectedIterationTaskIdx = 0 // Reset task selection
+		m.selectedIterationACIdx = 0    // Reset AC selection
+		m.iterationDetailFocusAC = false // Start with tasks focused
 		m.currentView = ViewIterationDetail
 		m.lastUpdate = time.Now()
 
@@ -1031,20 +1035,66 @@ func (m *AppModel) handleIterationListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 // handleIterationDetailKeys processes key presses on iteration detail view
 func (m *AppModel) handleIterationDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "tab":
+		// Toggle between tasks and ACs
+		if len(m.acs) > 0 {
+			m.iterationDetailFocusAC = !m.iterationDetailFocusAC
+		}
 	case "j", "down":
-		if m.selectedIterationTaskIdx < len(m.iterationTasks)-1 {
-			m.selectedIterationTaskIdx++
+		if m.iterationDetailFocusAC {
+			// Navigate ACs
+			if m.selectedIterationACIdx < len(m.acs)-1 {
+				m.selectedIterationACIdx++
+			}
+		} else {
+			// Navigate tasks
+			if m.selectedIterationTaskIdx < len(m.iterationTasks)-1 {
+				m.selectedIterationTaskIdx++
+			}
 		}
 	case "k", "up":
-		if m.selectedIterationTaskIdx > 0 {
-			m.selectedIterationTaskIdx--
+		if m.iterationDetailFocusAC {
+			// Navigate ACs
+			if m.selectedIterationACIdx > 0 {
+				m.selectedIterationACIdx--
+			}
+		} else {
+			// Navigate tasks
+			if m.selectedIterationTaskIdx > 0 {
+				m.selectedIterationTaskIdx--
+			}
 		}
 	case "enter":
-		if m.selectedIterationTaskIdx < len(m.iterationTasks) {
+		if !m.iterationDetailFocusAC && m.selectedIterationTaskIdx < len(m.iterationTasks) {
+			// View task detail (only when focused on tasks)
 			m.previousViewMode = ViewIterationDetail
 			taskID := m.iterationTasks[m.selectedIterationTaskIdx].ID
 			m.currentView = ViewLoading
 			return m, m.loadTaskDetail(taskID)
+		}
+	case " ": // Space bar
+		if m.iterationDetailFocusAC && m.selectedIterationACIdx < len(m.acs) {
+			// Verify selected AC
+			ac := m.acs[m.selectedIterationACIdx]
+			if ac.Status != ACStatusVerified {
+				ac.Status = ACStatusVerified
+				ac.UpdatedAt = time.Now()
+				if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
+					m.error = err
+					m.currentView = ViewError
+					return m, nil
+				}
+				// Reload iteration detail to refresh display
+				return m, m.loadIterationDetail(m.currentIteration.Number)
+			}
+		}
+	case "f":
+		if m.iterationDetailFocusAC && m.selectedIterationACIdx < len(m.acs) {
+			// Fail selected AC with feedback
+			m.feedbackInput.SetValue("")
+			m.feedbackInput.Focus()
+			m.previousViewMode = ViewIterationDetail
+			m.currentView = ViewACFailInput
 		}
 	}
 	return m, nil
@@ -1744,9 +1794,13 @@ func (m *AppModel) renderIterationDetail() string {
 	// Acceptance Criteria section
 	if len(m.acs) > 0 {
 		s += "\n\n"
-		s += sectionStyle.Render(fmt.Sprintf("Acceptance Criteria (%d)", len(m.acs))) + "\n"
+		focusIndicator := ""
+		if m.iterationDetailFocusAC {
+			focusIndicator = " [FOCUSED]"
+		}
+		s += sectionStyle.Render(fmt.Sprintf("Acceptance Criteria (%d)%s", len(m.acs), focusIndicator)) + "\n"
 
-		// Group ACs by task
+		// Group ACs by task (but keep flat list for selection)
 		acsByTask := make(map[string][]*AcceptanceCriteriaEntity)
 		taskMap := make(map[string]*TaskEntity)
 		for _, task := range m.iterationTasks {
@@ -1755,6 +1809,16 @@ func (m *AppModel) renderIterationDetail() string {
 		for _, ac := range m.acs {
 			acsByTask[ac.TaskID] = append(acsByTask[ac.TaskID], ac)
 		}
+
+		// Styles for AC items
+		acItemStyle := lipgloss.NewStyle().PaddingLeft(2)
+		acSelectedStyle := lipgloss.NewStyle().
+			PaddingLeft(2).
+			Background(lipgloss.Color("240")).
+			Foreground(lipgloss.Color("229"))
+
+		// Track cumulative AC index for selection
+		acIdx := 0
 
 		// Display ACs grouped by task
 		for _, task := range m.iterationTasks {
@@ -1771,14 +1835,32 @@ func (m *AppModel) renderIterationDetail() string {
 				if len(desc) > 80 {
 					desc = desc[:77] + "..."
 				}
-				s += fmt.Sprintf("  %s [%s] %s\n", statusIcon, ac.ID, desc)
+
+				// Build AC line
+				acLine := fmt.Sprintf("%s [%s] %s", statusIcon, ac.ID, desc)
+
+				// Apply selection style if this AC is selected and in focus mode
+				if m.iterationDetailFocusAC && acIdx == m.selectedIterationACIdx {
+					s += acSelectedStyle.Render(acLine) + "\n"
+				} else {
+					s += acItemStyle.Render(acLine) + "\n"
+				}
+				acIdx++
 			}
 		}
 	}
 
-	// Help
+	// Help - context sensitive
 	s += "\n"
-	s += helpStyle.Render("j/k/↑/↓: Navigate | Enter: View Details | esc: Back | q: Quit")
+	if len(m.acs) > 0 {
+		if m.iterationDetailFocusAC {
+			s += helpStyle.Render("j/k/↑/↓: Navigate ACs | space: Verify | f: Fail | tab: Switch to Tasks | esc: Back | q: Quit")
+		} else {
+			s += helpStyle.Render("j/k/↑/↓: Navigate Tasks | Enter: View Details | tab: Switch to ACs | esc: Back | q: Quit")
+		}
+	} else {
+		s += helpStyle.Render("j/k/↑/↓: Navigate | Enter: View Details | esc: Back | q: Quit")
+	}
 
 	return s
 }
