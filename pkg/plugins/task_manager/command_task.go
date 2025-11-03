@@ -561,22 +561,42 @@ func (c *TaskUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 			return fmt.Errorf("failed to check acceptance criteria: %w", err)
 		}
 
-		// Build list of unverified ACs
+		// Build lists of unverified and failed ACs
 		var unverifiedAC []*AcceptanceCriteriaEntity
+		var failedAC []*AcceptanceCriteriaEntity
 		for _, ac := range acs {
-			if !ac.IsVerified() && ac.Status != ACStatusFailed {
+			if ac.IsFailed() {
+				failedAC = append(failedAC, ac)
+			} else if !ac.IsVerified() {
 				unverifiedAC = append(unverifiedAC, ac)
 			}
 		}
 
-		if len(unverifiedAC) > 0 {
-			fmt.Fprintf(cmdCtx.GetStdout(), "Error: Cannot mark task as done - acceptance criteria not verified:\n")
-			for _, ac := range unverifiedAC {
-				statusIcon := ac.StatusIndicator()
-				fmt.Fprintf(cmdCtx.GetStdout(), "  %s [%s] %s\n", statusIcon, ac.ID, ac.Description)
+		if len(unverifiedAC) > 0 || len(failedAC) > 0 {
+			fmt.Fprintf(cmdCtx.GetStdout(), "Error: Cannot mark task as done\n\n")
+
+			if len(unverifiedAC) > 0 {
+				fmt.Fprintf(cmdCtx.GetStdout(), "Unverified acceptance criteria (%d):\n", len(unverifiedAC))
+				for _, ac := range unverifiedAC {
+					statusIcon := ac.StatusIndicator()
+					fmt.Fprintf(cmdCtx.GetStdout(), "  %s [%s] %s\n", statusIcon, ac.ID, ac.Description)
+				}
+				fmt.Fprintf(cmdCtx.GetStdout(), "\n")
 			}
-			fmt.Fprintf(cmdCtx.GetStdout(), "Hint: Use 'dw task-manager ac verify <ac-id>' to verify criteria\n")
-			return fmt.Errorf("cannot mark task as done: acceptance criteria not verified")
+
+			if len(failedAC) > 0 {
+				fmt.Fprintf(cmdCtx.GetStdout(), "Failed acceptance criteria (%d):\n", len(failedAC))
+				for _, ac := range failedAC {
+					statusIcon := ac.StatusIndicator()
+					fmt.Fprintf(cmdCtx.GetStdout(), "  %s [%s] %s\n", statusIcon, ac.ID, ac.Description)
+					if ac.Notes != "" {
+						fmt.Fprintf(cmdCtx.GetStdout(), "     Feedback: %s\n", ac.Notes)
+					}
+				}
+				fmt.Fprintf(cmdCtx.GetStdout(), "\n")
+			}
+
+			return fmt.Errorf("cannot mark task as done: %d unverified, %d failed acceptance criteria", len(unverifiedAC), len(failedAC))
 		}
 
 		// Check if ADR requirement is configured and enforce it

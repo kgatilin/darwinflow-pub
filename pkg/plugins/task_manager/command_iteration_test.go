@@ -1067,6 +1067,7 @@ func TestIterationViewCommand_Success(t *testing.T) {
 		task1.ID,
 		"Feature works correctly",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1080,6 +1081,7 @@ func TestIterationViewCommand_Success(t *testing.T) {
 		task1.ID,
 		"Error handling implemented",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1238,6 +1240,7 @@ func TestIterationViewCommand_FullFlag(t *testing.T) {
 		task.ID,
 		"Verify feature",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1356,5 +1359,595 @@ func TestIterationViewCommand_EmptyIteration(t *testing.T) {
 	// Check that empty iteration message is displayed
 	if !strings.Contains(output, "*No tasks in this iteration*") {
 		t.Errorf("expected empty iteration message, got: %s", output)
+	}
+}
+
+// ============================================================================
+// IterationComplete AC Enforcement Tests
+// ============================================================================
+
+func TestIterationCompleteCommand_BlocksWithUnverifiedAC(t *testing.T) {
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+
+	// Create roadmap first
+	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create roadmap: %v", err)
+	}
+	if err := repo.SaveRoadmap(ctx, roadmap); err != nil {
+		t.Fatalf("failed to save roadmap: %v", err)
+	}
+
+	// Create iteration
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create iteration: %v", err)
+	}
+	if err := repo.SaveIteration(ctx, iter); err != nil {
+		t.Fatalf("failed to save iteration: %v", err)
+	}
+
+	// Create a track
+	track, err := task_manager.NewTrackEntity(
+		"TM-track-1",
+		"roadmap-test",
+		"Test Track",
+		"Track description",
+		"in-progress",
+		500,
+		[]string{},
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("failed to create track: %v", err)
+	}
+	if err := repo.SaveTrack(ctx, track); err != nil {
+		t.Fatalf("failed to save track: %v", err)
+	}
+
+	// Create a task
+	task := task_manager.NewTaskEntity(
+		"TM-task-1",
+		"TM-track-1",
+		"Test Task",
+		"Task description",
+		"todo",
+		500,
+		"",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err := repo.SaveTask(ctx, task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	// Add task to iteration
+	if err := repo.AddTaskToIteration(ctx, 1, "TM-task-1"); err != nil {
+		t.Fatalf("failed to add task to iteration: %v", err)
+	}
+
+	// Create AC for task - not verified
+	ac := task_manager.NewAcceptanceCriteriaEntity(
+		"TM-ac-1",
+		"TM-task-1",
+		"User can login",
+		task_manager.VerificationTypeManual,
+		"",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err := repo.SaveAC(ctx, ac); err != nil {
+		t.Fatalf("failed to save AC: %v", err)
+	}
+
+	// Start iteration
+	if err := repo.StartIteration(ctx, 1); err != nil {
+		t.Fatalf("failed to start iteration: %v", err)
+	}
+
+	// Try to complete iteration with unverified AC - should fail
+	cmd := &task_manager.IterationCompleteCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"1"})
+	if err == nil {
+		t.Errorf("expected error due to unverified AC, but got none")
+	}
+
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "Cannot complete iteration") {
+		t.Errorf("expected 'Cannot complete iteration' message, got: %s", output)
+	}
+	if !strings.Contains(output, "Unverified acceptance criteria") {
+		t.Errorf("expected 'Unverified acceptance criteria' message, got: %s", output)
+	}
+	if !strings.Contains(output, "TM-ac-1") {
+		t.Errorf("expected AC ID in message, got: %s", output)
+	}
+
+	// Verify iteration was NOT completed
+	updated, err := repo.GetIteration(ctx, 1)
+	if err != nil {
+		t.Fatalf("failed to get iteration: %v", err)
+	}
+	if updated.Status != "current" {
+		t.Errorf("expected status 'current' (unchanged), got '%s'", updated.Status)
+	}
+}
+
+func TestIterationCompleteCommand_AllowsWithVerifiedAC(t *testing.T) {
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+
+	// Create roadmap first
+	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create roadmap: %v", err)
+	}
+	if err := repo.SaveRoadmap(ctx, roadmap); err != nil {
+		t.Fatalf("failed to save roadmap: %v", err)
+	}
+
+	// Create iteration
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create iteration: %v", err)
+	}
+	if err := repo.SaveIteration(ctx, iter); err != nil {
+		t.Fatalf("failed to save iteration: %v", err)
+	}
+
+	// Create a track
+	track, err := task_manager.NewTrackEntity(
+		"TM-track-1",
+		"roadmap-test",
+		"Test Track",
+		"Track description",
+		"in-progress",
+		500,
+		[]string{},
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("failed to create track: %v", err)
+	}
+	if err := repo.SaveTrack(ctx, track); err != nil {
+		t.Fatalf("failed to save track: %v", err)
+	}
+
+	// Create a task
+	task := task_manager.NewTaskEntity(
+		"TM-task-1",
+		"TM-track-1",
+		"Test Task",
+		"Task description",
+		"todo",
+		500,
+		"",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err := repo.SaveTask(ctx, task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	// Add task to iteration
+	if err := repo.AddTaskToIteration(ctx, 1, "TM-task-1"); err != nil {
+		t.Fatalf("failed to add task to iteration: %v", err)
+	}
+
+	// Create AC for task and mark as verified
+	ac := task_manager.NewAcceptanceCriteriaEntity(
+		"TM-ac-1",
+		"TM-task-1",
+		"User can login",
+		task_manager.VerificationTypeManual,
+		"",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	ac.Status = task_manager.ACStatusVerified // Mark as verified
+	if err := repo.SaveAC(ctx, ac); err != nil {
+		t.Fatalf("failed to save AC: %v", err)
+	}
+
+	// Start iteration
+	if err := repo.StartIteration(ctx, 1); err != nil {
+		t.Fatalf("failed to start iteration: %v", err)
+	}
+
+	// Complete iteration - should succeed
+	cmd := &task_manager.IterationCompleteCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"1"})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "completed") {
+		t.Errorf("expected 'completed', got: %s", output)
+	}
+
+	// Verify iteration status changed to complete
+	updated, err := repo.GetIteration(ctx, 1)
+	if err != nil {
+		t.Fatalf("failed to get iteration: %v", err)
+	}
+	if updated.Status != "complete" {
+		t.Errorf("expected status 'complete', got '%s'", updated.Status)
+	}
+}
+
+func TestIterationCompleteCommand_AutoMarkTasksDone(t *testing.T) {
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+
+	// Create roadmap first
+	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create roadmap: %v", err)
+	}
+	if err := repo.SaveRoadmap(ctx, roadmap); err != nil {
+		t.Fatalf("failed to save roadmap: %v", err)
+	}
+
+	// Create iteration
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create iteration: %v", err)
+	}
+	if err := repo.SaveIteration(ctx, iter); err != nil {
+		t.Fatalf("failed to save iteration: %v", err)
+	}
+
+	// Create a track
+	track, err := task_manager.NewTrackEntity(
+		"TM-track-1",
+		"roadmap-test",
+		"Test Track",
+		"Track description",
+		"in-progress",
+		500,
+		[]string{},
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("failed to create track: %v", err)
+	}
+	if err := repo.SaveTrack(ctx, track); err != nil {
+		t.Fatalf("failed to save track: %v", err)
+	}
+
+	// Create multiple tasks
+	task1 := task_manager.NewTaskEntity("TM-task-1", "TM-track-1", "Task 1", "", "todo", 500, "", time.Now().UTC(), time.Now().UTC())
+	task2 := task_manager.NewTaskEntity("TM-task-2", "TM-track-1", "Task 2", "", "in-progress", 500, "", time.Now().UTC(), time.Now().UTC())
+	task3 := task_manager.NewTaskEntity("TM-task-3", "TM-track-1", "Task 3", "", "done", 500, "", time.Now().UTC(), time.Now().UTC())
+
+	if err := repo.SaveTask(ctx, task1); err != nil {
+		t.Fatalf("failed to save task1: %v", err)
+	}
+	if err := repo.SaveTask(ctx, task2); err != nil {
+		t.Fatalf("failed to save task2: %v", err)
+	}
+	if err := repo.SaveTask(ctx, task3); err != nil {
+		t.Fatalf("failed to save task3: %v", err)
+	}
+
+	// Add tasks to iteration
+	if err := repo.AddTaskToIteration(ctx, 1, "TM-task-1"); err != nil {
+		t.Fatalf("failed to add task1: %v", err)
+	}
+	if err := repo.AddTaskToIteration(ctx, 1, "TM-task-2"); err != nil {
+		t.Fatalf("failed to add task2: %v", err)
+	}
+	if err := repo.AddTaskToIteration(ctx, 1, "TM-task-3"); err != nil {
+		t.Fatalf("failed to add task3: %v", err)
+	}
+
+	// Create and verify ACs for all tasks
+	for _, taskID := range []string{"TM-task-1", "TM-task-2", "TM-task-3"} {
+		ac := task_manager.NewAcceptanceCriteriaEntity(
+			"TM-ac-"+taskID,
+			taskID,
+			"AC for "+taskID,
+			task_manager.VerificationTypeManual,
+			"",
+			time.Now().UTC(),
+			time.Now().UTC(),
+		)
+		ac.Status = task_manager.ACStatusVerified
+		if err := repo.SaveAC(ctx, ac); err != nil {
+			t.Fatalf("failed to save AC for %s: %v", taskID, err)
+		}
+	}
+
+	// Start iteration
+	if err := repo.StartIteration(ctx, 1); err != nil {
+		t.Fatalf("failed to start iteration: %v", err)
+	}
+
+	// Complete iteration
+	cmd := &task_manager.IterationCompleteCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"1"})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Verify all tasks are marked done
+	for _, taskID := range []string{"TM-task-1", "TM-task-2", "TM-task-3"} {
+		updatedTask, err := repo.GetTask(ctx, taskID)
+		if err != nil {
+			t.Fatalf("failed to get task %s: %v", taskID, err)
+		}
+		if updatedTask.Status != "done" {
+			t.Errorf("expected task %s status 'done', got '%s'", taskID, updatedTask.Status)
+		}
+	}
+
+	// Verify iteration shows all tasks completed
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "Tasks:      3/3 completed") {
+		t.Errorf("expected 'Tasks:      3/3 completed', got: %s", output)
+	}
+}
+
+func TestIterationCompleteCommand_AllowsWithFailedAC(t *testing.T) {
+	plugin, tmpDir := setupTestPlugin(t)
+	ctx := context.Background()
+
+	// Get database for default project
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	// Create repository for setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+
+	// Create roadmap first
+	roadmap, err := task_manager.NewRoadmapEntity("roadmap-test", "Vision", "Criteria", time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create roadmap: %v", err)
+	}
+	if err := repo.SaveRoadmap(ctx, roadmap); err != nil {
+		t.Fatalf("failed to save roadmap: %v", err)
+	}
+
+	// Create iteration
+	iter, err := task_manager.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to create iteration: %v", err)
+	}
+	if err := repo.SaveIteration(ctx, iter); err != nil {
+		t.Fatalf("failed to save iteration: %v", err)
+	}
+
+	// Create a track
+	track, err := task_manager.NewTrackEntity(
+		"TM-track-1",
+		"roadmap-test",
+		"Test Track",
+		"Track description",
+		"in-progress",
+		500,
+		[]string{},
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("failed to create track: %v", err)
+	}
+	if err := repo.SaveTrack(ctx, track); err != nil {
+		t.Fatalf("failed to save track: %v", err)
+	}
+
+	// Create a task
+	task := task_manager.NewTaskEntity(
+		"TM-task-1",
+		"TM-track-1",
+		"Test Task",
+		"Task description",
+		"todo",
+		500,
+		"",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err := repo.SaveTask(ctx, task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	// Add task to iteration
+	if err := repo.AddTaskToIteration(ctx, 1, "TM-task-1"); err != nil {
+		t.Fatalf("failed to add task to iteration: %v", err)
+	}
+
+	// Create AC and mark as failed (failed ACs don't block completion)
+	ac := task_manager.NewAcceptanceCriteriaEntity(
+		"TM-ac-1",
+		"TM-task-1",
+		"User can login",
+		task_manager.VerificationTypeManual,
+		"",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	ac.Status = task_manager.ACStatusFailed // Mark as failed
+	ac.Notes = "Feature not implemented"
+	if err := repo.SaveAC(ctx, ac); err != nil {
+		t.Fatalf("failed to save AC: %v", err)
+	}
+
+	// Start iteration
+	if err := repo.StartIteration(ctx, 1); err != nil {
+		t.Fatalf("failed to start iteration: %v", err)
+	}
+
+	// Complete iteration - should now BLOCK with failed AC (new behavior)
+	cmd := &task_manager.IterationCompleteCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"1"})
+	if err == nil {
+		t.Errorf("expected error due to failed AC, but got none")
+	}
+
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "Cannot complete iteration") {
+		t.Errorf("expected 'Cannot complete iteration' message, got: %s", output)
+	}
+	if !strings.Contains(output, "Failed acceptance criteria") {
+		t.Errorf("expected 'Failed acceptance criteria' in output, got: %s", output)
+	}
+}
+func TestIterationReordering(t *testing.T) {
+	// Setup
+	db := createTestDB(t)
+	defer db.Close()
+
+	repo := task_manager.NewSQLiteRoadmapRepository(db, createTestLogger())
+	ctx := context.Background()
+
+	// Create roadmap
+	now := time.Now().UTC()
+	roadmap, err := task_manager.NewRoadmapEntity("roadmap-1", "Test roadmap", "Test criteria", now, now)
+	if err != nil {
+		t.Fatalf("Failed to create roadmap: %v", err)
+	}
+	if err := repo.SaveRoadmap(ctx, roadmap); err != nil {
+		t.Fatalf("Failed to save roadmap: %v", err)
+	}
+
+	// Create 3 iterations with same default rank (500)
+	iter1, _ := task_manager.NewIterationEntity(1, "Iteration 1", "Goal 1", "", []string{}, "planned", 500, time.Time{}, time.Time{}, now, now)
+	iter2, _ := task_manager.NewIterationEntity(2, "Iteration 2", "Goal 2", "", []string{}, "planned", 500, time.Time{}, time.Time{}, now, now)
+	iter3, _ := task_manager.NewIterationEntity(3, "Iteration 3", "Goal 3", "", []string{}, "planned", 500, time.Time{}, time.Time{}, now, now)
+
+	if err := repo.SaveIteration(ctx, iter1); err != nil {
+		t.Fatalf("Failed to save iteration 1: %v", err)
+	}
+	if err := repo.SaveIteration(ctx, iter2); err != nil {
+		t.Fatalf("Failed to save iteration 2: %v", err)
+	}
+	if err := repo.SaveIteration(ctx, iter3); err != nil {
+		t.Fatalf("Failed to save iteration 3: %v", err)
+	}
+
+	// Verify initial order (by number since ranks are equal)
+	iterations, err := repo.ListIterations(ctx)
+	if err != nil {
+		t.Fatalf("Failed to list iterations: %v", err)
+	}
+	if len(iterations) != 3 {
+		t.Fatalf("Expected 3 iterations, got %d", len(iterations))
+	}
+	if iterations[0].Number != 1 || iterations[1].Number != 2 || iterations[2].Number != 3 {
+		t.Errorf("Initial order wrong: got %d, %d, %d", iterations[0].Number, iterations[1].Number, iterations[2].Number)
+	}
+
+	// Log initial ranks
+	t.Logf("Initial ranks: iter1=%d, iter2=%d, iter3=%d", iterations[0].Rank, iterations[1].Rank, iterations[2].Rank)
+
+	// Simulate TUI reordering: move iteration 1 down (swap with iteration 2)
+	// This is what the TUI code does
+	firstIter := iterations[0]
+	secondIter := iterations[1]
+
+	t.Logf("Before swap: firstIter.Rank=%d, secondIter.Rank=%d", firstIter.Rank, secondIter.Rank)
+
+	// Swap ranks - this is what the TUI does now
+	if firstIter.Rank == secondIter.Rank {
+		// Moving down, so increase rank
+		firstIter.Rank = firstIter.Rank + 1
+	} else {
+		firstIter.Rank, secondIter.Rank = secondIter.Rank, firstIter.Rank
+	}
+	firstIter.UpdatedAt = time.Now().UTC()
+	secondIter.UpdatedAt = time.Now().UTC()
+
+	t.Logf("After swap in memory: firstIter.Rank=%d, secondIter.Rank=%d", firstIter.Rank, secondIter.Rank)
+
+	// Update both iterations
+	if err := repo.UpdateIteration(ctx, firstIter); err != nil {
+		t.Fatalf("Failed to update first iteration: %v", err)
+	}
+	if err := repo.UpdateIteration(ctx, secondIter); err != nil {
+		t.Fatalf("Failed to update second iteration: %v", err)
+	}
+
+	// Reload iterations to verify order changed
+	iterations, err = repo.ListIterations(ctx)
+	if err != nil {
+		t.Fatalf("Failed to list iterations after reorder: %v", err)
+	}
+
+	t.Logf("After reload from DB: iter[0]=%d (rank=%d), iter[1]=%d (rank=%d), iter[2]=%d (rank=%d)",
+		iterations[0].Number, iterations[0].Rank,
+		iterations[1].Number, iterations[1].Rank,
+		iterations[2].Number, iterations[2].Rank)
+
+	// After moving iter1 down:
+	// - iter1 should now have rank=501
+	// - iter2 should still have rank=500
+	// - iter3 should still have rank=500
+	// Order by rank, then number: iter2 (500, #2), iter3 (500, #3), iter1 (501, #1)
+
+	// Expected: iteration 2 should come before iteration 1 now
+	if iterations[0].Number != 2 {
+		t.Errorf("After reordering down, first iteration should be 2, got %d (rank=%d)", iterations[0].Number, iterations[0].Rank)
+	}
+	if iterations[1].Number != 3 {
+		t.Errorf("After reordering down, second iteration should be 3, got %d (rank=%d)", iterations[1].Number, iterations[1].Rank)
+	}
+	if iterations[2].Number != 1 {
+		t.Errorf("After reordering down, third iteration should be 1, got %d (rank=%d)", iterations[2].Number, iterations[2].Rank)
+	}
+
+	// Verify ranks are different now
+	if iterations[2].Rank != 501 {
+		t.Errorf("Iteration 1 should have rank 501, got %d", iterations[2].Rank)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
@@ -84,7 +85,8 @@ type AppModel struct {
 	selectedACIdx    int
 
 	// Input - for capturing AC failure feedback
-	feedbackInput    textinput.Model
+	feedbackInput          textinput.Model
+	selectedACForFeedback  *AcceptanceCriteriaEntity // Stores the actual AC being marked as failed
 
 	previousViewMode ViewMode // To return to previous view after ADR/AC list
 
@@ -1171,8 +1173,8 @@ func (m *AppModel) handleIterationDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd
 
 			// Fail selected AC with feedback
 			if selectedAC != nil {
-				// Store selected AC in a way we can retrieve it later
-				m.selectedACIdx = m.selectedIterationACIdx
+				// Store the actual AC being marked as failed
+				m.selectedACForFeedback = selectedAC
 				m.feedbackInput.SetValue("")
 				m.feedbackInput.Focus()
 				m.previousViewMode = ViewIterationDetail
@@ -1293,12 +1295,12 @@ func (m *AppModel) renderRoadmapList() string {
 
 		// Vision as header with content below
 		s += headerStyle.Render("# Vision") + "\n"
-		visionText := wrapText(m.roadmap.Vision, contentWidth)
+		visionText := WrapText(m.roadmap.Vision, contentWidth)
 		s += contentStyle.Render(visionText) + "\n\n"
 
 		// Success Criteria as header with content below
 		s += headerStyle.Render("# Success Criteria") + "\n"
-		criteriaText := wrapText(m.roadmap.SuccessCriteria, contentWidth)
+		criteriaText := WrapText(m.roadmap.SuccessCriteria, contentWidth)
 		s += contentStyle.Render(criteriaText) + "\n\n"
 	}
 
@@ -1485,7 +1487,13 @@ func (m *AppModel) renderTrackDetail() string {
 	// Header
 	s += titleStyle.Render(fmt.Sprintf("Track: %s", m.currentTrack.ID)) + "\n"
 	s += fmt.Sprintf("Title: %s\n", m.currentTrack.Title)
-	s += fmt.Sprintf("Description: %s\n", m.currentTrack.Description)
+	// Wrap track description to fit terminal width
+	descWidth := m.width - 4
+	if descWidth < 20 {
+		descWidth = 20
+	}
+	wrappedTrackDesc := WrapText(m.currentTrack.Description, descWidth)
+	s += fmt.Sprintf("Description: %s\n", wrappedTrackDesc)
 	s += fmt.Sprintf("Status: %s | Rank: %d %s\n", m.currentTrack.Status, m.currentTrack.Rank, getPriorityIcon(m.currentTrack.Rank))
 
 	// ADR Status
@@ -1614,7 +1622,13 @@ func (m *AppModel) renderTaskDetail() string {
 	// Description
 	if m.currentTask.Description != "" {
 		s += "\n" + sectionStyle.Render("Description") + "\n"
-		s += contentStyle.Render(m.currentTask.Description) + "\n"
+		// Calculate available width for description (account for padding)
+		descWidth := m.width - 4
+		if descWidth < 20 {
+			descWidth = 20 // minimum width
+		}
+		wrappedDesc := WrapText(m.currentTask.Description, descWidth)
+		s += contentStyle.Render(wrappedDesc) + "\n"
 	}
 
 	// Status
@@ -1668,7 +1682,38 @@ func (m *AppModel) renderTaskDetail() string {
 			if ac.VerificationType == VerificationTypeAutomated {
 				typeStr = "auto"
 			}
-			s += contentStyle.Render(fmt.Sprintf("%s [%s] (%s) %s", acIcon, ac.ID, typeStr, ac.Description)) + "\n"
+			// Wrap AC description to fit within viewport
+			prefix := fmt.Sprintf("%s [%s] (%s) ", acIcon, ac.ID, typeStr)
+			prefixLen := len(prefix)
+			descWidth := m.width - prefixLen - 4 // Account for prefix and margin
+			if descWidth < 20 {
+				descWidth = 20
+			}
+			wrappedDesc := WrapText(ac.Description, descWidth)
+			descLines := strings.Split(wrappedDesc, "\n")
+			// First line includes the prefix
+			s += contentStyle.Render(prefix + descLines[0]) + "\n"
+			// Subsequent lines are indented
+			for i := 1; i < len(descLines); i++ {
+				s += contentStyle.Render(strings.Repeat(" ", prefixLen) + descLines[i]) + "\n"
+			}
+			if ac.TestingInstructions != "" {
+				// Render testing instructions as markdown with visual separation
+				s += "\n"  // Blank line for separation
+				testHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("105")).Bold(true)
+				s += testHeaderStyle.Render("  Testing Instructions:") + "\n"
+
+				testWidth := m.width - 8 // Account for indentation and margin
+				if testWidth < 20 {
+					testWidth = 20
+				}
+				renderedMarkdown := renderMarkdown(ac.TestingInstructions, testWidth)
+				// Indent each line of the rendered markdown
+				testLines := strings.Split(renderedMarkdown, "\n")
+				for _, line := range testLines {
+					s += "    " + line + "\n"
+				}
+			}
 		}
 	}
 
@@ -1920,19 +1965,30 @@ func (m *AppModel) renderIterationDetail() string {
 			for _, ac := range acs {
 				statusIcon := getACStatusIcon(string(ac.Status))
 
-				// Build AC line with prefix (icon and ID)
+				// Build AC line with proper text wrapping
+				// Account for status icon + ID + left padding
 				prefix := fmt.Sprintf("%s [%s] ", statusIcon, ac.ID)
+				prefixLen := len(prefix)
 
-				// Wrap description to fit available width
-				// Account for prefix length + left padding (2) + margin (8)
-				descWidth := m.width - len(prefix) - 10
-				if descWidth < 20 {
-					descWidth = 20 // minimum width
+				// Calculate available width for description
+				// Account for left padding from acItemStyle (2) + prefix + margin for safety (4)
+				availableWidth := m.width - prefixLen - 2 - 6
+				if availableWidth < 20 {
+					availableWidth = 20 // minimum width
 				}
-				wrappedDesc := lipgloss.NewStyle().Width(descWidth).Render(ac.Description)
 
-				// Combine prefix with wrapped description
-				acLine := prefix + wrappedDesc
+				// Wrap the description text
+				wrappedDesc := WrapText(ac.Description, availableWidth)
+
+				// Indent continuation lines to align with the first line of description
+				lines := strings.Split(wrappedDesc, "\n")
+				indentedDesc := lines[0]
+				for i := 1; i < len(lines); i++ {
+					indentedDesc += "\n" + strings.Repeat(" ", prefixLen) + lines[i]
+				}
+
+				// Combine prefix with wrapped and indented description
+				acLine := prefix + indentedDesc
 
 				// Apply selection style if this AC is selected and in focus mode
 				if m.iterationDetailFocusAC && acIdx == m.selectedIterationACIdx {
@@ -1940,6 +1996,27 @@ func (m *AppModel) renderIterationDetail() string {
 				} else {
 					s += acItemStyle.Render(acLine) + "\n"
 				}
+
+				// Show testing instructions if present (with visual separation)
+				if ac.TestingInstructions != "" {
+					s += "\n" // Blank line for separation
+
+					baseIndent := strings.Repeat(" ", prefixLen+2)
+					testHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("105")).Bold(true)
+					s += testHeaderStyle.Render(baseIndent + "Testing Instructions:") + "\n"
+
+					testAvailableWidth := m.width - prefixLen - 10 // Account for indentation
+					if testAvailableWidth < 20 {
+						testAvailableWidth = 20
+					}
+
+					renderedMarkdown := renderMarkdown(ac.TestingInstructions, testAvailableWidth)
+					testLines := strings.Split(renderedMarkdown, "\n")
+					for _, line := range testLines {
+						s += baseIndent + "  " + line + "\n"
+					}
+				}
+
 				acIdx++
 			}
 		}
@@ -2246,11 +2323,51 @@ func (m *AppModel) renderACList() string {
 			if ac.VerificationType == VerificationTypeAutomated {
 				typeStr = "auto"
 			}
-			line := fmt.Sprintf("%s [%s] Task: %s (%s)\n  %s", statusIcon, ac.ID, ac.TaskID, typeStr, ac.Description)
 
-			// Show feedback indicator for failed ACs
+			// Build header with status, ID, task, and type
+			header := fmt.Sprintf("%s [%s] Task: %s (%s)", statusIcon, ac.ID, ac.TaskID, typeStr)
+
+			// Wrap description with proper indentation
+			descWidth := m.width - 4 // Account for indentation
+			if descWidth < 20 {
+				descWidth = 20
+			}
+			wrappedDesc := WrapText(ac.Description, descWidth)
+			descLines := strings.Split(wrappedDesc, "\n")
+			indentedDesc := "  " + strings.Join(descLines, "\n  ")
+
+			// Build main line
+			line := header + "\n" + indentedDesc
+
+			// Show testing instructions if present (with visual separation)
+			if ac.TestingInstructions != "" {
+				line += "\n\n" // Blank lines for separation
+				testHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("105")).Bold(true)
+				line += testHeaderStyle.Render("  Testing Instructions:") + "\n"
+
+				testWidth := m.width - 8 // Account for indentation and margin
+				if testWidth < 20 {
+					testWidth = 20
+				}
+				renderedMarkdown := renderMarkdown(ac.TestingInstructions, testWidth)
+				testLines := strings.Split(renderedMarkdown, "\n")
+				for _, testLine := range testLines {
+					line += "    " + testLine + "\n"
+				}
+				// Remove trailing newline since we'll add it later
+				line = strings.TrimRight(line, "\n")
+			}
+
+			// Show feedback indicator for failed ACs (also wrapped)
 			if ac.Status == ACStatusFailed && ac.Notes != "" {
-				line += fmt.Sprintf("\n  Feedback: %s", ac.Notes)
+				feedbackWidth := m.width - 6 // Account for "  Feedback: " prefix
+				if feedbackWidth < 20 {
+					feedbackWidth = 20
+				}
+				wrappedFeedback := WrapText(ac.Notes, feedbackWidth)
+				feedbackLines := strings.Split(wrappedFeedback, "\n")
+				indentedFeedback := "  Feedback: " + strings.Join(feedbackLines, "\n  ")
+				line += "\n" + indentedFeedback
 			}
 
 			if i == m.selectedACIdx {
@@ -2283,12 +2400,19 @@ func (m *AppModel) renderACFailInput() string {
 	var s string
 
 	// Get selected AC
-	if m.selectedACIdx < len(m.acs) {
-		ac := m.acs[m.selectedACIdx]
+	if m.selectedACForFeedback != nil {
+		ac := m.selectedACForFeedback
 
 		// Header
 		s += titleStyle.Render(fmt.Sprintf("Mark AC as Failed: %s", ac.ID)) + "\n\n"
-		s += fmt.Sprintf("Description: %s\n\n", ac.Description)
+
+		// Wrap description to fit terminal width
+		descWidth := m.width - 4
+		if descWidth < 20 {
+			descWidth = 20
+		}
+		wrappedDesc := WrapText(ac.Description, descWidth)
+		s += fmt.Sprintf("Description: %s\n\n", wrappedDesc)
 
 		// Input prompt
 		s += "Enter failure feedback (reason why AC failed):\n\n"
@@ -2333,7 +2457,8 @@ func (m *AppModel) handleACListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "f": // 'f' key - mark selected AC as failed with feedback
 		if m.selectedACIdx < len(m.acs) {
-			// Enter feedback input mode
+			// Store the actual AC being marked as failed
+			m.selectedACForFeedback = m.acs[m.selectedACIdx]
 			m.feedbackInput.SetValue("")
 			m.feedbackInput.Focus()
 			m.previousViewMode = ViewACList
@@ -2350,39 +2475,7 @@ func (m *AppModel) handleACFailInputKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
 		// Submit the feedback and mark AC as failed
-		var selectedAC *AcceptanceCriteriaEntity
-
-		if m.previousViewMode == ViewIterationDetail {
-			// Use grouping logic for iteration view
-			acsByTask := make(map[string][]*AcceptanceCriteriaEntity)
-			for _, ac := range m.acs {
-				acsByTask[ac.TaskID] = append(acsByTask[ac.TaskID], ac)
-			}
-
-			acIdx := 0
-			for _, task := range m.iterationTasks {
-				acs, hasACs := acsByTask[task.ID]
-				if !hasACs || len(acs) == 0 {
-					continue
-				}
-
-				for _, ac := range acs {
-					if acIdx == m.selectedACIdx {
-						selectedAC = ac
-						break
-					}
-					acIdx++
-				}
-				if selectedAC != nil {
-					break
-				}
-			}
-		} else {
-			// Use flat list for AC list view
-			if m.selectedACIdx < len(m.acs) {
-				selectedAC = m.acs[m.selectedACIdx]
-			}
-		}
+		selectedAC := m.selectedACForFeedback
 
 		if selectedAC != nil {
 			feedback := m.feedbackInput.Value()
@@ -2467,34 +2560,84 @@ func getACStatusIcon(status string) string {
 	}
 }
 
-// wrapText wraps text to fit within the specified width
-func wrapText(text string, width int) string {
+// WrapText wraps text to fit within the specified width.
+// It splits on spaces and handles words that are longer than the available width
+// by placing them on their own line (no hyphenation).
+func WrapText(text string, width int) string {
+	if text == "" {
+		return ""
+	}
+
+	if width <= 0 {
+		return text
+	}
+
+	// If text fits in one line, return as-is
 	if len(text) <= width {
 		return text
 	}
 
 	var result strings.Builder
 	words := strings.Fields(text)
+
+	if len(words) == 0 {
+		return ""
+	}
+
 	lineLen := 0
 
-	for _, word := range words {
+	for i, word := range words {
 		wordLen := len(word)
 
 		if lineLen == 0 {
+			// Start of a new line
 			result.WriteString(word)
 			lineLen = wordLen
 		} else if lineLen+1+wordLen <= width {
+			// Word fits on current line (with space)
 			result.WriteString(" ")
 			result.WriteString(word)
 			lineLen += 1 + wordLen
 		} else {
+			// Word doesn't fit, start a new line
 			result.WriteString("\n")
 			result.WriteString(word)
 			lineLen = wordLen
 		}
+
+		// Safety check: if we're on the last word, don't add extra newline
+		_ = i
 	}
 
 	return result.String()
+}
+
+// renderMarkdown renders markdown text using glamour with the specified width.
+// Falls back to plain text if rendering fails.
+func renderMarkdown(text string, width int) string {
+	if text == "" {
+		return ""
+	}
+
+	// Create glamour renderer with dark style for better terminal visibility
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(width),
+	)
+
+	if err != nil {
+		// Fallback to plain text if renderer creation fails
+		return text
+	}
+
+	rendered, err := renderer.Render(text)
+	if err != nil {
+		// Fallback to plain text if rendering fails
+		return text
+	}
+
+	// Trim trailing newlines that glamour adds
+	return strings.TrimRight(rendered, "\n")
 }
 
 // SetACs sets the ACs for testing

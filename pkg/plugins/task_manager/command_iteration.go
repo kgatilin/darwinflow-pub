@@ -1423,6 +1423,10 @@ func (c *IterationCompleteCommand) GetUsage() string {
 func (c *IterationCompleteCommand) GetHelp() string {
 	return `Marks an iteration as complete and sets the completed timestamp.
 
+This command validates that all tasks in the iteration have verified acceptance
+criteria before allowing completion. If validation passes, it automatically marks
+all tasks as done.
+
 Arguments:
   <number>  Iteration number (required)
 
@@ -1431,8 +1435,11 @@ Examples:
 
 Notes:
   - Iteration must be in current status to complete
+  - All tasks must have verified acceptance criteria
+  - Blocked by unverified ACs with helpful error message
+  - Automatically marks all iteration tasks as done when completed
   - Completed timestamp is automatically set
-  - Use 'dw task-manager iteration start' to begin a new iteration
+  - Use 'dw task-manager ac verify <ac-id>' to verify criteria before completion
   - Completed iteration can still be viewed but not modified`
 }
 
@@ -1454,12 +1461,20 @@ func (c *IterationCompleteCommand) Execute(ctx context.Context, cmdCtx pluginsdk
 		return fmt.Errorf("invalid iteration number: %v", err)
 	}
 
+	// Get tasks in iteration
+	tasks, err := repo.GetIterationTasks(ctx, number)
+	if err != nil {
+		return fmt.Errorf("failed to get iteration tasks: %w", err)
+	}
+
+	// Validate all tasks have verified acceptance criteria before completing
+	acValidationErr := c.validateIterationACs(ctx, repo, tasks, cmdCtx)
+	if acValidationErr != nil {
+		return acValidationErr
+	}
+
 	// Complete iteration
 	if err := repo.CompleteIteration(ctx, number); err != nil {
-		if errors.Is(err, pluginsdk.ErrNotFound) {
-			fmt.Fprintf(cmdCtx.GetStdout(), "Iteration %d not found.\n", number)
-			return nil
-		}
 		if errors.Is(err, pluginsdk.ErrInvalidArgument) {
 			fmt.Fprintf(cmdCtx.GetStdout(), "Cannot complete iteration: %v\n", err)
 			return nil
@@ -1467,24 +1482,27 @@ func (c *IterationCompleteCommand) Execute(ctx context.Context, cmdCtx pluginsdk
 		return fmt.Errorf("failed to complete iteration: %w", err)
 	}
 
-	// Get updated iteration
+	// Auto-update all tasks in iteration to "done" status
+	for _, task := range tasks {
+		if task.Status != "done" {
+			task.Status = "done"
+			task.UpdatedAt = time.Now().UTC()
+			if err := repo.UpdateTask(ctx, task); err != nil {
+				return fmt.Errorf("failed to update task %s to done: %w", task.ID, err)
+			}
+		}
+	}
+
+	// Get updated iteration for display
 	iteration, err := repo.GetIteration(ctx, number)
 	if err != nil {
 		return fmt.Errorf("failed to get iteration: %w", err)
 	}
 
-	// Get tasks for summary
-	tasks, err := repo.GetIterationTasks(ctx, number)
-	if err != nil {
-		return fmt.Errorf("failed to get iteration tasks: %w", err)
-	}
-
 	// Calculate task summary
 	completedCount := 0
-	for _, task := range tasks {
-		if task.Status == "done" {
-			completedCount++
-		}
+	for range tasks {
+		completedCount++ // All tasks are now marked done
 	}
 
 	// Calculate duration
@@ -1503,6 +1521,87 @@ func (c *IterationCompleteCommand) Execute(ctx context.Context, cmdCtx pluginsdk
 	}
 	if iteration.StartedAt != nil {
 		fmt.Fprintf(cmdCtx.GetStdout(), "Duration:   %s\n", durationStr)
+	}
+
+	return nil
+}
+
+// validateIterationACs validates that all tasks in iteration have verified ACs
+func (c *IterationCompleteCommand) validateIterationACs(ctx context.Context, repo RoadmapRepository, tasks []*TaskEntity, cmdCtx pluginsdk.CommandContext) error {
+	// Track unverified and failed ACs by task for helpful error message
+	type TaskACStatus struct {
+		Task          *TaskEntity
+		UnverifiedACs []*AcceptanceCriteriaEntity
+		FailedACs     []*AcceptanceCriteriaEntity
+	}
+
+	var tasksWithIssues []TaskACStatus
+
+	// Check each task's ACs
+	for _, task := range tasks {
+		acs, err := repo.ListAC(ctx, task.ID)
+		if err != nil {
+			return fmt.Errorf("failed to check acceptance criteria for task %s: %w", task.ID, err)
+		}
+
+		// Build lists of unverified and failed ACs for this task
+		var unverifiedACs []*AcceptanceCriteriaEntity
+		var failedACs []*AcceptanceCriteriaEntity
+		for _, ac := range acs {
+			if ac.IsFailed() {
+				failedACs = append(failedACs, ac)
+			} else if !ac.IsVerified() {
+				unverifiedACs = append(unverifiedACs, ac)
+			}
+		}
+
+		// If this task has unverified or failed ACs, add to list
+		if len(unverifiedACs) > 0 || len(failedACs) > 0 {
+			tasksWithIssues = append(tasksWithIssues, TaskACStatus{
+				Task:          task,
+				UnverifiedACs: unverifiedACs,
+				FailedACs:     failedACs,
+			})
+		}
+	}
+
+	// If any tasks have unverified or failed ACs, return error with helpful details
+	if len(tasksWithIssues) > 0 {
+		fmt.Fprintf(cmdCtx.GetStdout(), "Error: Cannot complete iteration\n\n")
+
+		for _, taskStatus := range tasksWithIssues {
+			fmt.Fprintf(cmdCtx.GetStdout(), "Task: %s (%s)\n", taskStatus.Task.ID, taskStatus.Task.Title)
+
+			if len(taskStatus.UnverifiedACs) > 0 {
+				fmt.Fprintf(cmdCtx.GetStdout(), "  Unverified acceptance criteria (%d):\n", len(taskStatus.UnverifiedACs))
+				for _, ac := range taskStatus.UnverifiedACs {
+					statusIcon := ac.StatusIndicator()
+					fmt.Fprintf(cmdCtx.GetStdout(), "    %s [%s] %s\n", statusIcon, ac.ID, ac.Description)
+				}
+			}
+
+			if len(taskStatus.FailedACs) > 0 {
+				fmt.Fprintf(cmdCtx.GetStdout(), "  Failed acceptance criteria (%d):\n", len(taskStatus.FailedACs))
+				for _, ac := range taskStatus.FailedACs {
+					statusIcon := ac.StatusIndicator()
+					fmt.Fprintf(cmdCtx.GetStdout(), "    %s [%s] %s\n", statusIcon, ac.ID, ac.Description)
+					if ac.Notes != "" {
+						fmt.Fprintf(cmdCtx.GetStdout(), "       Feedback: %s\n", ac.Notes)
+					}
+				}
+			}
+
+			fmt.Fprintf(cmdCtx.GetStdout(), "\n")
+		}
+
+		totalUnverified := 0
+		totalFailed := 0
+		for _, ts := range tasksWithIssues {
+			totalUnverified += len(ts.UnverifiedACs)
+			totalFailed += len(ts.FailedACs)
+		}
+
+		return fmt.Errorf("cannot complete iteration: %d task(s) have issues (%d unverified, %d failed acceptance criteria)", len(tasksWithIssues), totalUnverified, totalFailed)
 	}
 
 	return nil
