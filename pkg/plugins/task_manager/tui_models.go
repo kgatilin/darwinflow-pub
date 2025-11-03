@@ -128,10 +128,11 @@ type AppModel struct {
 // Message types for Bubble Tea
 
 type RoadmapLoadedMsg struct {
-	Roadmap    *RoadmapEntity
-	Tracks     []*TrackEntity
-	Iterations []*IterationEntity
-	Error      error
+	Roadmap      *RoadmapEntity
+	Tracks       []*TrackEntity
+	Iterations   []*IterationEntity
+	BacklogTasks []*TaskEntity
+	Error        error
 }
 
 type TrackDetailLoadedMsg struct {
@@ -376,10 +377,18 @@ func (m *AppModel) loadRoadmap() tea.Msg {
 		iterations = []*IterationEntity{}
 	}
 
+	// Load backlog tasks (tasks not assigned to any iteration)
+	backlogTasks, err := m.repository.GetBacklogTasks(m.ctx)
+	if err != nil {
+		// Don't fail if backlog can't be loaded
+		backlogTasks = []*TaskEntity{}
+	}
+
 	return RoadmapLoadedMsg{
-		Roadmap:    roadmap,
-		Tracks:     tracks,
-		Iterations: iterations,
+		Roadmap:      roadmap,
+		Tracks:       tracks,
+		Iterations:   iterations,
+		BacklogTasks: backlogTasks,
 	}
 }
 
@@ -568,6 +577,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.roadmap = msg.Roadmap
 		m.tracks = msg.Tracks
 		m.iterations = msg.Iterations
+		m.backlogTasks = msg.BacklogTasks
 		m.currentView = ViewRoadmapList
 		m.selectedTrackIdx = 0
 		m.lastUpdate = time.Now()
@@ -1412,7 +1422,7 @@ func (m *AppModel) renderRoadmapList() string {
 			if task.TrackID != "" {
 				track, err := m.repository.GetTrack(m.ctx, task.TrackID)
 				if err == nil && track != nil {
-					trackInfo = fmt.Sprintf(" [%s]", track.ID)
+					trackInfo = fmt.Sprintf(" [%s: %s]", track.ID, track.Title)
 				}
 			}
 

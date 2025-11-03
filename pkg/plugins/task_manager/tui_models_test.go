@@ -1237,9 +1237,9 @@ func TestBacklogDisplayWithTrackInfo(t *testing.T) {
 
 	view := model.View()
 
-	// Check that track ID is displayed with task
-	if !contains(view, "[TM-track-1]") {
-		t.Fatal("View should contain track ID [TM-track-1]")
+	// Check that track ID and title are displayed with task
+	if !contains(view, "[TM-track-1: Core Framework]") {
+		t.Fatal("View should contain track ID and title [TM-track-1: Core Framework]")
 	}
 }
 
