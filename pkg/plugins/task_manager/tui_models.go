@@ -525,9 +525,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedACIdx = 0
 				return m, nil
 			case ViewACFailInput:
-				// Cancel input, return to AC list
+				// Cancel input, return to previous view
 				m.feedbackInput.SetValue("")
-				m.currentView = ViewACList
+				m.feedbackInput.Blur()
+				m.currentView = m.previousViewMode
 				return m, nil
 			}
 		}
@@ -2247,6 +2248,7 @@ func (m *AppModel) handleACListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Enter feedback input mode
 			m.feedbackInput.SetValue("")
 			m.feedbackInput.Focus()
+			m.previousViewMode = ViewACList
 			m.currentView = ViewACFailInput
 		}
 	}
