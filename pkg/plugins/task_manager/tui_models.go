@@ -792,8 +792,14 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				currentIter := activeIterations[m.selectedIterationIdx]
 				nextIter := activeIterations[m.selectedIterationIdx+1]
 
-				// Swap ranks
-				currentIter.Rank, nextIter.Rank = nextIter.Rank, currentIter.Rank
+				// Swap ranks - if equal, make them different first
+				if currentIter.Rank == nextIter.Rank {
+					// Current moves down, so increase its rank
+					currentIter.Rank = currentIter.Rank + 1
+				} else {
+					// Normal swap
+					currentIter.Rank, nextIter.Rank = nextIter.Rank, currentIter.Rank
+				}
 				currentIter.UpdatedAt = time.Now()
 				nextIter.UpdatedAt = time.Now()
 
@@ -826,8 +832,14 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				currentIter := activeIterations[m.selectedIterationIdx]
 				prevIter := activeIterations[m.selectedIterationIdx-1]
 
-				// Swap ranks
-				currentIter.Rank, prevIter.Rank = prevIter.Rank, currentIter.Rank
+				// Swap ranks - if equal, make them different first
+				if currentIter.Rank == prevIter.Rank {
+					// Current moves up, so decrease its rank
+					currentIter.Rank = currentIter.Rank - 1
+				} else {
+					// Normal swap
+					currentIter.Rank, prevIter.Rank = prevIter.Rank, currentIter.Rank
+				}
 				currentIter.UpdatedAt = time.Now()
 				prevIter.UpdatedAt = time.Now()
 
