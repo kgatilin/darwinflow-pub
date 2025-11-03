@@ -32,14 +32,15 @@ const (
 
 // AcceptanceCriteriaEntity represents a single acceptance criterion for a task
 type AcceptanceCriteriaEntity struct {
-	ID                 string                            `json:"id"`
-	TaskID             string                            `json:"task_id"`           // Parent task ID
-	Description        string                            `json:"description"`       // What must be verified
-	VerificationType   AcceptanceCriteriaVerificationType `json:"verification_type"` // manual or automated
-	Status             AcceptanceCriteriaStatus          `json:"status"`            // Current verification status
-	Notes              string                            `json:"notes"`             // Additional notes (reason, feedback, etc.)
-	CreatedAt          time.Time                         `json:"created_at"`
-	UpdatedAt          time.Time                         `json:"updated_at"`
+	ID                  string                            `json:"id"`
+	TaskID              string                            `json:"task_id"`           // Parent task ID
+	Description         string                            `json:"description"`       // What must be verified
+	VerificationType    AcceptanceCriteriaVerificationType `json:"verification_type"` // manual or automated
+	Status              AcceptanceCriteriaStatus          `json:"status"`            // Current verification status
+	Notes               string                            `json:"notes"`             // Additional notes (reason, feedback, etc.)
+	TestingInstructions string                            `json:"testing_instructions"` // Step-by-step testing guidance
+	CreatedAt           time.Time                         `json:"created_at"`
+	UpdatedAt           time.Time                         `json:"updated_at"`
 }
 
 // NewAcceptanceCriteriaEntity creates a new acceptance criterion entity
@@ -48,18 +49,20 @@ func NewAcceptanceCriteriaEntity(
 	taskID string,
 	description string,
 	verificationType AcceptanceCriteriaVerificationType,
+	testingInstructions string,
 	createdAt time.Time,
 	updatedAt time.Time,
 ) *AcceptanceCriteriaEntity {
 	return &AcceptanceCriteriaEntity{
-		ID:               id,
-		TaskID:           taskID,
-		Description:      description,
-		VerificationType: verificationType,
-		Status:           ACStatusNotStarted,
-		Notes:            "",
-		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
+		ID:                  id,
+		TaskID:              taskID,
+		Description:         description,
+		VerificationType:    verificationType,
+		Status:              ACStatusNotStarted,
+		Notes:               "",
+		TestingInstructions: testingInstructions,
+		CreatedAt:           createdAt,
+		UpdatedAt:           updatedAt,
 	}
 }
 

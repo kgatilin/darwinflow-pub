@@ -374,6 +374,7 @@ func TestACListCommand_Success(t *testing.T) {
 			"DW-task-1",
 			"AC "+string(rune(48+i)),
 			task_manager.VerificationTypeManual,
+			"",
 			time.Now().UTC(),
 			time.Now().UTC(),
 		)
@@ -560,6 +561,7 @@ func TestACVerifyCommand_Success(t *testing.T) {
 		"DW-task-1",
 		"AC description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -630,6 +632,7 @@ func TestACVerifyCommand_WithNotes(t *testing.T) {
 		"DW-task-1",
 		"AC description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -734,6 +737,7 @@ func TestACFailCommand_Success(t *testing.T) {
 		"DW-task-1",
 		"AC description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -843,6 +847,7 @@ func TestACUpdateCommand_Success(t *testing.T) {
 		"DW-task-1",
 		"Original description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -955,6 +960,7 @@ func TestACDeleteCommand_Success(t *testing.T) {
 		"DW-task-1",
 		"AC description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1058,6 +1064,7 @@ func TestACVerifyAutoCommand_Success(t *testing.T) {
 		"DW-task-1",
 		"AC description",
 		task_manager.VerificationTypeAutomated,
+		"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1132,6 +1139,7 @@ func TestACRequestReviewCommand_Success(t *testing.T) {
 		"DW-task-1",
 		"AC description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1210,6 +1218,7 @@ func TestACFailedCommand_NoFilters(t *testing.T) {
 		"DW-task-1",
 		"AC1 description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1222,6 +1231,7 @@ func TestACFailedCommand_NoFilters(t *testing.T) {
 		"DW-task-2",
 		"AC2 description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1235,6 +1245,7 @@ func TestACFailedCommand_NoFilters(t *testing.T) {
 		"DW-task-1",
 		"AC3 description",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1318,6 +1329,7 @@ func TestACFailedCommand_FilterByIteration(t *testing.T) {
 		"DW-task-1",
 		"AC1 in iteration",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1330,6 +1342,7 @@ func TestACFailedCommand_FilterByIteration(t *testing.T) {
 		"DW-task-2",
 		"AC2 not in iteration",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1409,6 +1422,7 @@ func TestACFailedCommand_FilterByTrack(t *testing.T) {
 		"DW-task-1",
 		"AC1 in track 1",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1420,6 +1434,7 @@ func TestACFailedCommand_FilterByTrack(t *testing.T) {
 		"DW-task-2",
 		"AC2 in track 2",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1492,6 +1507,7 @@ func TestACFailedCommand_FilterByTask(t *testing.T) {
 		"DW-task-1",
 		"AC1 for task",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1503,6 +1519,7 @@ func TestACFailedCommand_FilterByTask(t *testing.T) {
 		"DW-task-1",
 		"AC2 for task",
 		task_manager.VerificationTypeManual,
+			"",
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -1576,5 +1593,386 @@ func TestACFailedCommand_NoResults(t *testing.T) {
 	output := cmdCtx.stdout.String()
 	if !strings.Contains(output, "No failed acceptance criteria found") {
 		t.Errorf("expected 'no failed ACs' message, got: %s", output)
+	}
+}
+
+// ============================================================================
+// ACAddCommand Tests - Testing Instructions
+// ============================================================================
+
+func TestACAddCommand_WithTestingInstructions(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	plugin, err := task_manager.NewTaskManagerPlugin(
+		&stubLogger{},
+		tmpDir,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to create plugin: %v", err)
+	}
+
+	// Set active project
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
+	// Setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+	ctx := context.Background()
+
+	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
+	repo.SaveRoadmap(ctx, roadmap)
+
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	repo.SaveTrack(ctx, track)
+
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
+	repo.SaveTask(ctx, task)
+
+	// Execute command with testing instructions
+	cmd := &task_manager.ACAddCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	testingInstructions := "1. Open the app\n2. Navigate to login\n3. Verify email field exists"
+
+	err = cmd.Execute(ctx, cmdCtx, []string{
+		"DW-task-1",
+		"--description", "User can login with email",
+		"--testing-instructions", testingInstructions,
+	})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Verify AC was created with testing instructions
+	acs, err := repo.ListAC(ctx, "DW-task-1")
+	if err != nil {
+		t.Fatalf("failed to list ACs: %v", err)
+	}
+	if len(acs) != 1 {
+		t.Errorf("expected 1 AC, got %d", len(acs))
+	}
+	if len(acs) > 0 {
+		if acs[0].TestingInstructions != testingInstructions {
+			t.Errorf("expected testing instructions '%s', got '%s'", testingInstructions, acs[0].TestingInstructions)
+		}
+	}
+}
+
+func TestACAddCommand_WithoutTestingInstructions(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	plugin, err := task_manager.NewTaskManagerPlugin(
+		&stubLogger{},
+		tmpDir,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to create plugin: %v", err)
+	}
+
+	// Set active project
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
+	// Setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+	ctx := context.Background()
+
+	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
+	repo.SaveRoadmap(ctx, roadmap)
+
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	repo.SaveTrack(ctx, track)
+
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
+	repo.SaveTask(ctx, task)
+
+	// Execute command without testing instructions
+	cmd := &task_manager.ACAddCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{
+		"DW-task-1",
+		"--description", "User can login with email",
+	})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Verify AC was created with empty testing instructions
+	acs, err := repo.ListAC(ctx, "DW-task-1")
+	if err != nil {
+		t.Fatalf("failed to list ACs: %v", err)
+	}
+	if len(acs) > 0 && acs[0].TestingInstructions != "" {
+		t.Errorf("expected empty testing instructions, got '%s'", acs[0].TestingInstructions)
+	}
+}
+
+// ============================================================================
+// ACListCommand Tests - Testing Instructions Display
+// ============================================================================
+
+func TestACListCommand_DisplaysTestingInstructions(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	plugin, err := task_manager.NewTaskManagerPlugin(
+		&stubLogger{},
+		tmpDir,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to create plugin: %v", err)
+	}
+
+	// Set active project
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
+	// Setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+	ctx := context.Background()
+
+	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
+	repo.SaveRoadmap(ctx, roadmap)
+
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	repo.SaveTrack(ctx, track)
+
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
+	repo.SaveTask(ctx, task)
+
+	testingInstructions := "1. Click the button\n2. Verify result"
+	ac := task_manager.NewAcceptanceCriteriaEntity(
+		"DW-ac-1",
+		"DW-task-1",
+		"Button works correctly",
+		task_manager.VerificationTypeManual,
+		testingInstructions,
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	repo.SaveAC(ctx, ac)
+
+	// Execute list command
+	cmd := &task_manager.ACListCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"DW-task-1"})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "Testing instructions:") {
+		t.Errorf("expected 'Testing instructions:' in output, got: %s", output)
+	}
+	if !strings.Contains(output, testingInstructions) {
+		t.Errorf("expected testing instructions content in output, got: %s", output)
+	}
+}
+
+// ============================================================================
+// ACShowCommand Tests
+// ============================================================================
+
+func TestACShowCommand_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	plugin, err := task_manager.NewTaskManagerPlugin(
+		&stubLogger{},
+		tmpDir,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to create plugin: %v", err)
+	}
+
+	// Set active project
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
+	// Setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+	ctx := context.Background()
+
+	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
+	repo.SaveRoadmap(ctx, roadmap)
+
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	repo.SaveTrack(ctx, track)
+
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
+	repo.SaveTask(ctx, task)
+
+	testingInstructions := "1. Click the button\n2. Verify result"
+	ac := task_manager.NewAcceptanceCriteriaEntity(
+		"DW-ac-1",
+		"DW-task-1",
+		"Button works correctly",
+		task_manager.VerificationTypeManual,
+		testingInstructions,
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	repo.SaveAC(ctx, ac)
+
+	// Execute show command
+	cmd := &task_manager.ACShowCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"DW-ac-1"})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "DW-ac-1") {
+		t.Errorf("expected AC ID in output, got: %s", output)
+	}
+	if !strings.Contains(output, "Button works correctly") {
+		t.Errorf("expected AC description in output, got: %s", output)
+	}
+	if !strings.Contains(output, "Testing Instructions:") {
+		t.Errorf("expected 'Testing Instructions:' in output, got: %s", output)
+	}
+	if !strings.Contains(output, testingInstructions) {
+		t.Errorf("expected testing instructions content in output, got: %s", output)
+	}
+}
+
+func TestACShowCommand_WithoutTestingInstructions(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	plugin, err := task_manager.NewTaskManagerPlugin(
+		&stubLogger{},
+		tmpDir,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to create plugin: %v", err)
+	}
+
+	// Set active project
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
+	// Setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+	ctx := context.Background()
+
+	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
+	repo.SaveRoadmap(ctx, roadmap)
+
+	track, _ := task_manager.NewTrackEntity("DW-track-1", "roadmap-test", "Test Track", "", "not-started", 200, []string{}, time.Now().UTC(), time.Now().UTC())
+	repo.SaveTrack(ctx, track)
+
+	task := task_manager.NewTaskEntity("DW-task-1", "DW-track-1", "Test Task", "", "todo", 200, "", time.Now().UTC(), time.Now().UTC())
+	repo.SaveTask(ctx, task)
+
+	ac := task_manager.NewAcceptanceCriteriaEntity(
+		"DW-ac-1",
+		"DW-task-1",
+		"Button works correctly",
+		task_manager.VerificationTypeManual,
+		"", // no testing instructions
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	repo.SaveAC(ctx, ac)
+
+	// Execute show command
+	cmd := &task_manager.ACShowCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"DW-ac-1"})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "Testing Instructions: (none)") {
+		t.Errorf("expected '(none)' message for testing instructions, got: %s", output)
+	}
+}
+
+func TestACShowCommand_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := getProjectDB(t, tmpDir, "default")
+	defer db.Close()
+
+	plugin, err := task_manager.NewTaskManagerPlugin(
+		&stubLogger{},
+		tmpDir,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to create plugin: %v", err)
+	}
+
+	// Set active project
+	if err := os.WriteFile(filepath.Join(tmpDir, ".darwinflow", "active-project.txt"), []byte("default"), 0644); err != nil {
+		t.Fatalf("failed to set active project: %v", err)
+	}
+
+	// Setup
+	repo := task_manager.NewSQLiteRoadmapRepository(db, &stubLogger{})
+	ctx := context.Background()
+
+	roadmap, _ := task_manager.NewRoadmapEntity("roadmap-test", "Test vision", "Test criteria", time.Now().UTC(), time.Now().UTC())
+	repo.SaveRoadmap(ctx, roadmap)
+
+	// Execute show command with non-existent AC
+	cmd := &task_manager.ACShowCommand{Plugin: plugin}
+	cmdCtx := &mockCommandContext{
+		workingDir: tmpDir,
+		stdout:     &bytes.Buffer{},
+		logger:     &stubLogger{},
+	}
+
+	err = cmd.Execute(ctx, cmdCtx, []string{"DW-ac-999"})
+	if err == nil {
+		t.Errorf("expected error for non-existent AC, got nil")
+	}
+
+	output := cmdCtx.stdout.String()
+	if !strings.Contains(output, "not found") {
+		t.Errorf("expected 'not found' message, got: %s", output)
 	}
 }

@@ -1463,8 +1463,8 @@ func TestIterationCompleteCommand_BlocksWithUnverifiedAC(t *testing.T) {
 	}
 
 	err = cmd.Execute(ctx, cmdCtx, []string{"1"})
-	if err == nil {
-		t.Errorf("expected error due to unverified AC, but got none")
+	if err != nil {
+		t.Errorf("expected nil (error printed to stdout), got error: %v", err)
 	}
 
 	output := cmdCtx.stdout.String()
@@ -1831,8 +1831,8 @@ func TestIterationCompleteCommand_AllowsWithFailedAC(t *testing.T) {
 	}
 
 	err = cmd.Execute(ctx, cmdCtx, []string{"1"})
-	if err == nil {
-		t.Errorf("expected error due to failed AC, but got none")
+	if err != nil {
+		t.Errorf("expected nil (error printed to stdout), got error: %v", err)
 	}
 
 	output := cmdCtx.stdout.String()

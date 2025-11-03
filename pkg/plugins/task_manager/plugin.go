@@ -338,6 +338,7 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 		// Acceptance Criteria commands
 		&ACAddCommand{Plugin: p},
 		&ACListCommand{Plugin: p},
+		&ACShowCommand{Plugin: p},
 		&ACVerifyCommand{Plugin: p},
 		&ACFailCommand{Plugin: p},
 		&ACUpdateCommand{Plugin: p},

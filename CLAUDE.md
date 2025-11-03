@@ -83,6 +83,11 @@ dw task-manager ac verify TM-ac-X
 
 # Mark as failed with feedback
 dw task-manager ac fail TM-ac-X --feedback "..."
+
+# List all failed ACs (for debugging/fixing)
+dw task-manager ac failed
+dw task-manager ac failed --task TM-task-X     # Filter by task
+dw task-manager ac failed --iteration 11       # Filter by iteration
 ```
 
 **Creating New Work:**

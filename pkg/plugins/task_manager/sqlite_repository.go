@@ -1451,8 +1451,8 @@ func (r *SQLiteRoadmapRepository) SaveAC(ctx context.Context, ac *AcceptanceCrit
 
 	_, err = r.db.ExecContext(
 		ctx,
-		"INSERT INTO acceptance_criteria (id, task_id, description, verification_type, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		ac.ID, ac.TaskID, ac.Description, string(ac.VerificationType), string(ac.Status), ac.Notes, ac.CreatedAt, ac.UpdatedAt,
+		"INSERT INTO acceptance_criteria (id, task_id, description, verification_type, status, notes, testing_instructions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		ac.ID, ac.TaskID, ac.Description, string(ac.VerificationType), string(ac.Status), ac.Notes, ac.TestingInstructions, ac.CreatedAt, ac.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert AC: %w", err)
@@ -1465,11 +1465,16 @@ func (r *SQLiteRoadmapRepository) SaveAC(ctx context.Context, ac *AcceptanceCrit
 func (r *SQLiteRoadmapRepository) GetAC(ctx context.Context, id string) (*AcceptanceCriteriaEntity, error) {
 	var ac AcceptanceCriteriaEntity
 
+	var testingInstructions sql.NullString
 	err := r.db.QueryRowContext(
 		ctx,
-		"SELECT id, task_id, description, verification_type, status, notes, created_at, updated_at FROM acceptance_criteria WHERE id = ?",
+		"SELECT id, task_id, description, verification_type, status, notes, testing_instructions, created_at, updated_at FROM acceptance_criteria WHERE id = ?",
 		id,
-	).Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+	).Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &testingInstructions, &ac.CreatedAt, &ac.UpdatedAt)
+
+	if testingInstructions.Valid {
+		ac.TestingInstructions = testingInstructions.String
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1485,7 +1490,7 @@ func (r *SQLiteRoadmapRepository) GetAC(ctx context.Context, id string) (*Accept
 func (r *SQLiteRoadmapRepository) ListAC(ctx context.Context, taskID string) ([]*AcceptanceCriteriaEntity, error) {
 	rows, err := r.db.QueryContext(
 		ctx,
-		"SELECT id, task_id, description, verification_type, status, notes, created_at, updated_at FROM acceptance_criteria WHERE task_id = ? ORDER BY created_at ASC",
+		"SELECT id, task_id, description, verification_type, status, notes, testing_instructions, created_at, updated_at FROM acceptance_criteria WHERE task_id = ? ORDER BY created_at ASC",
 		taskID,
 	)
 	if err != nil {
@@ -1496,9 +1501,13 @@ func (r *SQLiteRoadmapRepository) ListAC(ctx context.Context, taskID string) ([]
 	var acs []*AcceptanceCriteriaEntity
 	for rows.Next() {
 		var ac AcceptanceCriteriaEntity
-		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+		var testingInstructions sql.NullString
+		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &testingInstructions, &ac.CreatedAt, &ac.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan AC: %w", err)
+		}
+		if testingInstructions.Valid {
+			ac.TestingInstructions = testingInstructions.String
 		}
 		acs = append(acs, &ac)
 	}
@@ -1514,8 +1523,8 @@ func (r *SQLiteRoadmapRepository) ListAC(ctx context.Context, taskID string) ([]
 func (r *SQLiteRoadmapRepository) UpdateAC(ctx context.Context, ac *AcceptanceCriteriaEntity) error {
 	result, err := r.db.ExecContext(
 		ctx,
-		"UPDATE acceptance_criteria SET task_id = ?, description = ?, verification_type = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?",
-		ac.TaskID, ac.Description, string(ac.VerificationType), string(ac.Status), ac.Notes, ac.UpdatedAt, ac.ID,
+		"UPDATE acceptance_criteria SET task_id = ?, description = ?, verification_type = ?, status = ?, notes = ?, testing_instructions = ?, updated_at = ? WHERE id = ?",
+		ac.TaskID, ac.Description, string(ac.VerificationType), string(ac.Status), ac.Notes, ac.TestingInstructions, ac.UpdatedAt, ac.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update AC: %w", err)
@@ -1556,7 +1565,7 @@ func (r *SQLiteRoadmapRepository) DeleteAC(ctx context.Context, id string) error
 func (r *SQLiteRoadmapRepository) ListACByTrack(ctx context.Context, trackID string) ([]*AcceptanceCriteriaEntity, error) {
 	rows, err := r.db.QueryContext(
 		ctx,
-		`SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.created_at, ac.updated_at
+		`SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.testing_instructions, ac.created_at, ac.updated_at
 		 FROM acceptance_criteria ac
 		 JOIN tasks t ON ac.task_id = t.id
 		 WHERE t.track_id = ?
@@ -1571,9 +1580,13 @@ func (r *SQLiteRoadmapRepository) ListACByTrack(ctx context.Context, trackID str
 	var acs []*AcceptanceCriteriaEntity
 	for rows.Next() {
 		var ac AcceptanceCriteriaEntity
-		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+		var testingInstructions sql.NullString
+		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &testingInstructions, &ac.CreatedAt, &ac.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan AC: %w", err)
+		}
+		if testingInstructions.Valid {
+			ac.TestingInstructions = testingInstructions.String
 		}
 		acs = append(acs, &ac)
 	}
@@ -1589,7 +1602,7 @@ func (r *SQLiteRoadmapRepository) ListACByTrack(ctx context.Context, trackID str
 func (r *SQLiteRoadmapRepository) ListACByIteration(ctx context.Context, iterationNum int) ([]*AcceptanceCriteriaEntity, error) {
 	rows, err := r.db.QueryContext(
 		ctx,
-		`SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.created_at, ac.updated_at
+		`SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.testing_instructions, ac.created_at, ac.updated_at
 		 FROM acceptance_criteria ac
 		 JOIN tasks t ON ac.task_id = t.id
 		 JOIN iteration_tasks it ON t.id = it.task_id
@@ -1605,9 +1618,13 @@ func (r *SQLiteRoadmapRepository) ListACByIteration(ctx context.Context, iterati
 	var acs []*AcceptanceCriteriaEntity
 	for rows.Next() {
 		var ac AcceptanceCriteriaEntity
-		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+		var testingInstructions sql.NullString
+		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &testingInstructions, &ac.CreatedAt, &ac.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan AC: %w", err)
+		}
+		if testingInstructions.Valid {
+			ac.TestingInstructions = testingInstructions.String
 		}
 		acs = append(acs, &ac)
 	}
@@ -1714,7 +1731,7 @@ func (r *SQLiteRoadmapRepository) GetBacklogTasks(ctx context.Context) ([]*TaskE
 
 // ListFailedAC returns all acceptance criteria with status "failed".
 func (r *SQLiteRoadmapRepository) ListFailedAC(ctx context.Context, filters ACFilters) ([]*AcceptanceCriteriaEntity, error) {
-	query := `SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.created_at, ac.updated_at
+	query := `SELECT ac.id, ac.task_id, ac.description, ac.verification_type, ac.status, ac.notes, ac.testing_instructions, ac.created_at, ac.updated_at
 		      FROM acceptance_criteria ac`
 
 	var joins []string
@@ -1763,9 +1780,13 @@ func (r *SQLiteRoadmapRepository) ListFailedAC(ctx context.Context, filters ACFi
 	var acs []*AcceptanceCriteriaEntity
 	for rows.Next() {
 		var ac AcceptanceCriteriaEntity
-		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &ac.CreatedAt, &ac.UpdatedAt)
+		var testingInstructions sql.NullString
+		err := rows.Scan(&ac.ID, &ac.TaskID, &ac.Description, (*string)(&ac.VerificationType), (*string)(&ac.Status), &ac.Notes, &testingInstructions, &ac.CreatedAt, &ac.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan AC: %w", err)
+		}
+		if testingInstructions.Valid {
+			ac.TestingInstructions = testingInstructions.String
 		}
 		acs = append(acs, &ac)
 	}

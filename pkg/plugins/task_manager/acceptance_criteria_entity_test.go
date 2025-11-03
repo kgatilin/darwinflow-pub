@@ -14,6 +14,7 @@ func TestNewAcceptanceCriteriaEntity(t *testing.T) {
 		"DW-task-1",
 		"User can login",
 		task_manager.VerificationTypeManual,
+		"",
 		now,
 		now,
 	)
@@ -53,6 +54,7 @@ func TestAcceptanceCriteriaIsVerified(t *testing.T) {
 				"DW-task-1",
 				"Test AC",
 				task_manager.VerificationTypeManual,
+				"",
 				now,
 				now,
 			)
@@ -86,6 +88,7 @@ func TestAcceptanceCriteriaStatusIndicator(t *testing.T) {
 				"DW-task-1",
 				"Test AC",
 				task_manager.VerificationTypeManual,
+				"",
 				now,
 				now,
 			)
@@ -105,6 +108,7 @@ func TestAcceptanceCriteriaIsPendingReview(t *testing.T) {
 		"DW-task-1",
 		"Test AC",
 		task_manager.VerificationTypeManual,
+		"",
 		now,
 		now,
 	)
@@ -127,6 +131,7 @@ func TestAcceptanceCriteriaIsFailed(t *testing.T) {
 		"DW-task-1",
 		"Test AC",
 		task_manager.VerificationTypeManual,
+		"",
 		now,
 		now,
 	)
@@ -149,6 +154,7 @@ func TestAcceptanceCriteriaGetID(t *testing.T) {
 		"DW-task-1",
 		"Test AC",
 		task_manager.VerificationTypeManual,
+		"",
 		now,
 		now,
 	)
@@ -165,11 +171,30 @@ func TestAcceptanceCriteriaGetType(t *testing.T) {
 		"DW-task-1",
 		"Test AC",
 		task_manager.VerificationTypeManual,
+		"",
 		now,
 		now,
 	)
 
 	if ac.GetType() != "acceptance_criteria" {
 		t.Errorf("GetType() returned %s, expected acceptance_criteria", ac.GetType())
+	}
+}
+
+func TestAcceptanceCriteriaWithTestingInstructions(t *testing.T) {
+	now := time.Now().UTC()
+	testingInstructions := "1. Open the login page\n2. Enter credentials\n3. Click submit"
+	ac := task_manager.NewAcceptanceCriteriaEntity(
+		"DW-ac-1",
+		"DW-task-1",
+		"User can login",
+		task_manager.VerificationTypeManual,
+		testingInstructions,
+		now,
+		now,
+	)
+
+	if ac.TestingInstructions != testingInstructions {
+		t.Errorf("Expected TestingInstructions '%s', got '%s'", testingInstructions, ac.TestingInstructions)
 	}
 }

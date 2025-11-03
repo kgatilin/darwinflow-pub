@@ -596,7 +596,8 @@ func (c *TaskUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Comman
 				fmt.Fprintf(cmdCtx.GetStdout(), "\n")
 			}
 
-			return fmt.Errorf("cannot mark task as done: %d unverified, %d failed acceptance criteria", len(unverifiedAC), len(failedAC))
+			// Return nil to avoid showing help text (error already printed to stdout)
+			return nil
 		}
 
 		// Check if ADR requirement is configured and enforce it

@@ -1000,9 +1000,12 @@ func TestListFailedAC(t *testing.T) {
 	repo.SaveTask(ctx, task)
 
 	// Create ACs with different statuses
-	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
-	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-1", "AC 2", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
-	ac3 := task_manager.NewAcceptanceCriteriaEntity("ac-3", "task-1", "AC 3", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
+	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
+	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-1", "AC 2", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
+	ac3 := task_manager.NewAcceptanceCriteriaEntity("ac-3", "task-1", "AC 3", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveAC(ctx, ac1)
 	repo.SaveAC(ctx, ac2)
@@ -1059,8 +1062,10 @@ func TestListFailedACWithTaskFilter(t *testing.T) {
 	repo.SaveTask(ctx, task2)
 
 	// Create failed ACs for both tasks
-	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
-	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-2", "AC 2", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
+	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
+	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-2", "AC 2", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveAC(ctx, ac1)
 	repo.SaveAC(ctx, ac2)
@@ -1111,8 +1116,10 @@ func TestListFailedACWithIterationFilter(t *testing.T) {
 	repo.AddTaskToIteration(ctx, 1, "task-1")
 
 	// Create failed ACs for both tasks
-	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
-	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-2", "AC 2", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
+	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
+	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-2", "AC 2", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveAC(ctx, ac1)
 	repo.SaveAC(ctx, ac2)
@@ -1161,8 +1168,10 @@ func TestListFailedACWithTrackFilter(t *testing.T) {
 	repo.SaveTask(ctx, task2)
 
 	// Create failed ACs for both tasks
-	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
-	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-2", "AC 2", task_manager.VerificationTypeManual, time.Now().UTC(), time.Now().UTC())
+	ac1 := task_manager.NewAcceptanceCriteriaEntity("ac-1", "task-1", "AC 1", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
+	ac2 := task_manager.NewAcceptanceCriteriaEntity("ac-2", "task-2", "AC 2", task_manager.VerificationTypeManual,
+			"", time.Now().UTC(), time.Now().UTC())
 
 	repo.SaveAC(ctx, ac1)
 	repo.SaveAC(ctx, ac2)

@@ -2,6 +2,7 @@ package task_manager_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -972,8 +973,25 @@ func TestACListDisplay(t *testing.T) {
 	}
 
 	// Check that full descriptions are present (not truncated)
-	if !contains(view, "This is a very long acceptance criterion description that should be displayed in full without any truncation") {
-		t.Error("View should display full AC description without truncation")
+	// With text wrapping, phrases may be split across lines, so check for individual words
+	keyWords := []string{
+		"This",
+		"very",
+		"long",
+		"acceptance",
+		"criterion",
+		"description",
+		"displayed",
+		"truncation",
+	}
+	missingWords := []string{}
+	for _, word := range keyWords {
+		if !contains(view, word) {
+			missingWords = append(missingWords, word)
+		}
+	}
+	if len(missingWords) > 0 {
+		t.Errorf("View is missing AC description words: %v", missingWords)
 	}
 
 	// Check that space bar help text is shown
@@ -1510,3 +1528,120 @@ func TestBacklogSelectionHighlight(t *testing.T) {
 		t.Fatal("View should contain selection indicator (→)")
 	}
 }
+
+// TestWrapTextBasic tests basic text wrapping functionality
+func TestWrapTextBasic(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		width    int
+		expected string
+	}{
+		{
+			name:     "Empty string",
+			text:     "",
+			width:    10,
+			expected: "",
+		},
+		{
+			name:     "Text shorter than width",
+			text:     "Hello",
+			width:    20,
+			expected: "Hello",
+		},
+		{
+			name:     "Text equal to width",
+			text:     "HelloWorld",
+			width:    10,
+			expected: "HelloWorld",
+		},
+		{
+			name:     "Text longer than width - single wrap",
+			text:     "Hello world",
+			width:    8,
+			expected: "Hello\nworld",
+		},
+		{
+			name:     "Text with multiple words - multiple wraps",
+			text:     "The quick brown fox jumps",
+			width:    10,
+			expected: "The quick\nbrown fox\njumps",
+		},
+		{
+			name:     "Very long single word",
+			text:     "abcdefghijklmnop",
+			width:    10,
+			expected: "abcdefghijklmnop",
+		},
+		{
+			name:     "Whitespace handling",
+			text:     "One  two   three",
+			width:    10,
+			expected: "One two\nthree",
+		},
+		{
+			name:     "Zero width",
+			text:     "Hello world",
+			width:    0,
+			expected: "Hello world",
+		},
+		{
+			name:     "Negative width",
+			text:     "Hello world",
+			width:    -1,
+			expected: "Hello world",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call the wrapped function
+			result := tm.WrapText(tt.text, tt.width)
+			if result != tt.expected {
+				t.Errorf("WrapText(%q, %d)\n  got:      %q\n  expected: %q",
+					tt.text, tt.width, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestWrapTextEdgeCases tests edge cases for text wrapping
+func TestWrapTextEdgeCases(t *testing.T) {
+	// Very long description that should wrap at multiple points
+	longText := "This is a comprehensive description that contains multiple words and should wrap to fit within the terminal width without causing overflow issues on the display"
+	result := tm.WrapText(longText, 20)
+	lines := strings.Split(result, "\n")
+
+	// Check that no line exceeds the width
+	for i, line := range lines {
+		if len(line) > 20 {
+			t.Errorf("Line %d exceeds width: len=%d, content=%q", i, len(line), line)
+		}
+	}
+
+	// Verify we got multiple lines
+	if len(lines) < 5 {
+		t.Errorf("Expected multiple lines for long text, got %d", len(lines))
+	}
+}
+
+// TestWrapTextPreservesWords tests that wrapping preserves words correctly
+func TestWrapTextPreservesWords(t *testing.T) {
+	text := "The quick brown fox"
+	result := tm.WrapText(text, 8)
+	lines := strings.Split(result, "\n")
+
+	// All lines should be actual content lines (no empty lines)
+	for _, line := range lines {
+		if line == "" {
+			t.Errorf("WrapText should not produce empty lines")
+		}
+	}
+
+	// Reconstruct original text (minus whitespace) and verify it matches
+	reconstructed := strings.Join(lines, " ")
+	if reconstructed != text {
+		t.Errorf("Reconstructed text doesn't match original\n  original: %q\n  reconstructed: %q", text, reconstructed)
+	}
+}
+

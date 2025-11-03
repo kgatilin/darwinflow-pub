@@ -134,6 +134,8 @@ overrides:
                 - github.com/google/uuid
                 - github.com/charmbracelet/bubbletea  # TUI framework (shared UI utility)
                 - github.com/charmbracelet/lipgloss   # TUI styling (shared UI utility)
+                - github.com/charmbracelet/bubbles/viewport   # TUI viewport component (shared UI utility)
+                - github.com/charmbracelet/bubbles/textinput  # TUI text input component (shared UI utility)
                 - github.com/mattn/go-sqlite3         # SQLite driver (shared infrastructure)
                 - gopkg.in/yaml.v3                    # YAML config (shared configuration utility)
         directories_import:

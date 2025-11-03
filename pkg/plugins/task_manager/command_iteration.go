@@ -1470,7 +1470,8 @@ func (c *IterationCompleteCommand) Execute(ctx context.Context, cmdCtx pluginsdk
 	// Validate all tasks have verified acceptance criteria before completing
 	acValidationErr := c.validateIterationACs(ctx, repo, tasks, cmdCtx)
 	if acValidationErr != nil {
-		return acValidationErr
+		// Error already printed to stdout with details, return nil to avoid showing help
+		return nil
 	}
 
 	// Complete iteration

@@ -15,11 +15,12 @@ import (
 // ============================================================================
 
 type ACAddCommand struct {
-	Plugin           *TaskManagerPlugin
-	project          string
-	taskID           string
-	description      string
-	verificationType string
+	Plugin               *TaskManagerPlugin
+	project              string
+	taskID               string
+	description          string
+	verificationType     string
+	testingInstructions  string
 }
 
 func (c *ACAddCommand) GetName() string {
@@ -41,25 +42,46 @@ An acceptance criterion defines what must be verified before a task can be
 considered complete. It can be manually verified by a human or automatically
 verified by a coding agent.
 
+GUIDANCE: Write criteria that the end-user can verify, focusing on core
+business logic and observable behavior - NOT implementation details.
+
 Flags:
-  <task-id>                 Task ID to add AC to (required)
-  --description "..."       Description of what must be verified (required)
-  --type <type>            Verification type (optional, default: manual)
-                           Values: manual, automated
+  <task-id>                     Task ID to add AC to (required)
+  --description "..."           Description of what must be verified (required)
+  --type <type>                Verification type (optional, default: manual)
+                               Values: manual, automated
+  --testing-instructions "..."  Step-by-step testing instructions (optional)
+                               Provide easily reproducible step-by-step testing
 
 Examples:
-  # Add a manual verification criterion
-  dw task-manager ac add DW-task-123 \
-    --description "User can create tasks"
 
-  # Add an automated verification criterion
+GOOD AC (what the user experiences):
   dw task-manager ac add DW-task-123 \
-    --description "Tests pass with 80% coverage" \
-    --type automated
+    --description "User can export session data to CSV format"
+
+  dw task-manager ac add DW-task-123 \
+    --description "TUI shows task status with color coding" \
+    --testing-instructions "1. Open app
+2. Navigate to tasks view
+3. Verify status column is color-coded by status"
+
+BAD AC (implementation details):
+  dw task-manager ac add DW-task-123 \
+    --description "ExportRepository saves data to database"
+
+  dw task-manager ac add DW-task-123 \
+    --description "Service validates input parameters"
+
+Key Principles:
+  ✓ Describes WHAT the user can verify, not HOW it's implemented
+  ✓ Focuses on observable behavior and outcomes
+  ✓ Can be tested/verified by an end user
+  ✓ Addresses core business logic
 
 Notes:
   - Initial status is automatically set to "not_started"
-  - AC ID is generated automatically`
+  - AC ID is generated automatically
+  - Testing instructions support markdown formatting (numbered lists, code blocks)`
 }
 
 func (c *ACAddCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -79,6 +101,11 @@ func (c *ACAddCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandCont
 		case "--type":
 			if i+1 < len(args) {
 				c.verificationType = args[i+1]
+				i++
+			}
+		case "--testing-instructions":
+			if i+1 < len(args) {
+				c.testingInstructions = args[i+1]
 				i++
 			}
 		default:
@@ -127,6 +154,7 @@ func (c *ACAddCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandCont
 		c.taskID,
 		c.description,
 		AcceptanceCriteriaVerificationType(c.verificationType),
+		c.testingInstructions, // testingInstructions can be provided via --testing-instructions flag
 		time.Now().UTC(),
 		time.Now().UTC(),
 	)
@@ -142,6 +170,7 @@ func (c *ACAddCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandCont
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Description:      %s\n", ac.Description)
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Verification:     %s\n", ac.VerificationType)
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Status:           %s\n", ac.Status)
+	fmt.Fprintf(cmdCtx.GetStdout(), "\nTip: Remember - Focus on what the user experiences, not how it works internally.\n")
 
 	return nil
 }
@@ -246,6 +275,9 @@ func (c *ACListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandCon
 	for _, ac := range acs {
 		statusIcon := ac.StatusIndicator()
 		fmt.Fprintf(cmdCtx.GetStdout(), "%s [%s] %s (%s)\n", statusIcon, ac.ID, ac.Description, ac.VerificationType)
+		if ac.TestingInstructions != "" {
+			fmt.Fprintf(cmdCtx.GetStdout(), "  Testing instructions: %s\n", ac.TestingInstructions)
+		}
 		if ac.Status == ACStatusFailed && ac.Notes != "" {
 			fmt.Fprintf(cmdCtx.GetStdout(), "  Reason: %s\n", ac.Notes)
 		}
@@ -458,10 +490,12 @@ func (c *ACFailCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandCon
 // ============================================================================
 
 type ACUpdateCommand struct {
-	Plugin      *TaskManagerPlugin
-	project     string
-	acID        string
-	description string
+	Plugin              *TaskManagerPlugin
+	project             string
+	acID                string
+	description         string
+	testingInstructions string
+	updateTesting       bool // Flag to indicate if testing instructions should be updated
 }
 
 func (c *ACUpdateCommand) GetName() string {
@@ -473,20 +507,32 @@ func (c *ACUpdateCommand) GetDescription() string {
 }
 
 func (c *ACUpdateCommand) GetUsage() string {
-	return "dw task-manager ac update <ac-id> --description \"...\""
+	return "dw task-manager ac update <ac-id> [--description \"...\"] [--testing-instructions \"...\"]"
 }
 
 func (c *ACUpdateCommand) GetHelp() string {
-	return `Updates an acceptance criterion description.
+	return `Updates an acceptance criterion.
 
 Flags:
-  <ac-id>            AC ID to update (required)
-  --description "..."  New description (required)
+  <ac-id>                      AC ID to update (required)
+  --description "..."          New description (optional)
+  --testing-instructions "..." New testing instructions (optional)
+
+At least one of --description or --testing-instructions must be provided.
 
 Examples:
   # Update AC description
   dw task-manager ac update DW-ac-1 \
-    --description "Updated requirement text"`
+    --description "Updated requirement text"
+
+  # Update testing instructions
+  dw task-manager ac update DW-ac-1 \
+    --testing-instructions "1. Do this 2. Do that"
+
+  # Update both
+  dw task-manager ac update DW-ac-1 \
+    --description "New description" \
+    --testing-instructions "New test steps"`
 }
 
 func (c *ACUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -502,6 +548,12 @@ func (c *ACUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 				c.description = args[i+1]
 				i++
 			}
+		case "--testing-instructions":
+			if i+1 < len(args) {
+				c.testingInstructions = args[i+1]
+				c.updateTesting = true
+				i++
+			}
 		default:
 			if c.acID == "" && !strings.HasPrefix(args[i], "--") {
 				c.acID = args[i]
@@ -509,8 +561,12 @@ func (c *ACUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 		}
 	}
 
-	if c.acID == "" || c.description == "" {
-		return fmt.Errorf("<ac-id> and --description are required")
+	if c.acID == "" {
+		return fmt.Errorf("<ac-id> is required")
+	}
+
+	if c.description == "" && !c.updateTesting {
+		return fmt.Errorf("at least one of --description or --testing-instructions must be provided")
 	}
 
 	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
@@ -529,8 +585,13 @@ func (c *ACUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 		return fmt.Errorf("failed to get AC: %w", err)
 	}
 
-	// Update AC
-	ac.Description = c.description
+	// Update AC fields
+	if c.description != "" {
+		ac.Description = c.description
+	}
+	if c.updateTesting {
+		ac.TestingInstructions = c.testingInstructions
+	}
 	ac.UpdatedAt = time.Now().UTC()
 
 	if err := repo.UpdateAC(ctx, ac); err != nil {
@@ -539,7 +600,16 @@ func (c *ACUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandC
 
 	fmt.Fprintf(cmdCtx.GetStdout(), "Acceptance criterion updated\n")
 	fmt.Fprintf(cmdCtx.GetStdout(), "  ID:          %s\n", ac.ID)
-	fmt.Fprintf(cmdCtx.GetStdout(), "  Description: %s\n", ac.Description)
+	if c.description != "" {
+		fmt.Fprintf(cmdCtx.GetStdout(), "  Description: %s\n", ac.Description)
+	}
+	if c.updateTesting {
+		if ac.TestingInstructions != "" {
+			fmt.Fprintf(cmdCtx.GetStdout(), "  Testing Instructions: Updated\n")
+		} else {
+			fmt.Fprintf(cmdCtx.GetStdout(), "  Testing Instructions: Cleared\n")
+		}
+	}
 
 	return nil
 }
@@ -946,6 +1016,110 @@ func (c *ACRequestReviewCommand) Execute(ctx context.Context, cmdCtx pluginsdk.C
 	fmt.Fprintf(cmdCtx.GetStdout(), "Human review requested for acceptance criterion\n")
 	fmt.Fprintf(cmdCtx.GetStdout(), "  ID:     %s\n", ac.ID)
 	fmt.Fprintf(cmdCtx.GetStdout(), "  Status: %s\n", ac.Status)
+
+	return nil
+}
+
+// ============================================================================
+// ACShowCommand shows detailed information about an AC
+// ============================================================================
+
+type ACShowCommand struct {
+	Plugin  *TaskManagerPlugin
+	project string
+	acID    string
+}
+
+func (c *ACShowCommand) GetName() string {
+	return "ac show"
+}
+
+func (c *ACShowCommand) GetDescription() string {
+	return "Show detailed information about an acceptance criterion"
+}
+
+func (c *ACShowCommand) GetUsage() string {
+	return "dw task-manager ac show <ac-id>"
+}
+
+func (c *ACShowCommand) GetHelp() string {
+	return `Shows detailed information about an acceptance criterion including
+description, verification type, status, and testing instructions.
+
+Flags:
+  <ac-id>  AC ID to show (required)
+
+Examples:
+  # Show AC details
+  dw task-manager ac show DW-ac-1`
+}
+
+func (c *ACShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		default:
+			if c.acID == "" && !strings.HasPrefix(args[i], "--") {
+				c.acID = args[i]
+			}
+		}
+	}
+
+	if c.acID == "" {
+		return fmt.Errorf("<ac-id> is required")
+	}
+
+	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Get AC
+	ac, err := repo.GetAC(ctx, c.acID)
+	if err != nil {
+		if errors.Is(err, pluginsdk.ErrNotFound) {
+			fmt.Fprintf(cmdCtx.GetStdout(), "Error: AC \"%s\" not found\n", c.acID)
+			return fmt.Errorf("AC not found: %s", c.acID)
+		}
+		return fmt.Errorf("failed to get AC: %w", err)
+	}
+
+	// Display AC details
+	fmt.Fprintf(cmdCtx.GetStdout(), "Acceptance Criterion Details\n")
+	fmt.Fprintf(cmdCtx.GetStdout(), "============================\n\n")
+
+	fmt.Fprintf(cmdCtx.GetStdout(), "ID:                   %s\n", ac.ID)
+	fmt.Fprintf(cmdCtx.GetStdout(), "Task ID:              %s\n", ac.TaskID)
+	fmt.Fprintf(cmdCtx.GetStdout(), "Description:          %s\n", ac.Description)
+	fmt.Fprintf(cmdCtx.GetStdout(), "Verification Type:    %s\n", ac.VerificationType)
+	fmt.Fprintf(cmdCtx.GetStdout(), "Status:               %s %s\n", ac.StatusIndicator(), ac.Status)
+
+	// Show testing instructions if present
+	if ac.TestingInstructions != "" {
+		fmt.Fprintf(cmdCtx.GetStdout(), "\nTesting Instructions:\n")
+		fmt.Fprintf(cmdCtx.GetStdout(), "---------------------\n")
+		fmt.Fprintf(cmdCtx.GetStdout(), "%s\n", ac.TestingInstructions)
+	} else {
+		fmt.Fprintf(cmdCtx.GetStdout(), "\nTesting Instructions: (none)\n")
+	}
+
+	// Show failure notes if AC failed
+	if ac.Status == ACStatusFailed && ac.Notes != "" {
+		fmt.Fprintf(cmdCtx.GetStdout(), "\nFailure Feedback:\n")
+		fmt.Fprintf(cmdCtx.GetStdout(), "-----------------\n")
+		fmt.Fprintf(cmdCtx.GetStdout(), "%s\n", ac.Notes)
+	}
+
+	// Show timestamps
+	fmt.Fprintf(cmdCtx.GetStdout(), "\nTimestamps:\n")
+	fmt.Fprintf(cmdCtx.GetStdout(), "-----------\n")
+	fmt.Fprintf(cmdCtx.GetStdout(), "Created: %s\n", ac.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(cmdCtx.GetStdout(), "Updated: %s\n", ac.UpdatedAt.Format("2006-01-02 15:04:05"))
 
 	return nil
 }

@@ -11,7 +11,7 @@ import (
 
 const (
 	// SchemaVersion is the current database schema version
-	SchemaVersion = 4
+	SchemaVersion = 5
 )
 
 // SQL table creation statements
@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS acceptance_criteria (
     verification_type TEXT NOT NULL,
     status TEXT NOT NULL,
     notes TEXT,
+    testing_instructions TEXT,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
@@ -234,6 +235,14 @@ func InitSchema(db *sql.DB) error {
 	if currentVersion == 3 {
 		if err := migrateV3ToV4(db); err != nil {
 			return fmt.Errorf("failed to migrate from v3 to v4: %w", err)
+		}
+		currentVersion = 4
+	}
+
+	// If we have version 4, run migration
+	if currentVersion == 4 {
+		if err := migrateV4ToV5(db); err != nil {
+			return fmt.Errorf("failed to migrate from v4 to v5: %w", err)
 		}
 	}
 
