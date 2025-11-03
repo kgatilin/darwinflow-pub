@@ -34,6 +34,7 @@ type ItemSelectionType int
 const (
 	SelectTracks ItemSelectionType = iota
 	SelectIterations
+	SelectBacklog
 )
 
 // Hotkey represents a single keyboard shortcut
@@ -85,7 +86,8 @@ type AppModel struct {
 	selectedTrackIdx     int
 	selectedTaskIdx      int
 	selectedIterationIdx int
-	selectedItemType     ItemSelectionType // Tracks which list is active for selection (tracks vs iterations)
+	selectedBacklogIdx   int
+	selectedItemType     ItemSelectionType // Tracks which list is active for selection (tracks vs iterations vs backlog)
 	width                int
 	height               int
 
@@ -213,10 +215,13 @@ func NewAppModelWithProject(
 func (m AppModel) getRoadmapListHotkeys() []HotkeyGroup {
 	// Dynamic description based on current selection mode
 	var navTarget string
-	if m.selectedItemType == SelectTracks {
+	switch m.selectedItemType {
+	case SelectTracks:
 		navTarget = "Tracks"
-	} else {
+	case SelectIterations:
 		navTarget = "Iterations"
+	case SelectBacklog:
+		navTarget = "Backlog"
 	}
 
 	// Dynamic view mode description
@@ -601,21 +606,30 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleRoadmapListKeys processes key presses on roadmap list view
 func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	// Tab: Toggle between selecting tracks and iterations
+	// Tab: Cycle through selection modes (Iterations → Tracks → Backlog)
 	case "tab":
-		if m.selectedItemType == SelectTracks {
-			m.selectedItemType = SelectIterations
-			// Reset iteration selection to 0
-			m.selectedIterationIdx = 0
-		} else {
+		switch m.selectedItemType {
+		case SelectIterations:
 			m.selectedItemType = SelectTracks
-			// Reset track selection to 0
 			m.selectedTrackIdx = 0
+		case SelectTracks:
+			// Only show backlog option if in full view mode and backlog has items
+			if m.showFullRoadmap && len(m.backlogTasks) > 0 {
+				m.selectedItemType = SelectBacklog
+				m.selectedBacklogIdx = 0
+			} else {
+				m.selectedItemType = SelectIterations
+				m.selectedIterationIdx = 0
+			}
+		case SelectBacklog:
+			m.selectedItemType = SelectIterations
+			m.selectedIterationIdx = 0
 		}
 
 	// Navigation: j/k or arrow keys
 	case "j", "down":
-		if m.selectedItemType == SelectTracks {
+		switch m.selectedItemType {
+		case SelectTracks:
 			// Navigate tracks
 			activeTracks := []*TrackEntity{}
 			for _, track := range m.tracks {
@@ -626,7 +640,7 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(activeTracks) > 0 && m.selectedTrackIdx < len(activeTracks)-1 {
 				m.selectedTrackIdx++
 			}
-		} else {
+		case SelectIterations:
 			// Navigate iterations
 			activeIterations := []*IterationEntity{}
 			for _, iter := range m.iterations {
@@ -637,24 +651,36 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(activeIterations) > 0 && m.selectedIterationIdx < len(activeIterations)-1 {
 				m.selectedIterationIdx++
 			}
+		case SelectBacklog:
+			// Navigate backlog
+			if len(m.backlogTasks) > 0 && m.selectedBacklogIdx < len(m.backlogTasks)-1 {
+				m.selectedBacklogIdx++
+			}
 		}
 
 	case "k", "up":
-		if m.selectedItemType == SelectTracks {
+		switch m.selectedItemType {
+		case SelectTracks:
 			// Navigate tracks
 			if m.selectedTrackIdx > 0 {
 				m.selectedTrackIdx--
 			}
-		} else {
+		case SelectIterations:
 			// Navigate iterations
 			if m.selectedIterationIdx > 0 {
 				m.selectedIterationIdx--
+			}
+		case SelectBacklog:
+			// Navigate backlog
+			if m.selectedBacklogIdx > 0 {
+				m.selectedBacklogIdx--
 			}
 		}
 
 	// Enter: View details of selected item
 	case "enter":
-		if m.selectedItemType == SelectTracks {
+		switch m.selectedItemType {
+		case SelectTracks:
 			// View track detail
 			activeTracks := []*TrackEntity{}
 			for _, track := range m.tracks {
@@ -665,7 +691,7 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(activeTracks) > 0 && m.selectedTrackIdx < len(activeTracks) {
 				return m, m.loadTrackDetail(activeTracks[m.selectedTrackIdx].ID)
 			}
-		} else {
+		case SelectIterations:
 			// View iteration detail
 			activeIterations := []*IterationEntity{}
 			for _, iter := range m.iterations {
@@ -675,6 +701,11 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			if len(activeIterations) > 0 && m.selectedIterationIdx < len(activeIterations) {
 				return m, m.loadIterationDetail(activeIterations[m.selectedIterationIdx].Number)
+			}
+		case SelectBacklog:
+			// View backlog task detail
+			if len(m.backlogTasks) > 0 && m.selectedBacklogIdx < len(m.backlogTasks) {
+				return m, m.loadTaskDetail(m.backlogTasks[m.selectedBacklogIdx].ID)
 			}
 		}
 
@@ -1026,9 +1057,15 @@ func (m *AppModel) renderRoadmapList() string {
 	// Backlog (only in full view)
 	if m.showFullRoadmap && len(m.backlogTasks) > 0 {
 		s += "\n" + sectionHeaderStyle.Render("Backlog:") + "\n"
-		for _, task := range m.backlogTasks {
-			taskLine := fmt.Sprintf("  %s %s", task.ID, task.Title)
-			s += trackItemStyle.Render(taskLine) + "\n"
+		for idx, task := range m.backlogTasks {
+			var taskLine string
+			if m.selectedItemType == SelectBacklog && idx == m.selectedBacklogIdx {
+				taskLine = fmt.Sprintf("→ %s %s", task.ID, task.Title)
+				s += selectedTrackStyle.Render(taskLine) + "\n"
+			} else {
+				taskLine = fmt.Sprintf("  %s %s", task.ID, task.Title)
+				s += trackItemStyle.Render(taskLine) + "\n"
+			}
 		}
 	}
 
