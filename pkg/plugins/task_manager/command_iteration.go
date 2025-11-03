@@ -609,6 +609,7 @@ type IterationUpdateCommand struct {
 	name        *string
 	goal        *string
 	deliverable *string
+	status      *string
 }
 
 func (c *IterationUpdateCommand) GetName() string {
@@ -620,7 +621,7 @@ func (c *IterationUpdateCommand) GetDescription() string {
 }
 
 func (c *IterationUpdateCommand) GetUsage() string {
-	return "dw task-manager iteration update <number> [--name <name>] [--goal <goal>] [--deliverable <deliverable>]"
+	return "dw task-manager iteration update <number> [--name <name>] [--goal <goal>] [--deliverable <deliverable>] [--status <status>]"
 }
 
 func (c *IterationUpdateCommand) GetHelp() string {
@@ -635,6 +636,7 @@ Flags:
   --name <name>              New iteration name
   --goal <goal>              New iteration goal
   --deliverable <output>     New expected deliverable
+  --status <status>          New status (planned, current, complete)
 
 Examples:
   # Update name
@@ -645,10 +647,15 @@ Examples:
     --name "Sprint 1" \
     --goal "Complete framework"
 
+  # Reset status to planned
+  dw task-manager iteration update 1 --status planned
+
 Notes:
   - At least one flag is required
   - Updated_at timestamp is automatically updated
-  - Cannot change status (use start/complete commands)`
+  - Valid status values: planned, current, complete
+  - Use start/complete commands for typical workflow (recommended)
+  - Direct status updates are for manual corrections/resets`
 }
 
 func (c *IterationUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -673,6 +680,7 @@ func (c *IterationUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.C
 	c.name = nil
 	c.goal = nil
 	c.deliverable = nil
+	c.status = nil
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -694,12 +702,30 @@ func (c *IterationUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.C
 				c.deliverable = &v
 				i++
 			}
+		case "--status":
+			if i+1 < len(args) {
+				v := args[i+1]
+				c.status = &v
+				i++
+			}
 		}
 	}
 
 	// At least one flag must be provided
-	if c.name == nil && c.goal == nil && c.deliverable == nil {
-		return fmt.Errorf("at least one flag is required (--name, --goal, or --deliverable)")
+	if c.name == nil && c.goal == nil && c.deliverable == nil && c.status == nil {
+		return fmt.Errorf("at least one flag is required (--name, --goal, --deliverable, or --status)")
+	}
+
+	// Validate status if provided
+	if c.status != nil {
+		validStatuses := map[string]bool{
+			"planned":  true,
+			"current":  true,
+			"complete": true,
+		}
+		if !validStatuses[*c.status] {
+			return fmt.Errorf("invalid status '%s'; must be one of: planned, current, complete", *c.status)
+		}
 	}
 
 	// Get iteration
@@ -722,6 +748,22 @@ func (c *IterationUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.C
 	if c.deliverable != nil {
 		iteration.Deliverable = *c.deliverable
 	}
+	if c.status != nil {
+		iteration.Status = *c.status
+		// Update timestamps based on status changes
+		now := time.Now().UTC()
+		if *c.status == "current" && iteration.StartedAt == nil {
+			iteration.StartedAt = &now
+		}
+		if *c.status == "complete" && iteration.CompletedAt == nil {
+			iteration.CompletedAt = &now
+		}
+		// Reset timestamps if moving back to planned
+		if *c.status == "planned" {
+			iteration.StartedAt = nil
+			iteration.CompletedAt = nil
+		}
+	}
 	iteration.UpdatedAt = time.Now().UTC()
 
 	// Save to repository
@@ -736,6 +778,7 @@ func (c *IterationUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.C
 	if iteration.Deliverable != "" {
 		fmt.Fprintf(cmdCtx.GetStdout(), "Deliverable:  %s\n", iteration.Deliverable)
 	}
+	fmt.Fprintf(cmdCtx.GetStdout(), "Status:       %s\n", iteration.Status)
 	fmt.Fprintf(cmdCtx.GetStdout(), "Updated:      %s\n", iteration.UpdatedAt.Format(time.RFC3339))
 
 	return nil
