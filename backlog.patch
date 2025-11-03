@@ -1,0 +1,34 @@
+--- a/pkg/plugins/task_manager/tui_models.go
++++ b/pkg/plugins/task_manager/tui_models.go
+@@ -1261,17 +1261,29 @@ func (m *AppModel) renderRoadmapList() string {
+ 		}
+ 	}
+
+-	// Backlog (only in full view)
+-	if m.showFullRoadmap && len(m.backlogTasks) > 0 {
++	// Backlog (always visible when tasks exist)
++	if len(m.backlogTasks) > 0 {
+ 		// Track backlog section position
+ 		m.backlogSectionLine = countLines(s)
+ 		s += "\n" + sectionHeaderStyle.Render(fmt.Sprintf("Backlog (%d):", len(m.backlogTasks))) + "\n"
+ 		for idx, task := range m.backlogTasks {
++			// Get track information for display
++			trackInfo := ""
++			if task.TrackID != "" {
++				track, err := m.repository.GetTrack(m.ctx, task.TrackID)
++				if err == nil && track != nil {
++					trackInfo = fmt.Sprintf(" [%s]", track.ID)
++				}
++			}
++
+ 			var taskLine string
+ 			if m.selectedItemType == SelectBacklog && idx == m.selectedBacklogIdx {
+-				taskLine = fmt.Sprintf("→ %s %s", task.ID, task.Title)
++				taskLine = fmt.Sprintf("→ %s %s%s", task.ID, task.Title, trackInfo)
+ 				s += selectedTrackStyle.Render(taskLine) + "\n"
+ 			} else {
+-				taskLine = fmt.Sprintf("  %s %s", task.ID, task.Title)
++				taskLine = fmt.Sprintf("  %s %s%s", task.ID, task.Title, trackInfo)
+ 				s += trackItemStyle.Render(taskLine) + "\n"
+ 			}
+ 		}

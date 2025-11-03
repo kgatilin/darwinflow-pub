@@ -2273,20 +2273,27 @@ func (m *AppModel) handleACFailInputKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := m.repository.UpdateAC(m.ctx, ac); err != nil {
 				m.logger.Error("Failed to mark AC as failed", "error", err)
 			} else {
-				// Clear input and return to AC list
+				// Clear input and return to previous view
 				m.feedbackInput.SetValue("")
 				m.feedbackInput.Blur()
-				m.currentView = ViewACList
-				// Reload ACs to reflect the change
-				return m, m.loadACs(m.currentTrack.ID)
+				m.currentView = m.previousViewMode
+
+				// Reload data based on previous view
+				if m.previousViewMode == ViewIterationDetail {
+					// Reload iteration detail to refresh AC display
+					return m, m.loadIterationDetail(m.currentIteration.Number)
+				} else {
+					// Reload ACs for track view
+					return m, m.loadACs(m.currentTrack.ID)
+				}
 			}
 		}
 		return m, nil
 	case tea.KeyCtrlC, tea.KeyEsc:
-		// Cancel and return to AC list
+		// Cancel and return to previous view
 		m.feedbackInput.SetValue("")
 		m.feedbackInput.Blur()
-		m.currentView = ViewACList
+		m.currentView = m.previousViewMode
 		return m, nil
 	}
 
