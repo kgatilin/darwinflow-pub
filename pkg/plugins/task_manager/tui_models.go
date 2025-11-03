@@ -642,9 +642,15 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			statusOrder := map[string]int{"todo": 0, "in-progress": 1, "done": 2}
 			return statusOrder[m.iterationTasks[i].Status] < statusOrder[m.iterationTasks[j].Status]
 		})
-		m.selectedIterationTaskIdx = 0 // Reset task selection
-		m.selectedIterationACIdx = 0    // Reset AC selection
-		m.iterationDetailFocusAC = false // Start with tasks focused
+
+		// Only reset selection and focus on initial load (not on reload)
+		if m.currentView != ViewIterationDetail {
+			m.selectedIterationTaskIdx = 0
+			m.selectedIterationACIdx = 0
+			m.iterationDetailFocusAC = false
+		}
+		// Otherwise preserve existing focus and selection state
+
 		m.currentView = ViewIterationDetail
 		m.lastUpdate = time.Now()
 
@@ -1819,6 +1825,12 @@ func (m *AppModel) renderIterationDetail() string {
 		// Track cumulative task index across all status groups
 		taskIdx := 0
 
+		// Determine selected index for tasks (only highlight if focus is on tasks)
+		taskSelectedIdx := -1 // -1 means no highlight
+		if !m.iterationDetailFocusAC {
+			taskSelectedIdx = m.selectedIterationTaskIdx
+		}
+
 		// Render To Do tasks
 		if len(todoTasks) > 0 {
 			s += "\n" + sectionStyle.Render(fmt.Sprintf("To Do (%d)", len(todoTasks))) + "\n"
@@ -1828,7 +1840,7 @@ func (m *AppModel) renderIterationDetail() string {
 				priorityIcon := getPriorityIcon(task.Rank)
 				todoItems = append(todoItems, fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title))
 			}
-			s += renderSelectableList(m.selectedIterationTaskIdx-taskIdx, todoItems, itemStyle, selectedItemStyle)
+			s += renderSelectableList(taskSelectedIdx-taskIdx, todoItems, itemStyle, selectedItemStyle)
 			taskIdx += len(todoTasks)
 		}
 
@@ -1841,7 +1853,7 @@ func (m *AppModel) renderIterationDetail() string {
 				priorityIcon := getPriorityIcon(task.Rank)
 				inProgressItems = append(inProgressItems, fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title))
 			}
-			s += renderSelectableList(m.selectedIterationTaskIdx-taskIdx, inProgressItems, itemStyle, selectedItemStyle)
+			s += renderSelectableList(taskSelectedIdx-taskIdx, inProgressItems, itemStyle, selectedItemStyle)
 			taskIdx += len(inProgressTasks)
 		}
 
@@ -1854,7 +1866,7 @@ func (m *AppModel) renderIterationDetail() string {
 				priorityIcon := getPriorityIcon(task.Rank)
 				doneItems = append(doneItems, fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title))
 			}
-			s += renderSelectableList(m.selectedIterationTaskIdx-taskIdx, doneItems, itemStyle, selectedItemStyle)
+			s += renderSelectableList(taskSelectedIdx-taskIdx, doneItems, itemStyle, selectedItemStyle)
 		}
 	}
 
