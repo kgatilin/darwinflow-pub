@@ -269,6 +269,7 @@ func (c *IterationListCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Com
 type IterationShowCommand struct {
 	Plugin  *TaskManagerPlugin
 	project string
+	full    bool
 }
 
 func (c *IterationShowCommand) GetName() string {
@@ -280,7 +281,7 @@ func (c *IterationShowCommand) GetDescription() string {
 }
 
 func (c *IterationShowCommand) GetUsage() string {
-	return "dw task-manager iteration show <number>"
+	return "dw task-manager iteration show <number> [--full]"
 }
 
 func (c *IterationShowCommand) GetHelp() string {
@@ -292,16 +293,40 @@ with their status breakdown.
 Arguments:
   <number>  Iteration number (required)
 
+Flags:
+  --full    Show full task titles and descriptions (default: truncated)
+
 Examples:
   dw task-manager iteration show 1
-  dw task-manager iteration show 2
+  dw task-manager iteration show 2 --full
 
 Notes:
   - Run 'dw task-manager iteration list' to see all iteration numbers
-  - Task counts show completed/total breakdown`
+  - Task counts show completed/total breakdown
+  - Use --full to see complete task titles and descriptions`
 }
 
 func (c *IterationShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	// Parse flags
+	c.full = false
+	iterationNum := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--full":
+			c.full = true
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		default:
+			if !strings.HasPrefix(args[i], "--") && iterationNum == "" {
+				iterationNum = args[i]
+			}
+		}
+	}
+
 	// Get repository for project
 	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
 	if err != nil {
@@ -310,11 +335,11 @@ func (c *IterationShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Com
 	defer cleanup()
 
 	// Parse iteration number
-	if len(args) == 0 {
+	if iterationNum == "" {
 		return fmt.Errorf("iteration number is required")
 	}
 
-	number, err := strconv.Atoi(args[0])
+	number, err := strconv.Atoi(iterationNum)
 	if err != nil {
 		return fmt.Errorf("invalid iteration number: %v", err)
 	}
@@ -353,31 +378,25 @@ func (c *IterationShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Com
 		fmt.Fprintf(cmdCtx.GetStdout(), "Completed:     %s\n", iteration.CompletedAt.Format(time.RFC3339))
 	}
 
-	// Display task information
+	// Display task information as list blocks
 	fmt.Fprintf(cmdCtx.GetStdout(), "\nTasks: %d total\n", len(iteration.TaskIDs))
 	if len(tasks) > 0 {
-		fmt.Fprintf(cmdCtx.GetStdout(), "\n%-20s %-30s %-12s\n", "ID", "Title", "Status")
-		fmt.Fprintf(cmdCtx.GetStdout(), "%s %s %s\n",
-			strings.Repeat("-", 20),
-			strings.Repeat("-", 30),
-			strings.Repeat("-", 12),
-		)
-
 		completedCount := 0
 		for _, task := range tasks {
-			title := task.Title
-			if len(title) > 30 {
-				title = title[:27] + "..."
-			}
 			if task.Status == "done" {
 				completedCount++
 			}
-			fmt.Fprintf(cmdCtx.GetStdout(), "%-20s %-30s %-12s\n",
-				task.ID,
-				title,
-				task.Status,
-			)
+
+			// Display as list block
+			fmt.Fprintf(cmdCtx.GetStdout(), "\n- %s: %s\n", task.ID, task.Title)
+			fmt.Fprintf(cmdCtx.GetStdout(), "  Status: %s\n", task.Status)
+
+			// Show description if --full flag is set
+			if c.full && task.Description != "" {
+				fmt.Fprintf(cmdCtx.GetStdout(), "  Description: %s\n", task.Description)
+			}
 		}
+
 		fmt.Fprintf(cmdCtx.GetStdout(), "\nProgress: %d/%d tasks completed (%.0f%%)\n",
 			completedCount,
 			len(tasks),
@@ -397,6 +416,7 @@ func (c *IterationShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Com
 type IterationCurrentCommand struct {
 	Plugin  *TaskManagerPlugin
 	project string
+	full    bool
 }
 
 func (c *IterationCurrentCommand) GetName() string {
@@ -408,24 +428,44 @@ func (c *IterationCurrentCommand) GetDescription() string {
 }
 
 func (c *IterationCurrentCommand) GetUsage() string {
-	return "dw task-manager iteration current"
+	return "dw task-manager iteration current [--full]"
 }
 
 func (c *IterationCurrentCommand) GetHelp() string {
 	return `Displays the current active iteration (status: current).
 
 If no iteration is currently active, provides guidance on how to start one.
+By default, only shows non-completed tasks.
+
+Flags:
+  --full    Show task descriptions (default: only titles)
 
 Examples:
   dw task-manager iteration current
+  dw task-manager iteration current --full
 
 Notes:
   - Only one iteration can be current at a time
+  - Only non-completed tasks (todo, in-progress) are shown by default
   - Start an iteration with 'dw task-manager iteration start <number>'
   - Complete current iteration with 'dw task-manager iteration complete'`
 }
 
 func (c *IterationCurrentCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	// Parse flags
+	c.full = false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--full":
+			c.full = true
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		}
+	}
+
 	// Get repository for project
 	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
 	if err != nil {
@@ -505,7 +545,18 @@ func (c *IterationCurrentCommand) Execute(ctx context.Context, cmdCtx pluginsdk.
 		return fmt.Errorf("failed to get iteration tasks: %w", err)
 	}
 
-	// Display current iteration details (similar to show)
+	// Filter non-completed tasks (todo, in-progress only)
+	var activeTasks []*TaskEntity
+	completedCount := 0
+	for _, task := range tasks {
+		if task.Status == "done" {
+			completedCount++
+		} else {
+			activeTasks = append(activeTasks, task)
+		}
+	}
+
+	// Display current iteration details
 	fmt.Fprintf(cmdCtx.GetStdout(), "Current Iteration: #%d: %s\n", iteration.Number, iteration.Name)
 	fmt.Fprintf(cmdCtx.GetStdout(), "===============================\n")
 	fmt.Fprintf(cmdCtx.GetStdout(), "Goal:          %s\n", iteration.Goal)
@@ -520,36 +571,27 @@ func (c *IterationCurrentCommand) Execute(ctx context.Context, cmdCtx pluginsdk.
 		fmt.Fprintf(cmdCtx.GetStdout(), "Started:       %s\n", iteration.StartedAt.Format(time.RFC3339))
 	}
 
-	// Display task information
-	fmt.Fprintf(cmdCtx.GetStdout(), "\nTasks: %d total\n", len(iteration.TaskIDs))
-	if len(tasks) > 0 {
-		fmt.Fprintf(cmdCtx.GetStdout(), "\n%-20s %-30s %-12s\n", "ID", "Title", "Status")
-		fmt.Fprintf(cmdCtx.GetStdout(), "%s %s %s\n",
-			strings.Repeat("-", 20),
-			strings.Repeat("-", 30),
-			strings.Repeat("-", 12),
-		)
+	// Display active (non-completed) tasks
+	fmt.Fprintf(cmdCtx.GetStdout(), "\nActive Tasks: %d (of %d total)\n", len(activeTasks), len(tasks))
+	if len(activeTasks) > 0 {
+		for _, task := range activeTasks {
+			// Display as list block
+			fmt.Fprintf(cmdCtx.GetStdout(), "\n- %s: %s\n", task.ID, task.Title)
+			fmt.Fprintf(cmdCtx.GetStdout(), "  Status: %s\n", task.Status)
 
-		completedCount := 0
-		for _, task := range tasks {
-			title := task.Title
-			if len(title) > 30 {
-				title = title[:27] + "..."
+			// Show description if --full flag is set
+			if c.full && task.Description != "" {
+				fmt.Fprintf(cmdCtx.GetStdout(), "  Description: %s\n", task.Description)
 			}
-			if task.Status == "done" {
-				completedCount++
-			}
-			fmt.Fprintf(cmdCtx.GetStdout(), "%-20s %-30s %-12s\n",
-				task.ID,
-				title,
-				task.Status,
-			)
 		}
+
 		fmt.Fprintf(cmdCtx.GetStdout(), "\nProgress: %d/%d tasks completed (%.0f%%)\n",
 			completedCount,
 			len(tasks),
 			float64(completedCount)/float64(len(tasks))*100,
 		)
+	} else if len(tasks) > 0 {
+		fmt.Fprintf(cmdCtx.GetStdout(), "All tasks completed! Use 'dw task-manager iteration complete %d' to finish this iteration.\n", iteration.Number)
 	} else {
 		fmt.Fprintf(cmdCtx.GetStdout(), "No tasks in current iteration.\n")
 	}

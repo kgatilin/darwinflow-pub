@@ -436,9 +436,9 @@ func (m *AppModel) loadFullRoadmapData() tea.Cmd {
 			trackTasks[task.TrackID] = append(trackTasks[task.TrackID], task)
 		}
 
-		// Collect backlog tasks (tasks not assigned to any iteration)
+		// Collect backlog tasks (tasks not assigned to any iteration, excluding 'done' status)
 		for _, task := range allTasks {
-			if !assignedTaskIDs[task.ID] {
+			if !assignedTaskIDs[task.ID] && task.Status != "done" {
 				backlogTasks = append(backlogTasks, task)
 			}
 		}
@@ -763,9 +763,78 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "end":
 		m.roadmapViewport.GotoBottom()
 	case "ctrl+j":
-		m.roadmapViewport.LineDown(3)
+		m.roadmapViewport.ScrollDown(3)
 	case "ctrl+k":
-		m.roadmapViewport.LineUp(3)
+		m.roadmapViewport.ScrollUp(3)
+
+	// Iteration reordering with shift+up/down
+	case "shift+down":
+		if m.selectedItemType == SelectIterations {
+			// Get active iterations
+			activeIterations := []*IterationEntity{}
+			for _, iter := range m.iterations {
+				if iter.Status != "complete" {
+					activeIterations = append(activeIterations, iter)
+				}
+			}
+
+			// Move iteration down (increase rank)
+			if len(activeIterations) > 0 && m.selectedIterationIdx < len(activeIterations)-1 {
+				currentIter := activeIterations[m.selectedIterationIdx]
+				nextIter := activeIterations[m.selectedIterationIdx+1]
+
+				// Swap ranks
+				currentIter.Rank, nextIter.Rank = nextIter.Rank, currentIter.Rank
+				currentIter.UpdatedAt = time.Now()
+				nextIter.UpdatedAt = time.Now()
+
+				// Update both iterations in repository
+				if err := m.repository.UpdateIteration(m.ctx, currentIter); err == nil {
+					if err := m.repository.UpdateIteration(m.ctx, nextIter); err == nil {
+						// Move selection down
+						m.selectedIterationIdx++
+						// Reload roadmap to reflect changes
+						return m, func() tea.Msg {
+							return m.loadRoadmap()
+						}
+					}
+				}
+			}
+		}
+
+	case "shift+up":
+		if m.selectedItemType == SelectIterations {
+			// Get active iterations
+			activeIterations := []*IterationEntity{}
+			for _, iter := range m.iterations {
+				if iter.Status != "complete" {
+					activeIterations = append(activeIterations, iter)
+				}
+			}
+
+			// Move iteration up (decrease rank)
+			if len(activeIterations) > 0 && m.selectedIterationIdx > 0 {
+				currentIter := activeIterations[m.selectedIterationIdx]
+				prevIter := activeIterations[m.selectedIterationIdx-1]
+
+				// Swap ranks
+				currentIter.Rank, prevIter.Rank = prevIter.Rank, currentIter.Rank
+				currentIter.UpdatedAt = time.Now()
+				prevIter.UpdatedAt = time.Now()
+
+				// Update both iterations in repository
+				if err := m.repository.UpdateIteration(m.ctx, currentIter); err == nil {
+					if err := m.repository.UpdateIteration(m.ctx, prevIter); err == nil {
+						// Move selection up
+						m.selectedIterationIdx--
+						// Reload roadmap to reflect changes
+						return m, func() tea.Msg {
+							return m.loadRoadmap()
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return m, nil

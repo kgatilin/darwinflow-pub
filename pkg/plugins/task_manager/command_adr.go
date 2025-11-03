@@ -353,6 +353,7 @@ type ADRUpdateCommand struct {
 	decision     string
 	consequences string
 	alternatives string
+	status       string
 }
 
 func (c *ADRUpdateCommand) GetName() string {
@@ -364,7 +365,7 @@ func (c *ADRUpdateCommand) GetDescription() string {
 }
 
 func (c *ADRUpdateCommand) GetUsage() string {
-	return "dw task-manager adr update <adr-id> [--title|--context|--decision|--consequences|--alternatives \"...\"]"
+	return "dw task-manager adr update <adr-id> [--title|--context|--decision|--consequences|--alternatives|--status \"...\"]"
 }
 
 func (c *ADRUpdateCommand) GetHelp() string {
@@ -372,9 +373,25 @@ func (c *ADRUpdateCommand) GetHelp() string {
 
 At least one field must be provided.
 
+Flags:
+  --title <title>                New title
+  --context <context>            New context
+  --decision <decision>          New decision
+  --consequences <consequences>  New consequences
+  --alternatives <alternatives>  New alternatives
+  --status <status>              New status (proposed, accepted, deprecated, superseded)
+
+Note: For superseded status, use 'adr supersede' command instead (requires --superseded-by flag)
+
 Examples:
   # Update title
-  dw task-manager adr update DW-adr-1 --title "New title"`
+  dw task-manager adr update DW-adr-1 --title "New title"
+
+  # Update status to accepted
+  dw task-manager adr update DW-adr-1 --status accepted
+
+  # Update multiple fields
+  dw task-manager adr update DW-adr-1 --title "New title" --status accepted`
 }
 
 func (c *ADRUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
@@ -411,6 +428,11 @@ func (c *ADRUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 				c.alternatives = args[i+1]
 				i++
 			}
+		case "--status":
+			if i+1 < len(args) {
+				c.status = args[i+1]
+				i++
+			}
 		default:
 			if !strings.HasPrefix(args[i], "--") && c.adrID == "" {
 				c.adrID = args[i]
@@ -420,6 +442,26 @@ func (c *ADRUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 
 	if c.adrID == "" {
 		return fmt.Errorf("ADR ID is required")
+	}
+
+	// Validate status if provided
+	if c.status != "" {
+		validStatuses := []string{"proposed", "accepted", "deprecated", "superseded"}
+		valid := false
+		for _, s := range validStatuses {
+			if c.status == s {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("invalid status: %s (must be one of: proposed, accepted, deprecated, superseded)", c.status)
+		}
+
+		// Warn if trying to set superseded status without proper command
+		if c.status == "superseded" {
+			return fmt.Errorf("to mark ADR as superseded, use 'dw task-manager adr supersede %s --by <new-adr-id>' instead", c.adrID)
+		}
 	}
 
 	// Get repository for project
@@ -451,6 +493,9 @@ func (c *ADRUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	if c.alternatives != "" {
 		adr.Alternatives = c.alternatives
 	}
+	if c.status != "" {
+		adr.Status = c.status
+	}
 
 	adr.UpdatedAt = GetCurrentTime()
 
@@ -462,6 +507,9 @@ func (c *ADRUpdateCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 	// Event is emitted by the repository
 
 	fmt.Printf("Updated ADR %s\n", c.adrID)
+	if c.status != "" {
+		fmt.Printf("Status: %s\n", c.status)
+	}
 
 	return nil
 }

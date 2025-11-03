@@ -292,6 +292,8 @@ type TrackShowCommand struct {
 	Plugin  *TaskManagerPlugin
 	project string
 	trackID string
+	showAll bool
+	full    bool
 }
 
 func (c *TrackShowCommand) GetName() string {
@@ -303,7 +305,7 @@ func (c *TrackShowCommand) GetDescription() string {
 }
 
 func (c *TrackShowCommand) GetUsage() string {
-	return "dw task-manager track show <track-id>"
+	return "dw task-manager track show <track-id> [--all] [--full]"
 }
 
 func (c *TrackShowCommand) GetHelp() string {
@@ -312,23 +314,56 @@ func (c *TrackShowCommand) GetHelp() string {
 Arguments:
   <track-id>  The ID of the track to display (required)
 
+Flags:
+  --all       Show all tasks including completed (default: smart filter based on track status)
+  --full      Show task descriptions (default: only titles)
+
+Smart filtering (when --all is not specified):
+  - Active tracks (not-started, in-progress, blocked, waiting): show only non-completed tasks
+  - Complete tracks: show all tasks
+
 Examples:
   dw task-manager track show track-plugin-system
+  dw task-manager track show track-plugin-system --all
+  dw task-manager track show track-plugin-system --full
 
 Output:
   Track details including:
   - Basic info (ID, title, description)
-  - Status and priority
+  - Status and rank
   - Dependencies (tracks this depends on)
+  - Tasks (with smart filtering)
   - Created/Updated timestamps`
 }
 
 func (c *TrackShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	// Parse flags
+	c.showAll = false
+	c.full = false
+	c.trackID = ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all":
+			c.showAll = true
+		case "--full":
+			c.full = true
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		default:
+			if !strings.HasPrefix(args[i], "--") && c.trackID == "" {
+				c.trackID = args[i]
+			}
+		}
+	}
+
 	// Get track ID from arguments
-	if len(args) == 0 {
+	if c.trackID == "" {
 		return fmt.Errorf("track ID is required")
 	}
-	c.trackID = args[0]
 
 	// Get repository for project
 	repo, cleanup, err := c.Plugin.getRepositoryForProject(c.project)
@@ -367,6 +402,55 @@ func (c *TrackShowCommand) Execute(ctx context.Context, cmdCtx pluginsdk.Command
 		}
 	} else {
 		fmt.Fprintf(cmdCtx.GetStdout(), "  Dependencies: none\n")
+	}
+
+	// Get tasks for this track
+	tasks, err := repo.ListTasks(ctx, TaskFilters{TrackID: c.trackID})
+	if err != nil {
+		return fmt.Errorf("failed to get tasks: %w", err)
+	}
+
+	// Apply smart filtering if --all is not specified
+	var displayTasks []*TaskEntity
+	if c.showAll {
+		displayTasks = tasks
+	} else {
+		// Smart filtering: for active tracks, show only non-completed tasks; for complete tracks, show all
+		if track.Status == "complete" {
+			displayTasks = tasks
+		} else {
+			for _, task := range tasks {
+				if task.Status != "done" {
+					displayTasks = append(displayTasks, task)
+				}
+			}
+		}
+	}
+
+	// Display tasks
+	fmt.Fprintf(cmdCtx.GetStdout(), "\nTasks: %d", len(displayTasks))
+	if !c.showAll && track.Status != "complete" {
+		fmt.Fprintf(cmdCtx.GetStdout(), " (non-completed, use --all to show all %d tasks)", len(tasks))
+	} else if !c.showAll && track.Status == "complete" {
+		fmt.Fprintf(cmdCtx.GetStdout(), " (all tasks shown for completed track)")
+	}
+	fmt.Fprintf(cmdCtx.GetStdout(), "\n")
+
+	if len(displayTasks) > 0 {
+		for _, task := range displayTasks {
+			// Display as list block
+			fmt.Fprintf(cmdCtx.GetStdout(), "\n- %s: %s\n", task.ID, task.Title)
+			fmt.Fprintf(cmdCtx.GetStdout(), "  Status: %s\n", task.Status)
+
+			// Show description if --full flag is set
+			if c.full && task.Description != "" {
+				fmt.Fprintf(cmdCtx.GetStdout(), "  Description: %s\n", task.Description)
+			}
+		}
+	} else if len(tasks) == 0 {
+		fmt.Fprintf(cmdCtx.GetStdout(), "  No tasks in this track\n")
+	} else {
+		fmt.Fprintf(cmdCtx.GetStdout(), "  All tasks completed\n")
 	}
 
 	return nil
