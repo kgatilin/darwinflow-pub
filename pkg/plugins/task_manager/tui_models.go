@@ -1830,14 +1830,20 @@ func (m *AppModel) renderIterationDetail() string {
 			s += "\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214")).Render(fmt.Sprintf("%s: %s", task.ID, task.Title)) + "\n"
 			for _, ac := range acs {
 				statusIcon := getACStatusIcon(string(ac.Status))
-				// Truncate description if too long
-				desc := ac.Description
-				if len(desc) > 80 {
-					desc = desc[:77] + "..."
-				}
 
-				// Build AC line
-				acLine := fmt.Sprintf("%s [%s] %s", statusIcon, ac.ID, desc)
+				// Build AC line with prefix (icon and ID)
+				prefix := fmt.Sprintf("%s [%s] ", statusIcon, ac.ID)
+
+				// Wrap description to fit available width
+				// Account for prefix length + left padding (2) + margin (8)
+				descWidth := m.width - len(prefix) - 10
+				if descWidth < 20 {
+					descWidth = 20 // minimum width
+				}
+				wrappedDesc := lipgloss.NewStyle().Width(descWidth).Render(ac.Description)
+
+				// Combine prefix with wrapped description
+				acLine := prefix + wrappedDesc
 
 				// Apply selection style if this AC is selected and in focus mode
 				if m.iterationDetailFocusAC && acIdx == m.selectedIterationACIdx {
