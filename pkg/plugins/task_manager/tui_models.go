@@ -238,7 +238,7 @@ func (m AppModel) getRoadmapListHotkeys() []HotkeyGroup {
 		viewMode = "Show Details"
 	}
 
-	return []HotkeyGroup{
+	groups := []HotkeyGroup{
 		{
 			Name: "Navigation",
 			Hotkeys: []Hotkey{
@@ -265,6 +265,15 @@ func (m AppModel) getRoadmapListHotkeys() []HotkeyGroup {
 			},
 		},
 	}
+
+	// Add reordering hotkeys when iterations are selected
+	if m.selectedItemType == SelectIterations {
+		groups[0].Hotkeys = append(groups[0].Hotkeys,
+			Hotkey{Keys: []string{"Shift+K", "Shift+J"}, Description: "Reorder Iteration"},
+		)
+	}
+
+	return groups
 }
 
 // formatHotkeyGroups formats hotkey groups for display, with multi-line wrapping
@@ -767,8 +776,8 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+k":
 		m.roadmapViewport.ScrollUp(3)
 
-	// Iteration reordering with shift+up/down
-	case "shift+down":
+	// Iteration reordering with shift+up/down (also support J/K for reordering)
+	case "shift+down", "J":
 		if m.selectedItemType == SelectIterations {
 			// Get active iterations
 			activeIterations := []*IterationEntity{}
@@ -802,7 +811,7 @@ func (m *AppModel) handleRoadmapListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case "shift+up":
+	case "shift+up", "K":
 		if m.selectedItemType == SelectIterations {
 			// Get active iterations
 			activeIterations := []*IterationEntity{}
@@ -1189,7 +1198,7 @@ func (m *AppModel) renderRoadmapList() string {
 	if m.showFullRoadmap && len(m.backlogTasks) > 0 {
 		// Track backlog section position
 		m.backlogSectionLine = countLines(s)
-		s += "\n" + sectionHeaderStyle.Render("Backlog:") + "\n"
+		s += "\n" + sectionHeaderStyle.Render(fmt.Sprintf("Backlog (%d):", len(m.backlogTasks))) + "\n"
 		for idx, task := range m.backlogTasks {
 			var taskLine string
 			if m.selectedItemType == SelectBacklog && idx == m.selectedBacklogIdx {

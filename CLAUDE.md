@@ -145,6 +145,73 @@ dw task-manager track list-missing-adrs
 - Use `dw task-manager iteration current` to stay focused
 - Check track dependencies before starting new tracks
 
+### Writing Good Acceptance Criteria
+
+**Core Principle**: Acceptance criteria must describe **end-user verifiable functionality** that focuses on **core business logic**, not implementation details or edge cases.
+
+**Good AC Characteristics**:
+- ✅ Describes WHAT the user can verify, not HOW it's implemented
+- ✅ Focuses on observable behavior and outcomes
+- ✅ Can be tested/verified by an end user
+- ✅ Addresses core business logic
+- ✅ Written from user perspective
+
+**Bad AC Characteristics**:
+- ❌ Implementation details (repositories, services, internal methods)
+- ❌ Edge cases and technical minutiae
+- ❌ Things only developers care about
+- ❌ Internal code structure or architecture
+
+**Examples**:
+
+Good ACs:
+- ✅ "User can export session data to CSV format"
+- ✅ "Command displays error message when file not found"
+- ✅ "TUI shows task status with color coding"
+- ✅ "Testing instructions are saved and displayed in AC details"
+
+Bad ACs:
+- ❌ "ExportRepository saves data to database"
+- ❌ "AcceptanceCriterionRepository updated to save and retrieve testing_instructions field"
+- ❌ "Service validates input parameters"
+- ❌ "Error handling covers nil pointer edge case"
+
+**Testing Instructions**: When adding acceptance criteria, include step-by-step testing instructions that allow anyone to verify the criterion is met.
+
+### Task Granularity
+
+**Core Principle**: If you cannot write end-user verifiable acceptance criteria for a task, the task is likely **too granular** and should be merged into a larger, user-facing task.
+
+**Good Task Granularity**:
+- ✅ Represents a complete user-facing feature or capability
+- ✅ Has at least 3-5 end-user verifiable acceptance criteria
+- ✅ Delivers observable value to the end user
+- ✅ Can be demonstrated and tested independently
+
+**Too Granular (merge into larger task)**:
+- ❌ "Create X entity" - implementation detail, merge into command that uses it
+- ❌ "Add database migration" - implementation detail, happens as part of feature
+- ❌ "Define X interface" - implementation detail, merge into service that implements it
+- ❌ "Add X field to entity" - implementation detail, merge into feature that uses it
+
+**Examples**:
+
+Good Tasks:
+- ✅ "Add task validation and comment commands" (includes entity creation, repository, commands)
+- ✅ "Implement iteration locking workflow" (includes status fields, entities, commands)
+- ✅ "Show iteration membership in task details" (includes repository method, CLI, TUI)
+
+Too Granular (should be merged):
+- ❌ "Create TaskComment entity" → Merge into "Add task validation commands"
+- ❌ "Database migration for task planning" → Merge into "Add task planning commands"
+- ❌ "Add iteration status fields" → Merge into "Add iteration locking commands"
+
+**Guidelines**:
+- Tasks should represent **features**, not implementation steps
+- Implementation details (entities, migrations, repositories) are part of feature delivery
+- Each task should answer: "What can the user now do that they couldn't before?"
+- If the answer is "nothing visible", the task is too granular
+
 ---
 
 ## Package Structure
