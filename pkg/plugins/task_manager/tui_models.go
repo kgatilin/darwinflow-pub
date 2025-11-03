@@ -941,6 +941,23 @@ func countLines(s string) int {
 	return strings.Count(s, "\n") + 1
 }
 
+// renderSelectableList renders a list of items with standardized selection highlighting
+// selectedIdx: index of selected item (-1 for no selection)
+// items: slice of strings to display (already formatted with icons, text, etc.)
+// unselectedStyle: style for normal items
+// selectedStyle: style for selected item
+func renderSelectableList(selectedIdx int, items []string, unselectedStyle, selectedStyle lipgloss.Style) string {
+	var result string
+	for i, item := range items {
+		if i == selectedIdx {
+			result += selectedStyle.Render("→ "+item) + "\n"
+		} else {
+			result += unselectedStyle.Render("  "+item) + "\n"
+		}
+	}
+	return result
+}
+
 // renderRoadmapList renders the roadmap overview screen
 func (m *AppModel) renderRoadmapList() string {
 	titleStyle := lipgloss.NewStyle().
@@ -1425,12 +1442,6 @@ func (m *AppModel) renderIterationDetail() string {
 		Italic(true).
 		MarginBottom(1)
 
-	selectedStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("240")).
-		Foreground(lipgloss.Color("229"))
-
-	contentStyle := lipgloss.NewStyle()
-
 	sectionStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("86"))
@@ -1471,11 +1482,10 @@ func (m *AppModel) renderIterationDetail() string {
 	if len(m.iterationTasks) == 0 {
 		s += subtitleStyle.Render("  No tasks in this iteration.") + "\n"
 	} else {
-		// Group tasks by status
+		// Separate tasks by status
 		todoTasks := []*TaskEntity{}
 		inProgressTasks := []*TaskEntity{}
 		doneTasks := []*TaskEntity{}
-
 		for _, task := range m.iterationTasks {
 			switch task.Status {
 			case "todo":
@@ -1498,49 +1508,58 @@ func (m *AppModel) renderIterationDetail() string {
 		s += m.renderProgressBar(progress, 40)
 		s += "\n\n"
 
-		// Task breakdown with selection tracking
-		taskIdx := 0 // Track cumulative task index across all statuses
+		// Define styles for list rendering
+		itemStyle := lipgloss.NewStyle().PaddingLeft(2)
+		selectedItemStyle := lipgloss.NewStyle().
+			PaddingLeft(2).
+			Background(lipgloss.Color("240")).
+			Foreground(lipgloss.Color("229"))
 
+		// Track cumulative task index across all status groups
+		taskIdx := 0
+
+		// Render To Do tasks
 		if len(todoTasks) > 0 {
 			s += "\n" + sectionStyle.Render(fmt.Sprintf("To Do (%d)", len(todoTasks))) + "\n"
+			var todoItems []string
 			for _, task := range todoTasks {
-				if taskIdx == m.selectedIterationTaskIdx {
-					s += selectedStyle.Render(fmt.Sprintf("  → %s\n", task.Title))
-				} else {
-					s += contentStyle.Render(fmt.Sprintf("  ○ %s\n", task.Title))
-				}
-				taskIdx++
+				statusIcon := getStatusIcon(task.Status)
+				priorityIcon := getPriorityIcon(task.Rank)
+				todoItems = append(todoItems, fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title))
 			}
+			s += renderSelectableList(m.selectedIterationTaskIdx-taskIdx, todoItems, itemStyle, selectedItemStyle)
+			taskIdx += len(todoTasks)
 		}
 
+		// Render In Progress tasks
 		if len(inProgressTasks) > 0 {
 			s += "\n" + sectionStyle.Render(fmt.Sprintf("In Progress (%d)", len(inProgressTasks))) + "\n"
+			var inProgressItems []string
 			for _, task := range inProgressTasks {
-				if taskIdx == m.selectedIterationTaskIdx {
-					s += selectedStyle.Render(fmt.Sprintf("  → %s\n", task.Title))
-				} else {
-					s += contentStyle.Render(fmt.Sprintf("  → %s\n", task.Title))
-				}
-				taskIdx++
+				statusIcon := getStatusIcon(task.Status)
+				priorityIcon := getPriorityIcon(task.Rank)
+				inProgressItems = append(inProgressItems, fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title))
 			}
+			s += renderSelectableList(m.selectedIterationTaskIdx-taskIdx, inProgressItems, itemStyle, selectedItemStyle)
+			taskIdx += len(inProgressTasks)
 		}
 
+		// Render Done tasks
 		if len(doneTasks) > 0 {
 			s += "\n" + sectionStyle.Render(fmt.Sprintf("Done (%d)", len(doneTasks))) + "\n"
+			var doneItems []string
 			for _, task := range doneTasks {
-				if taskIdx == m.selectedIterationTaskIdx {
-					s += selectedStyle.Render(fmt.Sprintf("  → %s\n", task.Title))
-				} else {
-					s += contentStyle.Render(fmt.Sprintf("  ✓ %s\n", task.Title))
-				}
-				taskIdx++
+				statusIcon := getStatusIcon(task.Status)
+				priorityIcon := getPriorityIcon(task.Rank)
+				doneItems = append(doneItems, fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title))
 			}
+			s += renderSelectableList(m.selectedIterationTaskIdx-taskIdx, doneItems, itemStyle, selectedItemStyle)
 		}
 	}
 
 	// Help
 	s += "\n"
-	s += helpStyle.Render("Navigation: j/k or ↑/↓: Select task | Enter: View task details | esc: Back to iteration list | q: Quit")
+	s += helpStyle.Render("j/k/↑/↓: Navigate | Enter: View Details | esc: Back | q: Quit")
 
 	return s
 }
