@@ -3,6 +3,7 @@ package task_manager
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -624,6 +625,12 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.currentIteration = msg.Iteration
 		m.iterationTasks = msg.Tasks
+		// Sort tasks by status to match display order (todo, in-progress, done)
+		// This ensures the selection index matches the visual order
+		sort.SliceStable(m.iterationTasks, func(i, j int) bool {
+			statusOrder := map[string]int{"todo": 0, "in-progress": 1, "done": 2}
+			return statusOrder[m.iterationTasks[i].Status] < statusOrder[m.iterationTasks[j].Status]
+		})
 		m.selectedIterationTaskIdx = 0 // Reset selection
 		m.currentView = ViewIterationDetail
 		m.lastUpdate = time.Now()
