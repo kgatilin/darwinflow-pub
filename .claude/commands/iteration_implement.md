@@ -87,7 +87,47 @@ dw task-manager iteration start $TARGET_ITERATION
 ```
 You are the planning agent for iteration [iteration-number or iteration-id].
 
-## Step 1: Gather Iteration Context
+## Step 1: Explore Codebase Architecture
+
+**Before planning**, use the Task tool with Explore agent to understand the codebase context.
+
+Based on iteration scope (read iteration details first), explore relevant areas:
+
+**For new features/commands**:
+- Explore similar existing implementations
+- Understand current patterns and conventions
+- Find related domain models and repositories
+
+**For refactoring/changes**:
+- Explore the code being modified
+- Understand current architecture and dependencies
+- Find test patterns in use
+
+**Example exploration**:
+```
+Use Task tool with:
+- subagent_type: "Explore"
+- description: "Explore [relevant area] architecture"
+- prompt: "Explore the [package/area] to understand [what you need to know].
+
+          Focus on:
+          - [Specific aspect 1]
+          - [Specific aspect 2]
+          - [Specific aspect 3]
+
+          Thoroughness: very thorough"
+```
+
+**Thoroughness guidance**:
+- Simple iterations (1-2 small tasks): "quick" or "medium"
+- Moderate iterations (3-4 tasks, new features): "medium" or "very thorough"
+- Complex iterations (5+ tasks, architectural changes): "very thorough"
+
+You may run **multiple explorations** for different areas if needed.
+
+**Synthesize exploration findings** before creating the plan.
+
+## Step 2: Gather Iteration Context
 
 Execute these commands to get complete iteration information:
 
@@ -104,15 +144,15 @@ Parse the output to understand:
 - All tasks in scope (IDs, titles, descriptions, status)
 - All acceptance criteria (descriptions, testing instructions, verification status)
 
-## Step 2: Your Mission
+## Step 3: Synthesize and Plan
 
-Create a comprehensive implementation plan that:
+Using **both exploration findings and iteration details**, create a comprehensive implementation plan that:
 
 1. **Analyzes all tasks** and their acceptance criteria
 2. **Decomposes into implementation phases** (each phase should fit in agent context)
 3. **Identifies dependencies** between phases
 4. **Marks parallel opportunities** (which phases can run concurrently)
-5. **Applies clean architecture principles** (follow DarwinFlow CLAUDE.md patterns)
+5. **Applies clean architecture principles** (follow DarwinFlow CLAUDE.md patterns, incorporate patterns from exploration)
 6. **Ensures testability** (each phase should have clear verification steps)
 
 ## Architecture Context
@@ -159,7 +199,8 @@ Return:
 - Any risks or concerns
 
 Think deeply about:
-- Clean architecture boundaries
+- Clean architecture boundaries (informed by exploration)
+- Existing patterns to follow (from exploration findings)
 - Test strategy for each phase
 - Minimal essential tests (don't over-test)
 - Parallel execution opportunities

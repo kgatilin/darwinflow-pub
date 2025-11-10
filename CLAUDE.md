@@ -154,34 +154,62 @@ dw task-manager track list-missing-adrs
 
 **Core Principle**: Acceptance criteria must describe **end-user verifiable functionality** that focuses on **core business logic**, not implementation details or edge cases.
 
+**Command Structure**:
+```bash
+dw task-manager ac add <task-id> \
+  --description "What must be verified (end-user observable)" \
+  --testing-instructions "Step-by-step instructions to verify"
+```
+
+**CRITICAL**: Use separate fields:
+- `--description`: The acceptance criterion itself (WHAT needs to be verified)
+- `--testing-instructions`: Step-by-step instructions (HOW to verify it)
+
 **Good AC Characteristics**:
 - ✅ Describes WHAT the user can verify, not HOW it's implemented
 - ✅ Focuses on observable behavior and outcomes
 - ✅ Can be tested/verified by an end user
 - ✅ Addresses core business logic
 - ✅ Written from user perspective
+- ✅ Testing instructions in separate field with numbered steps
 
 **Bad AC Characteristics**:
 - ❌ Implementation details (repositories, services, internal methods)
 - ❌ Edge cases and technical minutiae
 - ❌ Things only developers care about
 - ❌ Internal code structure or architecture
+- ❌ Testing instructions mixed into description field
 
 **Examples**:
 
-Good ACs:
-- ✅ "User can export session data to CSV format"
-- ✅ "Command displays error message when file not found"
-- ✅ "TUI shows task status with color coding"
-- ✅ "Testing instructions are saved and displayed in AC details"
+Good AC with proper separation:
+```bash
+dw task-manager ac add TM-task-X \
+  --description "Domain layer has 90%+ test coverage with all tests passing" \
+  --testing-instructions "1. Run: cd pkg/plugins/task_manager/domain
+2. Run: go test ./... -coverprofile=coverage.out
+3. Run: go tool cover -func=coverage.out | grep total
+4. Verify: total coverage >= 90%
+5. Run: go test ./... -v
+6. Verify: All tests pass with zero failures"
+```
 
-Bad ACs:
-- ❌ "ExportRepository saves data to database"
-- ❌ "AcceptanceCriterionRepository updated to save and retrieve testing_instructions field"
-- ❌ "Service validates input parameters"
-- ❌ "Error handling covers nil pointer edge case"
+Bad AC (everything in description):
+```bash
+dw task-manager ac add TM-task-X \
+  --description "Domain layer has 90%+ test coverage
 
-**Testing Instructions**: When adding acceptance criteria, include step-by-step testing instructions that allow anyone to verify the criterion is met.
+Testing instructions:
+1. Run: go test ./...
+2. Verify coverage >= 90%"
+```
+
+**Testing Instructions Best Practices**:
+- Start each step with a number
+- Use exact commands (copy-paste ready)
+- Include verification steps ("Verify: X should show Y")
+- Make it reproducible by anyone
+- Focus on observable outcomes, not internal state
 
 ### Task Granularity
 
