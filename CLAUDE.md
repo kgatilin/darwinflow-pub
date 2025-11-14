@@ -100,59 +100,78 @@ dw task-manager ac failed --iteration 11       # Filter by iteration
 # 1. Create a new track
 dw task-manager track create --title "..." --description "..." --rank 100
 
-# 2. Create ADR for the track (REQUIRED before implementation)
-dw task-manager adr create <track-id> \
-  --title "..." \
-  --context "..." \
-  --decision "..." \
-  --consequences "..." \
-  --alternatives "..."
+# 2. Create ADR document for the track (RECOMMENDED before implementation)
+dw task-manager doc create \
+  --title "ADR: ..." \
+  --type adr \
+  --content "# Context\n...\n\n# Decision\n...\n\n# Consequences\n..." \
+  --track <track-id>
 
-# 3. Update ADR status to 'accepted' after review
-dw task-manager adr update <adr-id> --status accepted
+# Or from file
+dw task-manager doc create \
+  --title "ADR: ..." \
+  --type adr \
+  --from-file ./docs/adr.md \
+  --track <track-id>
 
-# 4. Create tasks in the track with acceptance criteria
+# 3. Create tasks in the track with acceptance criteria
 dw task-manager task create --track TM-track-X --title "..." --rank 100
 dw task-manager ac add TM-task-X --description "..."
 
-# 5. Create iteration and add tasks
+# 4. Create iteration and add tasks
 dw task-manager iteration create --name "..." --goal "..." --deliverable "..."
 dw task-manager iteration add-task <iter-num> TM-task-1 TM-task-2
 
-# 6. Start working on iteration
+# 5. Start working on iteration
 dw task-manager iteration start <iter-num>
 ```
 
-**Architecture Decision Records (ADRs) - Additional Commands:**
+**Document Management Commands:**
 
 ```bash
-# List all ADRs
-dw task-manager adr list
+# Create document (ADR, plan, retrospective, etc.)
+dw task-manager doc create \
+  --title "..." \
+  --type adr \
+  --from-file ./docs/adr.md \
+  --track TM-track-X
 
-# Show ADR details
-dw task-manager adr show TM-adr-X
+# Or create inline
+dw task-manager doc create \
+  --title "..." \
+  --type plan \
+  --content "# Planning doc..."
 
-# Mark ADR as superseded
-dw task-manager adr supersede TM-adr-X --superseded-by TM-adr-Y
+# List documents (filter by type)
+dw task-manager doc list
+dw task-manager doc list --type adr
 
-# Mark ADR as deprecated
-dw task-manager adr deprecate TM-adr-X
+# Show document
+dw task-manager doc show TM-doc-X
 
-# Check if track has required ADR
-dw task-manager track check <track-id>
+# Update document
+dw task-manager doc update TM-doc-X --from-file ./updated.md
 
-# List tracks without ADRs
-dw task-manager track list-missing-adrs
+# Attach to track or iteration
+dw task-manager doc attach TM-doc-X --track TM-track-Y
+dw task-manager doc attach TM-doc-X --iteration 5
+
+# Detach document
+dw task-manager doc detach TM-doc-X
+
+# Delete document
+dw task-manager doc delete TM-doc-X [--force]
 ```
 
 **Priority Guidance**: Work on current iteration first → critical/high priority tracks → planned iterations.
 
 **Best Practices**:
-- **ALWAYS create ADR immediately after creating a track** (before any implementation)
+- **Create ADR document for tracks before implementation** (use `doc create --type adr`)
 - Update task status as you work (don't batch updates)
 - Verify all acceptance criteria before marking task "done"
 - Use `dw task-manager iteration current` to stay focused
 - Check track dependencies before starting new tracks
+- Use documents for planning, retrospectives, and decision records
 
 ### Writing Good Acceptance Criteria
 
