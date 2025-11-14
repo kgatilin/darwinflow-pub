@@ -876,11 +876,24 @@ func TestIterationService_GetCurrentIteration_Success(t *testing.T) {
 	}
 
 	// Get current iteration
-	iteration, err := service.GetCurrentIteration(ctx)
+	result, err := service.GetCurrentIteration(ctx)
 	if err != nil {
 		t.Fatalf("GetCurrentIteration() failed: %v", err)
 	}
 
+	// Verify it's not a fallback
+	if result.IsFallback {
+		t.Error("expected IsFallback = false for current iteration")
+	}
+	if result.FallbackMsg != "" {
+		t.Errorf("expected empty FallbackMsg, got %q", result.FallbackMsg)
+	}
+
+	// Verify iteration data
+	iteration, ok := result.Iteration.(*entities.IterationEntity)
+	if !ok {
+		t.Fatal("expected Iteration to be *entities.IterationEntity")
+	}
 	if iteration.Number != 1 {
 		t.Errorf("iteration.Number = %d, want 1", iteration.Number)
 	}
@@ -889,17 +902,79 @@ func TestIterationService_GetCurrentIteration_Success(t *testing.T) {
 	}
 }
 
-func TestIterationService_GetCurrentIteration_NoCurrent(t *testing.T) {
+func TestIterationService_GetCurrentIteration_FallbackToPlanned(t *testing.T) {
 	service, ctx, mockIterationRepo, _, _, _ := setupIterationTestService(t)
 
+	plannedIteration := createTestIterationEntity(t, 2, "planned")
+
+	// No current iteration
 	mockIterationRepo.GetCurrentIterationFunc = func(ctx context.Context) (*entities.IterationEntity, error) {
 		return nil, pluginsdk.ErrNotFound
 	}
 
-	// No current iteration exists
-	_, err := service.GetCurrentIteration(ctx)
-	if err == nil {
-		t.Fatal("GetCurrentIteration() should fail when no current iteration exists")
+	// But there is a planned iteration
+	mockIterationRepo.GetNextPlannedIterationFunc = func(ctx context.Context) (*entities.IterationEntity, error) {
+		return plannedIteration, nil
+	}
+
+	// Get current iteration (should fallback to planned)
+	result, err := service.GetCurrentIteration(ctx)
+	if err != nil {
+		t.Fatalf("GetCurrentIteration() failed: %v", err)
+	}
+
+	// Verify it IS a fallback
+	if !result.IsFallback {
+		t.Error("expected IsFallback = true when falling back to planned")
+	}
+	if result.FallbackMsg == "" {
+		t.Error("expected FallbackMsg to be set")
+	}
+	if result.FallbackMsg != "No current iteration. Showing next planned iteration: Test Iteration" {
+		t.Errorf("unexpected FallbackMsg: %q", result.FallbackMsg)
+	}
+
+	// Verify iteration data
+	iteration, ok := result.Iteration.(*entities.IterationEntity)
+	if !ok {
+		t.Fatal("expected Iteration to be *entities.IterationEntity")
+	}
+	if iteration.Number != 2 {
+		t.Errorf("iteration.Number = %d, want 2", iteration.Number)
+	}
+	if iteration.Status != "planned" {
+		t.Errorf("iteration.Status = %q, want %q", iteration.Status, "planned")
+	}
+}
+
+func TestIterationService_GetCurrentIteration_NoCurrentOrPlanned(t *testing.T) {
+	service, ctx, mockIterationRepo, _, _, _ := setupIterationTestService(t)
+
+	// No current iteration
+	mockIterationRepo.GetCurrentIterationFunc = func(ctx context.Context) (*entities.IterationEntity, error) {
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// No planned iterations either
+	mockIterationRepo.GetNextPlannedIterationFunc = func(ctx context.Context) (*entities.IterationEntity, error) {
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Get current iteration (should return nil with message)
+	result, err := service.GetCurrentIteration(ctx)
+	if err != nil {
+		t.Fatalf("GetCurrentIteration() should not error when no iterations exist: %v", err)
+	}
+
+	// Verify fallback state
+	if !result.IsFallback {
+		t.Error("expected IsFallback = true when no iterations")
+	}
+	if result.Iteration != nil {
+		t.Error("expected Iteration to be nil when no iterations")
+	}
+	if result.FallbackMsg != "No current or planned iterations found" {
+		t.Errorf("unexpected FallbackMsg: %q", result.FallbackMsg)
 	}
 }
 

@@ -171,7 +171,7 @@ func (c *TaskUpdateCommandAdapter) GetHelp() string {
 Flags:
   --title <title>          New task title
   --description <desc>     New task description
-  --status <status>        New task status (todo, in-progress, done)
+  --status <status>        New task status (todo, in-progress, review, done)
   --rank <rank>            New task rank (1-1000)
   --branch <branch>        Git branch name
   --project <name>         Project name (optional)`

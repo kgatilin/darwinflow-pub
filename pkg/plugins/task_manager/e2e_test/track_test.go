@@ -224,3 +224,35 @@ func (s *TrackTestSuite) TestTrackMultipleDependencies() {
 	s.Contains(showOutput, trackID1, "first dependency should appear")
 	s.Contains(showOutput, trackID2, "second dependency should appear")
 }
+
+// TestTrackWorkflowWithoutADR verifies that tracks can be created and used without ADRs (AC-564, AC-566)
+func (s *TrackTestSuite) TestTrackWorkflowWithoutADR() {
+	// Create a track without ADR
+	trackOutput, err := s.run("track", "create", "--title", "No ADR Track", "--description", "Track without ADR", "--rank", "100")
+	s.requireSuccess(trackOutput, err, "failed to create track without ADR")
+	trackID := s.parseID(trackOutput, "-track-")
+	s.NotEmpty(trackID, "track ID should be created")
+
+	// Verify track can be shown
+	showOutput, err := s.run("track", "show", trackID)
+	s.requireSuccess(showOutput, err, "should be able to show track without ADR")
+	s.Contains(showOutput, "No ADR Track", "track title should appear")
+
+	// Update track status without ADR (no validation errors expected - AC-566)
+	updateOutput, err := s.run("track", "update", trackID, "--status", "in-progress")
+	s.requireSuccess(updateOutput, err, "should be able to update track status without ADR")
+
+	// Create task in track without ADR
+	taskOutput, err := s.run("task", "create", "--track", trackID, "--title", "Task without ADR")
+	s.requireSuccess(taskOutput, err, "should be able to create task in track without ADR")
+	taskID := s.parseID(taskOutput, "-task-")
+	s.NotEmpty(taskID, "task should be created in track without ADR")
+
+	// Update task status without track having ADR
+	taskUpdateOutput, err := s.run("task", "update", taskID, "--status", "in-progress")
+	s.requireSuccess(taskUpdateOutput, err, "should be able to update task status without track ADR")
+
+	// Complete track without ADR (no validation errors expected)
+	completeOutput, err := s.run("track", "update", trackID, "--status", "complete")
+	s.requireSuccess(completeOutput, err, "should be able to complete track without ADR")
+}

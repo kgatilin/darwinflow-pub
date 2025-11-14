@@ -415,6 +415,94 @@ func TestACService_FailAC_EmptyFeedback(t *testing.T) {
 	}
 }
 
+// TestACService_SkipAC_Success tests successful AC skip marking
+func TestACService_SkipAC_Success(t *testing.T) {
+	service, ctx, mockACRepo, _, _ := setupACTestService(t)
+
+	ac := createTestACEntity(t, "TM-ac-1", "TM-task-1")
+
+	mockACRepo.GetACFunc = func(ctx context.Context, id string) (*entities.AcceptanceCriteriaEntity, error) {
+		if id == "TM-ac-1" {
+			return ac, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	mockACRepo.UpdateACFunc = func(ctx context.Context, updatedAC *entities.AcceptanceCriteriaEntity) error {
+		ac.Status = updatedAC.Status
+		ac.Notes = updatedAC.Notes
+		return nil
+	}
+
+	// Skip AC
+	skipInput := dto.SkipACDTO{
+		ID:     ac.ID,
+		Reason: "No longer applicable due to architecture change",
+	}
+
+	err := service.SkipAC(ctx, skipInput)
+	if err != nil {
+		t.Fatalf("SkipAC() failed: %v", err)
+	}
+
+	// Check status changed
+	gotAC, err := service.GetAC(ctx, "TM-ac-1")
+	if err != nil {
+		t.Fatalf("GetAC() failed: %v", err)
+	}
+
+	if gotAC.Status != entities.ACStatusSkipped {
+		t.Errorf("ac.Status = %q, want %q", gotAC.Status, entities.ACStatusSkipped)
+	}
+	if gotAC.Notes != skipInput.Reason {
+		t.Errorf("ac.Notes = %q, want %q", gotAC.Notes, skipInput.Reason)
+	}
+}
+
+// TestACService_SkipAC_NotFound tests skipping non-existent AC
+func TestACService_SkipAC_NotFound(t *testing.T) {
+	service, ctx, mockACRepo, _, _ := setupACTestService(t)
+
+	mockACRepo.GetACFunc = func(ctx context.Context, id string) (*entities.AcceptanceCriteriaEntity, error) {
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	skipInput := dto.SkipACDTO{
+		ID:     "nonexistent",
+		Reason: "Some reason",
+	}
+
+	err := service.SkipAC(ctx, skipInput)
+	if err == nil {
+		t.Fatal("SkipAC() should fail for non-existent AC")
+	}
+}
+
+// TestACService_SkipAC_EmptyReason tests skipping AC with empty reason
+func TestACService_SkipAC_EmptyReason(t *testing.T) {
+	service, ctx, mockACRepo, _, _ := setupACTestService(t)
+
+	ac := createTestACEntity(t, "TM-ac-1", "TM-task-1")
+
+	mockACRepo.GetACFunc = func(ctx context.Context, id string) (*entities.AcceptanceCriteriaEntity, error) {
+		if id == "TM-ac-1" {
+			return ac, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Skip AC with empty reason
+	skipInput := dto.SkipACDTO{
+		ID:     ac.ID,
+		Reason: "", // Empty reason
+	}
+
+	err := service.SkipAC(ctx, skipInput)
+	if err == nil {
+		t.Fatal("SkipAC() should fail with empty reason")
+	}
+}
+
 // TestACService_DeleteAC_Success tests successful AC deletion
 func TestACService_DeleteAC_Success(t *testing.T) {
 	service, ctx, mockACRepo, _, _ := setupACTestService(t)

@@ -1897,6 +1897,7 @@ func (m *AppModel) renderIterationDetail() string {
 		// Separate tasks by status
 		todoTasks := []*entities.TaskEntity{}
 		inProgressTasks := []*entities.TaskEntity{}
+		reviewTasks := []*entities.TaskEntity{}
 		doneTasks := []*entities.TaskEntity{}
 		for _, task := range m.iterationTasks {
 			switch task.Status {
@@ -1904,6 +1905,8 @@ func (m *AppModel) renderIterationDetail() string {
 				todoTasks = append(todoTasks, task)
 			case "in-progress":
 				inProgressTasks = append(inProgressTasks, task)
+			case "review":
+				reviewTasks = append(reviewTasks, task)
 			case "done":
 				doneTasks = append(doneTasks, task)
 			}
@@ -1962,6 +1965,19 @@ func (m *AppModel) renderIterationDetail() string {
 			taskIdx += len(inProgressTasks)
 		}
 
+
+		// Render Review tasks
+		if len(reviewTasks) > 0 {
+			s += "\n" + sectionStyle.Render(fmt.Sprintf("Review (%d)", len(reviewTasks))) + "\n"
+			var reviewItems []string
+			for _, task := range reviewTasks {
+				statusIcon := GetStatusIcon(task.Status)
+				priorityIcon := getPriorityIcon(task.Rank)
+				reviewItems = append(reviewItems, fmt.Sprintf("%s %s %s - %s", statusIcon, priorityIcon, task.ID, task.Title))
+			}
+			s += renderSelectableList(taskSelectedIdx-taskIdx, reviewItems, itemStyle, selectedItemStyle)
+			taskIdx += len(reviewTasks)
+		}
 		// Render Done tasks
 		if len(doneTasks) > 0 {
 			s += "\n" + sectionStyle.Render(fmt.Sprintf("Done (%d)", len(doneTasks))) + "\n"
@@ -2123,6 +2139,8 @@ func GetStatusIcon(status string) string {
 	switch status {
 	case "done", "complete":
 		return "✓"
+	case "review":
+		return "👁"
 	case "in-progress":
 		return "→"
 	case "blocked":

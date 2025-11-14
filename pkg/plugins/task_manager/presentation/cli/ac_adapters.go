@@ -369,6 +369,9 @@ func (c *ACListCommandAdapter) Execute(ctx context.Context, cmdCtx pluginsdk.Com
 		if ac.Status == "failed" && ac.Notes != "" {
 			fmt.Fprintf(out, "  Reason: %s\n", ac.Notes)
 		}
+		if ac.Status == "skipped" && ac.Notes != "" {
+			fmt.Fprintf(out, "  Reason: %s\n", ac.Notes)
+		}
 	}
 
 	return nil
@@ -382,6 +385,8 @@ func (c *ACListCommandAdapter) getStatusIndicator(status entities.AcceptanceCrit
 		return "⏸"
 	case entities.ACStatusFailed:
 		return "✗"
+	case entities.ACStatusSkipped:
+		return "⊘"
 	default:
 		return "○"
 	}
@@ -477,6 +482,13 @@ func (c *ACShowCommandAdapter) Execute(ctx context.Context, cmdCtx pluginsdk.Com
 		fmt.Fprintf(out, "%s\n", ac.Notes)
 	}
 
+	// Show skip reason if AC skipped
+	if ac.Status == "skipped" && ac.Notes != "" {
+		fmt.Fprintf(out, "\nSkip Reason:\n")
+		fmt.Fprintf(out, "------------\n")
+		fmt.Fprintf(out, "%s\n", ac.Notes)
+	}
+
 	// Show timestamps
 	fmt.Fprintf(out, "\nTimestamps:\n")
 	fmt.Fprintf(out, "-----------\n")
@@ -494,6 +506,8 @@ func (c *ACShowCommandAdapter) getStatusIndicator(status entities.AcceptanceCrit
 		return "⏸"
 	case entities.ACStatusFailed:
 		return "✗"
+	case entities.ACStatusSkipped:
+		return "⊘"
 	default:
 		return "○"
 	}
@@ -885,6 +899,100 @@ func (c *ACRequestReviewCommandAdapter) Execute(ctx context.Context, cmdCtx plug
 }
 
 // ============================================================================
+// ACSkipCommandAdapter - Adapts CLI to SkipACCommand use case
+// ============================================================================
+
+type ACSkipCommandAdapter struct {
+	ACService *application.ACApplicationService
+
+	// CLI flags
+	project string
+	acID    string
+	reason  string
+}
+
+func (c *ACSkipCommandAdapter) GetName() string {
+	return "ac skip"
+}
+
+func (c *ACSkipCommandAdapter) GetDescription() string {
+	return "Mark an acceptance criterion as skipped with a reason"
+}
+
+func (c *ACSkipCommandAdapter) GetUsage() string {
+	return "dw task-manager ac skip <ac-id> --reason <reason>"
+}
+
+func (c *ACSkipCommandAdapter) GetHelp() string {
+	return `Marks an acceptance criterion as skipped with a reason.
+
+Skipped ACs are treated as satisfied and do not block task completion.
+Use this for ACs that are no longer applicable or needed.
+
+Flags:
+  --reason <reason>    Reason for skipping (required)
+  --project <name>     Project name (optional)`
+}
+
+func (c *ACSkipCommandAdapter) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
+	// Parse AC ID
+	if len(args) == 0 {
+		return fmt.Errorf("acceptance criterion ID is required")
+	}
+	c.acID = args[0]
+	args = args[1:]
+
+	// Parse flags
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				c.project = args[i+1]
+				i++
+			}
+		case "--reason":
+			if i+1 < len(args) {
+				c.reason = args[i+1]
+				i++
+			}
+		}
+	}
+
+	// Validate required flags
+	if c.reason == "" {
+		return fmt.Errorf("--reason is required")
+	}
+
+	// Create DTO
+	input := dto.SkipACDTO{
+		ID:     c.acID,
+		Reason: c.reason,
+	}
+
+	// Execute via application service
+	if err := c.ACService.SkipAC(ctx, input); err != nil {
+		return fmt.Errorf("failed to skip acceptance criterion: %w", err)
+	}
+
+	// Get updated AC for output
+	ac, err := c.ACService.GetAC(ctx, c.acID)
+	if err != nil {
+		return fmt.Errorf("failed to get AC: %w", err)
+	}
+
+	// Format output
+	out := cmdCtx.GetStdout()
+	fmt.Fprintf(out, "Acceptance criterion skipped\n")
+	fmt.Fprintf(out, "  ID:     %s\n", ac.ID)
+	fmt.Fprintf(out, "  Status: %s\n", ac.Status)
+	if c.reason != "" {
+		fmt.Fprintf(out, "  Reason: %s\n", c.reason)
+	}
+
+	return nil
+}
+
+// ============================================================================
 // ACListIterationCommandAdapter - Lists ACs for an iteration
 // ============================================================================
 
@@ -1017,6 +1125,8 @@ func (c *ACListIterationCommandAdapter) getStatusIndicator(status entities.Accep
 		return "⏸"
 	case entities.ACStatusFailed:
 		return "✗"
+	case entities.ACStatusSkipped:
+		return "⊘"
 	default:
 		return "○"
 	}
@@ -1172,6 +1282,8 @@ func (c *ACListTrackCommandAdapter) getStatusIndicator(status entities.Acceptanc
 		return "⏸"
 	case entities.ACStatusFailed:
 		return "✗"
+	case entities.ACStatusSkipped:
+		return "⊘"
 	default:
 		return "○"
 	}

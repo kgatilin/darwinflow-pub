@@ -49,6 +49,9 @@ type MockIterationRepository struct {
 
 	// GetIterationByNumberFunc is called by GetIterationByNumber. If nil, returns nil, nil.
 	GetIterationByNumberFunc func(ctx context.Context, number int) (*entities.IterationEntity, error)
+
+	// GetNextPlannedIterationFunc is called by GetNextPlannedIteration. If nil, returns nil, nil.
+	GetNextPlannedIterationFunc func(ctx context.Context) (*entities.IterationEntity, error)
 }
 
 // NewMockIterationRepository creates a new mock iteration repository with in-memory storage
@@ -180,6 +183,20 @@ func (m *MockIterationRepository) GetIterationByNumber(ctx context.Context, numb
 	return nil, nil
 }
 
+// GetNextPlannedIteration implements repositories.IterationRepository.
+func (m *MockIterationRepository) GetNextPlannedIteration(ctx context.Context) (*entities.IterationEntity, error) {
+	if m.GetNextPlannedIterationFunc != nil {
+		return m.GetNextPlannedIterationFunc(ctx)
+	}
+	// Default implementation: find first planned iteration
+	for _, iteration := range m.iterations {
+		if iteration.Status == "planned" {
+			return iteration, nil
+		}
+	}
+	return nil, nil
+}
+
 // Reset clears all configured behavior.
 func (m *MockIterationRepository) Reset() {
 	m.SaveIterationFunc = nil
@@ -195,6 +212,7 @@ func (m *MockIterationRepository) Reset() {
 	m.StartIterationFunc = nil
 	m.CompleteIterationFunc = nil
 	m.GetIterationByNumberFunc = nil
+	m.GetNextPlannedIterationFunc = nil
 }
 
 // WithError configures the mock to return the specified error for all methods.
@@ -216,6 +234,9 @@ func (m *MockIterationRepository) WithError(err error) *MockIterationRepository 
 	m.StartIterationFunc = func(ctx context.Context, iterationNum int) error { return err }
 	m.CompleteIterationFunc = func(ctx context.Context, iterationNum int) error { return err }
 	m.GetIterationByNumberFunc = func(ctx context.Context, number int) (*entities.IterationEntity, error) {
+		return nil, err
+	}
+	m.GetNextPlannedIterationFunc = func(ctx context.Context) (*entities.IterationEntity, error) {
 		return nil, err
 	}
 	return m

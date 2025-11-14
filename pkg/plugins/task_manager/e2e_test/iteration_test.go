@@ -66,6 +66,7 @@ func (s *IterationWorkflowTestSuite) TestIterationCompleteWorkflow() {
 	s.requireSuccess(currentOutput, err, "iteration current should not error when none exists")
 	s.True(
 		strings.Contains(currentOutput, "No current iteration") ||
+			strings.Contains(currentOutput, "No current or planned iterations") ||
 			strings.Contains(currentOutput, "No planned iterations") ||
 			strings.Contains(currentOutput, "available"),
 		"should indicate no current iteration initially")

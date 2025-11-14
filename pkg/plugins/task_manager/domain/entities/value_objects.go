@@ -37,6 +37,7 @@ type TaskStatus string
 const (
 	TaskStatusTodo       TaskStatus = "todo"
 	TaskStatusInProgress TaskStatus = "in-progress"
+	TaskStatusReview     TaskStatus = "review"
 	TaskStatusDone       TaskStatus = "done"
 )
 
@@ -44,6 +45,7 @@ const (
 var validTaskStatuses = map[string]bool{
 	string(TaskStatusTodo):       true,
 	string(TaskStatusInProgress): true,
+	string(TaskStatusReview):     true,
 	string(TaskStatusDone):       true,
 }
 
@@ -110,6 +112,8 @@ const (
 	ACStatusVerified AcceptanceCriteriaStatus = "verified"
 	// ACStatusFailed - AC did not meet verification requirements
 	ACStatusFailed AcceptanceCriteriaStatus = "failed"
+	// ACStatusSkipped - AC was intentionally skipped with a reason
+	ACStatusSkipped AcceptanceCriteriaStatus = "skipped"
 )
 
 // AcceptanceCriteriaVerificationType indicates who should verify this AC
@@ -133,7 +137,7 @@ type TrackFilters struct {
 // TaskFilters represents filter criteria for task queries
 type TaskFilters struct {
 	TrackID  string   // Filter by parent track ID
-	Status   []string // Filter by status values (e.g., "todo", "in-progress", "done")
+	Status   []string // Filter by status values (e.g., "todo", "in-progress", "review", "done")
 	Priority []string // Legacy - not used
 }
 

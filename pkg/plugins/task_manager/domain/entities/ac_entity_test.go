@@ -160,6 +160,7 @@ func TestAcceptanceCriteriaEntity_IsPendingReview(t *testing.T) {
 		{"automatically verified", entities.ACStatusAutomaticallyVerified, false},
 		{"failed", entities.ACStatusFailed, false},
 		{"not started", entities.ACStatusNotStarted, false},
+		{"skipped", entities.ACStatusSkipped, false},
 	}
 
 	for _, tt := range tests {
@@ -180,6 +181,40 @@ func TestAcceptanceCriteriaEntity_IsPendingReview(t *testing.T) {
 	}
 }
 
+func TestAcceptanceCriteriaEntity_IsSkipped(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name       string
+		status     entities.AcceptanceCriteriaStatus
+		wantResult bool
+	}{
+		{"skipped", entities.ACStatusSkipped, true},
+		{"verified", entities.ACStatusVerified, false},
+		{"automatically verified", entities.ACStatusAutomaticallyVerified, false},
+		{"failed", entities.ACStatusFailed, false},
+		{"not started", entities.ACStatusNotStarted, false},
+		{"pending review", entities.ACStatusPendingHumanReview, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ac := entities.NewAcceptanceCriteriaEntity(
+				"id",
+				"task",
+				"desc",
+				entities.VerificationTypeManual,
+				"steps",
+				now,
+				now,
+			)
+			ac.Status = tt.status
+
+			assert.Equal(t, tt.wantResult, ac.IsSkipped())
+		})
+	}
+}
+
 func TestAcceptanceCriteriaEntity_StatusIndicator(t *testing.T) {
 	now := time.Now()
 
@@ -192,6 +227,7 @@ func TestAcceptanceCriteriaEntity_StatusIndicator(t *testing.T) {
 		{"auto-verified", entities.ACStatusAutomaticallyVerified, "✓"},
 		{"pending", entities.ACStatusPendingHumanReview, "⏸"},
 		{"failed", entities.ACStatusFailed, "✗"},
+		{"skipped", entities.ACStatusSkipped, "⊘"},
 		{"not started", entities.ACStatusNotStarted, "○"},
 	}
 
@@ -323,7 +359,16 @@ func TestAcceptanceCriteriaEntity_StatusTransitions(t *testing.T) {
 	assert.True(t, ac.IsVerified())
 	assert.False(t, ac.IsFailed())
 	assert.False(t, ac.IsPendingReview())
+	assert.False(t, ac.IsSkipped())
 	assert.Equal(t, "✓", ac.StatusIndicator())
+
+	// Transition to skipped
+	ac.Status = entities.ACStatusSkipped
+	assert.False(t, ac.IsVerified())
+	assert.False(t, ac.IsFailed())
+	assert.False(t, ac.IsPendingReview())
+	assert.True(t, ac.IsSkipped())
+	assert.Equal(t, "⊘", ac.StatusIndicator())
 }
 
 func TestAcceptanceCriteriaEntity_VerificationTypes(t *testing.T) {

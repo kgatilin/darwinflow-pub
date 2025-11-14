@@ -159,6 +159,32 @@ func (s *ACApplicationService) FailAC(ctx context.Context, input dto.FailACDTO) 
 	return nil
 }
 
+// SkipAC marks an acceptance criterion as skipped with a reason
+func (s *ACApplicationService) SkipAC(ctx context.Context, input dto.SkipACDTO) error {
+	// Validate reason
+	if err := s.validationService.ValidateNonEmpty("reason", input.Reason); err != nil {
+		return err
+	}
+
+	// Fetch existing AC
+	ac, err := s.acRepo.GetAC(ctx, input.ID)
+	if err != nil {
+		return fmt.Errorf("AC not found: %w", err)
+	}
+
+	// Update status to skipped
+	ac.Status = entities.ACStatusSkipped
+	ac.Notes = input.Reason
+	ac.UpdatedAt = time.Now().UTC()
+
+	// Persist updates
+	if err := s.acRepo.UpdateAC(ctx, ac); err != nil {
+		return fmt.Errorf("failed to skip AC: %w", err)
+	}
+
+	return nil
+}
+
 // DeleteAC removes an acceptance criterion
 func (s *ACApplicationService) DeleteAC(ctx context.Context, acID string) error {
 	if err := s.acRepo.DeleteAC(ctx, acID); err != nil {

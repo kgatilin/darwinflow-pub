@@ -14,16 +14,17 @@ import (
 )
 
 // setupTaskTestService creates a test service with mock repositories
-func setupTaskTestService(t *testing.T) (*application.TaskApplicationService, context.Context, *mocks.MockTaskRepository, *mocks.MockTrackRepository, *mocks.MockAggregateRepository) {
+func setupTaskTestService(t *testing.T) (*application.TaskApplicationService, context.Context, *mocks.MockTaskRepository, *mocks.MockTrackRepository, *mocks.MockAggregateRepository, *mocks.MockAcceptanceCriteriaRepository) {
 	mockTaskRepo := &mocks.MockTaskRepository{}
 	mockTrackRepo := &mocks.MockTrackRepository{}
 	mockAggregateRepo := &mocks.MockAggregateRepository{}
+	mockACRepo := &mocks.MockAcceptanceCriteriaRepository{}
 	validationService := services.NewValidationService()
 
-	service := application.NewTaskApplicationService(mockTaskRepo, mockTrackRepo, mockAggregateRepo, validationService)
+	service := application.NewTaskApplicationService(mockTaskRepo, mockTrackRepo, mockAggregateRepo, mockACRepo, validationService)
 	ctx := context.Background()
 
-	return service, ctx, mockTaskRepo, mockTrackRepo, mockAggregateRepo
+	return service, ctx, mockTaskRepo, mockTrackRepo, mockAggregateRepo, mockACRepo
 }
 
 // createTestTrackForMock creates a test track entity for mock configuration
@@ -42,7 +43,7 @@ func createTestTrackForMock(t *testing.T) *entities.TrackEntity {
 
 // TestTaskService_CreateTask_Success tests successful task creation
 func TestTaskService_CreateTask_Success(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	// Configure mocks
@@ -89,7 +90,7 @@ func TestTaskService_CreateTask_Success(t *testing.T) {
 
 // TestTaskService_CreateTask_DuplicateID tests task creation with duplicate ID
 func TestTaskService_CreateTask_DuplicateID(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	mockTrackRepo.GetTrackFunc = func(ctx context.Context, id string) (*entities.TrackEntity, error) {
@@ -129,7 +130,7 @@ func TestTaskService_CreateTask_DuplicateID(t *testing.T) {
 
 // TestTaskService_CreateTask_EmptyTitle tests task creation with empty title
 func TestTaskService_CreateTask_EmptyTitle(t *testing.T) {
-	service, ctx, _, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, _, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	mockTrackRepo.GetTrackFunc = func(ctx context.Context, id string) (*entities.TrackEntity, error) {
@@ -152,7 +153,7 @@ func TestTaskService_CreateTask_EmptyTitle(t *testing.T) {
 
 // TestTaskService_CreateTask_TrackNotFound tests task creation with non-existent track
 func TestTaskService_CreateTask_TrackNotFound(t *testing.T) {
-	service, ctx, _, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, _, mockTrackRepo, _, _ := setupTaskTestService(t)
 
 	mockTrackRepo.GetTrackFunc = func(ctx context.Context, id string) (*entities.TrackEntity, error) {
 		return nil, pluginsdk.ErrNotFound
@@ -174,7 +175,7 @@ func TestTaskService_CreateTask_TrackNotFound(t *testing.T) {
 
 // TestTaskService_CreateTask_InvalidRank tests task creation with invalid rank
 func TestTaskService_CreateTask_InvalidRank(t *testing.T) {
-	service, ctx, _, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, _, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	mockTrackRepo.GetTrackFunc = func(ctx context.Context, id string) (*entities.TrackEntity, error) {
@@ -197,7 +198,7 @@ func TestTaskService_CreateTask_InvalidRank(t *testing.T) {
 
 // TestTaskService_CreateTask_DefaultStatus tests task creation with default status
 func TestTaskService_CreateTask_DefaultStatus(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	mockTrackRepo.GetTrackFunc = func(ctx context.Context, id string) (*entities.TrackEntity, error) {
@@ -228,7 +229,7 @@ func TestTaskService_CreateTask_DefaultStatus(t *testing.T) {
 
 // TestTaskService_CreateTask_InvalidStatus tests task creation with invalid status
 func TestTaskService_CreateTask_InvalidStatus(t *testing.T) {
-	service, ctx, _, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, _, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	mockTrackRepo.GetTrackFunc = func(ctx context.Context, id string) (*entities.TrackEntity, error) {
@@ -255,7 +256,7 @@ func TestTaskService_CreateTask_InvalidStatus(t *testing.T) {
 
 // TestTaskService_UpdateTask_Success tests successful task update
 func TestTaskService_UpdateTask_Success(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -305,7 +306,7 @@ func TestTaskService_UpdateTask_Success(t *testing.T) {
 
 // TestTaskService_UpdateTask_NotFound tests updating non-existent task
 func TestTaskService_UpdateTask_NotFound(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 
 	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
 		return nil, pluginsdk.ErrNotFound
@@ -325,7 +326,7 @@ func TestTaskService_UpdateTask_NotFound(t *testing.T) {
 
 // TestTaskService_UpdateTask_PartialUpdate tests partial task update
 func TestTaskService_UpdateTask_PartialUpdate(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -372,7 +373,7 @@ func TestTaskService_UpdateTask_PartialUpdate(t *testing.T) {
 
 // TestTaskService_UpdateTask_InvalidStatus tests updating with invalid status
 func TestTaskService_UpdateTask_InvalidStatus(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -403,7 +404,7 @@ func TestTaskService_UpdateTask_InvalidStatus(t *testing.T) {
 
 // TestTaskService_UpdateTask_UpdateTrackID tests updating task's track
 func TestTaskService_UpdateTask_UpdateTrackID(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track1 := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -450,7 +451,7 @@ func TestTaskService_UpdateTask_UpdateTrackID(t *testing.T) {
 
 // TestTaskService_UpdateTask_InvalidTrackID tests updating with non-existent track
 func TestTaskService_UpdateTask_InvalidTrackID(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -484,7 +485,7 @@ func TestTaskService_UpdateTask_InvalidTrackID(t *testing.T) {
 
 // TestTaskService_UpdateTask_EmptyTitle tests updating with empty title
 func TestTaskService_UpdateTask_EmptyTitle(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -515,7 +516,7 @@ func TestTaskService_UpdateTask_EmptyTitle(t *testing.T) {
 
 // TestTaskService_UpdateTask_InvalidRank tests updating with invalid rank
 func TestTaskService_UpdateTask_InvalidRank(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -546,7 +547,7 @@ func TestTaskService_UpdateTask_InvalidRank(t *testing.T) {
 
 // TestTaskService_UpdateTask_UpdateDescription tests updating description
 func TestTaskService_UpdateTask_UpdateDescription(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -590,7 +591,7 @@ func TestTaskService_UpdateTask_UpdateDescription(t *testing.T) {
 
 // TestTaskService_DeleteTask_Success tests successful task deletion
 func TestTaskService_DeleteTask_Success(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 
 	deleted := false
 	mockTaskRepo.DeleteTaskFunc = func(ctx context.Context, id string) error {
@@ -623,7 +624,7 @@ func TestTaskService_DeleteTask_Success(t *testing.T) {
 
 // TestTaskService_DeleteTask_NotFound tests deleting non-existent task
 func TestTaskService_DeleteTask_NotFound(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 
 	mockTaskRepo.DeleteTaskFunc = func(ctx context.Context, id string) error {
 		return pluginsdk.ErrNotFound
@@ -641,7 +642,7 @@ func TestTaskService_DeleteTask_NotFound(t *testing.T) {
 
 // TestTaskService_MoveTask_Success tests successful task move
 func TestTaskService_MoveTask_Success(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track1 := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -692,7 +693,7 @@ func TestTaskService_MoveTask_Success(t *testing.T) {
 
 // TestTaskService_MoveTask_TaskNotFound tests moving non-existent task
 func TestTaskService_MoveTask_TaskNotFound(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	mockTrackRepo.GetTrackFunc = func(ctx context.Context, id string) (*entities.TrackEntity, error) {
@@ -711,7 +712,7 @@ func TestTaskService_MoveTask_TaskNotFound(t *testing.T) {
 
 // TestTaskService_MoveTask_TrackNotFound tests moving task to non-existent track
 func TestTaskService_MoveTask_TrackNotFound(t *testing.T) {
-	service, ctx, mockTaskRepo, mockTrackRepo, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, mockTrackRepo, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -744,7 +745,7 @@ func TestTaskService_MoveTask_TrackNotFound(t *testing.T) {
 
 // TestTaskService_GetTask_Success tests successful task retrieval
 func TestTaskService_GetTask_Success(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -773,7 +774,7 @@ func TestTaskService_GetTask_Success(t *testing.T) {
 
 // TestTaskService_GetTask_NotFound tests retrieving non-existent task
 func TestTaskService_GetTask_NotFound(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 
 	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
 		return nil, pluginsdk.ErrNotFound
@@ -791,7 +792,7 @@ func TestTaskService_GetTask_NotFound(t *testing.T) {
 
 // TestTaskService_ListTasks_Success tests successful task listing
 func TestTaskService_ListTasks_Success(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -817,7 +818,7 @@ func TestTaskService_ListTasks_Success(t *testing.T) {
 
 // TestTaskService_ListTasks_WithFilters tests task listing with status filter
 func TestTaskService_ListTasks_WithFilters(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -851,7 +852,7 @@ func TestTaskService_ListTasks_WithFilters(t *testing.T) {
 
 // TestTaskService_ListTasks_Empty tests listing tasks from empty database
 func TestTaskService_ListTasks_Empty(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 
 	mockTaskRepo.ListTasksFunc = func(ctx context.Context, filters entities.TaskFilters) ([]*entities.TaskEntity, error) {
 		return []*entities.TaskEntity{}, nil
@@ -875,7 +876,7 @@ func TestTaskService_ListTasks_Empty(t *testing.T) {
 
 // TestTaskService_GetBacklogTasks_Success tests successful backlog retrieval
 func TestTaskService_GetBacklogTasks_Success(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 	track := createTestTrackForMock(t)
 
 	now := time.Now().UTC()
@@ -899,7 +900,7 @@ func TestTaskService_GetBacklogTasks_Success(t *testing.T) {
 
 // TestTaskService_GetBacklogTasks_Empty tests backlog retrieval with no tasks
 func TestTaskService_GetBacklogTasks_Empty(t *testing.T) {
-	service, ctx, mockTaskRepo, _, _ := setupTaskTestService(t)
+	service, ctx, mockTaskRepo, _, _, _ := setupTaskTestService(t)
 
 	mockTaskRepo.GetBacklogTasksFunc = func(ctx context.Context) ([]*entities.TaskEntity, error) {
 		return []*entities.TaskEntity{}, nil
@@ -914,4 +915,388 @@ func TestTaskService_GetBacklogTasks_Empty(t *testing.T) {
 	if len(results) != 0 {
 		t.Fatalf("GetBacklogTasks() returned %d tasks, want 0", len(results))
 	}
+}
+
+// ============================================================================
+// AC Verification Enforcement Tests (Phase 3 - Iteration 36)
+// ============================================================================
+
+// TestTaskService_UpdateTask_CannotCompleteTodo_WithPendingACs tests that tasks cannot be marked done with pending ACs
+func TestTaskService_UpdateTask_CannotCompleteTodo_WithPendingACs(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "in-progress", 100, "", now, now)
+
+	// Mock task retrieval
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with pending ACs
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		if taskID == task.ID {
+			return []*entities.AcceptanceCriteriaEntity{
+				entities.NewAcceptanceCriteriaEntity("TM-ac-1", task.ID, "AC 1", entities.VerificationTypeManual, "", now, now),
+				entities.NewAcceptanceCriteriaEntity("TM-ac-2", task.ID, "AC 2", entities.VerificationTypeManual, "", now, now),
+			}, nil
+		}
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	// Try to update task status to "done"
+	doneStatus := "done"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &doneStatus,
+	}
+
+	_, err := service.UpdateTask(ctx, input)
+	if err == nil {
+		t.Fatal("UpdateTask() should fail when marking task done with pending ACs")
+	}
+
+	// Verify error message contains guidance
+	errMsg := err.Error()
+	if !contains(errMsg, "unverified acceptance criteria") {
+		t.Errorf("error message should mention unverified ACs, got: %s", errMsg)
+	}
+	if !contains(errMsg, "TM-ac-1") && !contains(errMsg, "TM-ac-2") {
+		t.Errorf("error message should list unverified AC IDs, got: %s", errMsg)
+	}
+}
+
+// TestTaskService_UpdateTask_CannotCompleteTodo_WithFailedACs tests that tasks cannot be marked done with failed ACs
+func TestTaskService_UpdateTask_CannotCompleteTodo_WithFailedACs(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "in-progress", 100, "", now, now)
+
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with failed ACs
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		if taskID == task.ID {
+			ac := entities.NewAcceptanceCriteriaEntity("TM-ac-1", task.ID, "AC 1", entities.VerificationTypeManual, "", now, now)
+			ac.Status = entities.ACStatusFailed
+			return []*entities.AcceptanceCriteriaEntity{ac}, nil
+		}
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	// Try to update task status to "done"
+	doneStatus := "done"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &doneStatus,
+	}
+
+	_, err := service.UpdateTask(ctx, input)
+	if err == nil {
+		t.Fatal("UpdateTask() should fail when marking task done with failed ACs")
+	}
+
+	// Verify error message
+	errMsg := err.Error()
+	if !contains(errMsg, "unverified acceptance criteria") {
+		t.Errorf("error message should mention unverified ACs, got: %s", errMsg)
+	}
+}
+
+// TestTaskService_UpdateTask_CanCompleteTodo_WithAllVerifiedACs tests successful completion with all verified ACs
+func TestTaskService_UpdateTask_CanCompleteTodo_WithAllVerifiedACs(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "in-progress", 100, "", now, now)
+
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with all verified ACs
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		if taskID == task.ID {
+			ac1 := entities.NewAcceptanceCriteriaEntity("TM-ac-1", task.ID, "AC 1", entities.VerificationTypeManual, "", now, now)
+			ac1.Status = entities.ACStatusVerified
+			ac2 := entities.NewAcceptanceCriteriaEntity("TM-ac-2", task.ID, "AC 2", entities.VerificationTypeManual, "", now, now)
+			ac2.Status = entities.ACStatusVerified
+			return []*entities.AcceptanceCriteriaEntity{ac1, ac2}, nil
+		}
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	mockTaskRepo.UpdateTaskFunc = func(ctx context.Context, task *entities.TaskEntity) error {
+		return nil
+	}
+
+	// Update task status to "done"
+	doneStatus := "done"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &doneStatus,
+	}
+
+	updatedTask, err := service.UpdateTask(ctx, input)
+	if err != nil {
+		t.Fatalf("UpdateTask() should succeed with all verified ACs, got error: %v", err)
+	}
+
+	if updatedTask.Status != "done" {
+		t.Errorf("task.Status = %q, want %q", updatedTask.Status, "done")
+	}
+}
+
+// TestTaskService_UpdateTask_CanCompleteTodo_WithAllSkippedACs tests successful completion with all skipped ACs
+func TestTaskService_UpdateTask_CanCompleteTodo_WithAllSkippedACs(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "in-progress", 100, "", now, now)
+
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with all skipped ACs
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		if taskID == task.ID {
+			ac1 := entities.NewAcceptanceCriteriaEntity("TM-ac-1", task.ID, "AC 1", entities.VerificationTypeManual, "", now, now)
+			ac1.Status = entities.ACStatusSkipped
+			ac2 := entities.NewAcceptanceCriteriaEntity("TM-ac-2", task.ID, "AC 2", entities.VerificationTypeManual, "", now, now)
+			ac2.Status = entities.ACStatusSkipped
+			return []*entities.AcceptanceCriteriaEntity{ac1, ac2}, nil
+		}
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	mockTaskRepo.UpdateTaskFunc = func(ctx context.Context, task *entities.TaskEntity) error {
+		return nil
+	}
+
+	// Update task status to "done"
+	doneStatus := "done"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &doneStatus,
+	}
+
+	updatedTask, err := service.UpdateTask(ctx, input)
+	if err != nil {
+		t.Fatalf("UpdateTask() should succeed with all skipped ACs, got error: %v", err)
+	}
+
+	if updatedTask.Status != "done" {
+		t.Errorf("task.Status = %q, want %q", updatedTask.Status, "done")
+	}
+}
+
+// TestTaskService_UpdateTask_CanCompleteTodo_WithMixedVerifiedAndSkippedACs tests completion with mixed verified/skipped ACs
+func TestTaskService_UpdateTask_CanCompleteTodo_WithMixedVerifiedAndSkippedACs(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "in-progress", 100, "", now, now)
+
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with mixed verified and skipped ACs
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		if taskID == task.ID {
+			ac1 := entities.NewAcceptanceCriteriaEntity("TM-ac-1", task.ID, "AC 1", entities.VerificationTypeManual, "", now, now)
+			ac1.Status = entities.ACStatusVerified
+			ac2 := entities.NewAcceptanceCriteriaEntity("TM-ac-2", task.ID, "AC 2", entities.VerificationTypeManual, "", now, now)
+			ac2.Status = entities.ACStatusSkipped
+			ac3 := entities.NewAcceptanceCriteriaEntity("TM-ac-3", task.ID, "AC 3", entities.VerificationTypeManual, "", now, now)
+			ac3.Status = entities.ACStatusAutomaticallyVerified
+			return []*entities.AcceptanceCriteriaEntity{ac1, ac2, ac3}, nil
+		}
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	mockTaskRepo.UpdateTaskFunc = func(ctx context.Context, task *entities.TaskEntity) error {
+		return nil
+	}
+
+	// Update task status to "done"
+	doneStatus := "done"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &doneStatus,
+	}
+
+	updatedTask, err := service.UpdateTask(ctx, input)
+	if err != nil {
+		t.Fatalf("UpdateTask() should succeed with mixed verified/skipped ACs, got error: %v", err)
+	}
+
+	if updatedTask.Status != "done" {
+		t.Errorf("task.Status = %q, want %q", updatedTask.Status, "done")
+	}
+}
+
+// TestTaskService_UpdateTask_CanCompleteTodo_WithNoACs tests completion when task has no ACs
+func TestTaskService_UpdateTask_CanCompleteTodo_WithNoACs(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "in-progress", 100, "", now, now)
+
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with no ACs
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	mockTaskRepo.UpdateTaskFunc = func(ctx context.Context, task *entities.TaskEntity) error {
+		return nil
+	}
+
+	// Update task status to "done"
+	doneStatus := "done"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &doneStatus,
+	}
+
+	updatedTask, err := service.UpdateTask(ctx, input)
+	if err != nil {
+		t.Fatalf("UpdateTask() should succeed with no ACs, got error: %v", err)
+	}
+
+	if updatedTask.Status != "done" {
+		t.Errorf("task.Status = %q, want %q", updatedTask.Status, "done")
+	}
+}
+
+// TestTaskService_UpdateTask_CannotCompleteTodo_WithMixedStatuses tests failure with mixed AC statuses including unverified
+func TestTaskService_UpdateTask_CannotCompleteTodo_WithMixedStatuses(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "in-progress", 100, "", now, now)
+
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with mixed statuses (verified + pending + failed)
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		if taskID == task.ID {
+			ac1 := entities.NewAcceptanceCriteriaEntity("TM-ac-1", task.ID, "AC 1", entities.VerificationTypeManual, "", now, now)
+			ac1.Status = entities.ACStatusVerified // OK
+			ac2 := entities.NewAcceptanceCriteriaEntity("TM-ac-2", task.ID, "AC 2", entities.VerificationTypeManual, "", now, now)
+			ac2.Status = entities.ACStatusNotStarted // BLOCKS
+			ac3 := entities.NewAcceptanceCriteriaEntity("TM-ac-3", task.ID, "AC 3", entities.VerificationTypeManual, "", now, now)
+			ac3.Status = entities.ACStatusFailed // BLOCKS
+			return []*entities.AcceptanceCriteriaEntity{ac1, ac2, ac3}, nil
+		}
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	// Try to update task status to "done"
+	doneStatus := "done"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &doneStatus,
+	}
+
+	_, err := service.UpdateTask(ctx, input)
+	if err == nil {
+		t.Fatal("UpdateTask() should fail when marking task done with mixed AC statuses including unverified")
+	}
+
+	// Verify error message lists both blocking ACs
+	errMsg := err.Error()
+	if !contains(errMsg, "TM-ac-2") || !contains(errMsg, "TM-ac-3") {
+		t.Errorf("error message should list both unverified AC IDs (TM-ac-2, TM-ac-3), got: %s", errMsg)
+	}
+}
+
+// TestTaskService_UpdateTask_AllowsNonDoneTransition_WithPendingACs tests that non-done transitions are allowed even with pending ACs
+func TestTaskService_UpdateTask_AllowsNonDoneTransition_WithPendingACs(t *testing.T) {
+	service, ctx, mockTaskRepo, _, _, mockACRepo := setupTaskTestService(t)
+
+	now := time.Now().UTC()
+	task, _ := entities.NewTaskEntity("TM-task-1", "TM-track-1", "Test Task", "Description", "todo", 100, "", now, now)
+
+	mockTaskRepo.GetTaskFunc = func(ctx context.Context, id string) (*entities.TaskEntity, error) {
+		if id == task.ID {
+			return task, nil
+		}
+		return nil, pluginsdk.ErrNotFound
+	}
+
+	// Mock AC list with pending ACs
+	mockACRepo.ListACFunc = func(ctx context.Context, taskID string) ([]*entities.AcceptanceCriteriaEntity, error) {
+		if taskID == task.ID {
+			return []*entities.AcceptanceCriteriaEntity{
+				entities.NewAcceptanceCriteriaEntity("TM-ac-1", task.ID, "AC 1", entities.VerificationTypeManual, "", now, now),
+			}, nil
+		}
+		return []*entities.AcceptanceCriteriaEntity{}, nil
+	}
+
+	mockTaskRepo.UpdateTaskFunc = func(ctx context.Context, task *entities.TaskEntity) error {
+		return nil
+	}
+
+	// Update task status to "in-progress" (not "done")
+	inProgressStatus := "in-progress"
+	input := dto.UpdateTaskDTO{
+		ID:     task.ID,
+		Status: &inProgressStatus,
+	}
+
+	updatedTask, err := service.UpdateTask(ctx, input)
+	if err != nil {
+		t.Fatalf("UpdateTask() should allow non-done transitions even with pending ACs, got error: %v", err)
+	}
+
+	if updatedTask.Status != "in-progress" {
+		t.Errorf("task.Status = %q, want %q", updatedTask.Status, "in-progress")
+	}
+}
+
+// Helper function to check if string contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsAt(s, substr, 0))
+}
+
+func containsAt(s, substr string, start int) bool {
+	for i := start; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

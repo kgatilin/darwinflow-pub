@@ -324,13 +324,45 @@ func (s *IterationApplicationService) GetIteration(ctx context.Context, iteratio
 }
 
 // GetCurrentIteration returns the iteration with status "current".
-func (s *IterationApplicationService) GetCurrentIteration(ctx context.Context) (*entities.IterationEntity, error) {
+// If no current iteration exists, returns the first planned iteration (fallback).
+// Returns result with IsFallback=true and FallbackMsg when using fallback.
+func (s *IterationApplicationService) GetCurrentIteration(ctx context.Context) (*dto.CurrentIterationResult, error) {
+	// Try to get current iteration first
 	iteration, err := s.iterationRepo.GetCurrentIteration(ctx)
-	if err != nil {
+	if err == nil {
+		// Found current iteration - return without fallback
+		return &dto.CurrentIterationResult{
+			Iteration:   iteration,
+			IsFallback:  false,
+			FallbackMsg: "",
+		}, nil
+	}
+
+	// Check if error is "not found" - if not, it's a real error
+	if !errors.Is(err, pluginsdk.ErrNotFound) {
 		return nil, fmt.Errorf("failed to get current iteration: %w", err)
 	}
 
-	return iteration, nil
+	// No current iteration - try fallback to next planned iteration
+	plannedIter, err := s.iterationRepo.GetNextPlannedIteration(ctx)
+	if err != nil {
+		if errors.Is(err, pluginsdk.ErrNotFound) {
+			// No current and no planned iterations - return nil with fallback message
+			return &dto.CurrentIterationResult{
+				Iteration:   nil,
+				IsFallback:  true,
+				FallbackMsg: "No current or planned iterations found",
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to get next planned iteration: %w", err)
+	}
+
+	// Return planned iteration as fallback
+	return &dto.CurrentIterationResult{
+		Iteration:   plannedIter,
+		IsFallback:  true,
+		FallbackMsg: fmt.Sprintf("No current iteration. Showing next planned iteration: %s", plannedIter.Name),
+	}, nil
 }
 
 // ListIterations returns all iterations ordered by number.

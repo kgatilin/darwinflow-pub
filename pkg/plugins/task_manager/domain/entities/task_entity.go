@@ -26,7 +26,7 @@ type TaskEntity struct {
 func NewTaskEntity(id, trackID, title, description, status string, rank int, branch string, createdAt, updatedAt time.Time) (*TaskEntity, error) {
 	// Validate status
 	if !IsValidTaskStatus(status) {
-		return nil, fmt.Errorf("%w: invalid task status: must be one of todo, in-progress, done", pluginsdk.ErrInvalidArgument)
+		return nil, fmt.Errorf("%w: invalid task status: must be one of todo, in-progress, review, done", pluginsdk.ErrInvalidArgument)
 	}
 
 	// Validate rank
@@ -118,6 +118,8 @@ func (t *TaskEntity) GetProgress() float64 {
 	switch t.Status {
 	case string(TaskStatusDone):
 		return 1.0
+	case string(TaskStatusReview):
+		return 0.8
 	case string(TaskStatusInProgress):
 		return 0.5
 	default: // todo

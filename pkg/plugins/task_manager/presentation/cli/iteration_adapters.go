@@ -6,6 +6,7 @@ import (
 
 	"github.com/kgatilin/darwinflow-pub/pkg/plugins/task_manager/application"
 	"github.com/kgatilin/darwinflow-pub/pkg/plugins/task_manager/application/dto"
+	"github.com/kgatilin/darwinflow-pub/pkg/plugins/task_manager/domain/entities"
 	"github.com/kgatilin/darwinflow-pub/pkg/pluginsdk"
 )
 
@@ -552,6 +553,7 @@ func (a *IterationShowCommandAdapter) Execute(ctx context.Context, cmdCtx plugin
 
 type IterationCurrentCommandAdapter struct {
 	IterationService *application.IterationApplicationService
+	DocumentService  *application.DocumentApplicationService
 }
 
 func (a *IterationCurrentCommandAdapter) GetName() string {
@@ -581,22 +583,42 @@ Notes:
 
 func (a *IterationCurrentCommandAdapter) Execute(ctx context.Context, cmdCtx pluginsdk.CommandContext, args []string) error {
 	// Query application service
-	iteration, err := a.IterationService.GetCurrentIteration(ctx)
+	result, err := a.IterationService.GetCurrentIteration(ctx)
 	if err != nil {
-		fmt.Fprintf(cmdCtx.GetStdout(), "No current iteration found.\n")
+		return fmt.Errorf("failed to get current iteration: %w", err)
+	}
+
+	out := cmdCtx.GetStdout()
+
+	// Check if no iterations found at all
+	if result.Iteration == nil {
+		fmt.Fprintf(out, "%s\n", result.FallbackMsg)
 		return nil
 	}
 
-	// Get tasks in current iteration
+	// Cast iteration to entity (we know it's *entities.IterationEntity)
+	iteration, ok := result.Iteration.(*entities.IterationEntity)
+	if !ok {
+		return fmt.Errorf("unexpected iteration type")
+	}
+
+	// Display fallback message if applicable
+	if result.IsFallback {
+		fmt.Fprintf(out, "%s\n\n", result.FallbackMsg)
+	}
+
+	// Get tasks in iteration
 	tasks, err := a.IterationService.GetIterationTasks(ctx, iteration.Number)
 	if err != nil {
 		return fmt.Errorf("failed to get iteration tasks: %w", err)
 	}
 
-	out := cmdCtx.GetStdout()
-
 	// Display iteration details
-	fmt.Fprintf(out, "Current Iteration: %d - %s\n", iteration.Number, iteration.Name)
+	if result.IsFallback {
+		fmt.Fprintf(out, "Iteration: %d - %s\n", iteration.Number, iteration.Name)
+	} else {
+		fmt.Fprintf(out, "Current Iteration: %d - %s\n", iteration.Number, iteration.Name)
+	}
 	fmt.Fprintf(out, "  Status:      %s\n", iteration.Status)
 	fmt.Fprintf(out, "  Goal:        %s\n", iteration.Goal)
 	if iteration.Deliverable != "" {
@@ -609,6 +631,37 @@ func (a *IterationCurrentCommandAdapter) Execute(ctx context.Context, cmdCtx plu
 		fmt.Fprintf(out, "\nTasks:\n")
 		for _, task := range tasks {
 			fmt.Fprintf(out, "  - %s (%s)\n", task.ID, task.Status)
+		}
+	}
+
+	// Display attached documents
+	documents, err := a.DocumentService.ListDocuments(ctx, nil, &iteration.Number, nil)
+	if err != nil {
+		// Log error but don't fail the command - documents are optional
+		fmt.Fprintf(out, "\nWarning: failed to load documents: %v\n", err)
+	} else {
+		fmt.Fprintf(out, "\nAttached Documents:\n")
+		if len(documents) == 0 {
+			fmt.Fprintf(out, "  (none)\n")
+		} else {
+			// Display table header
+			fmt.Fprintf(out, "  %-20s %-30s %-15s %-10s\n",
+				"ID", "Title", "Type", "Status")
+			fmt.Fprintf(out, "  %s %s %s %s\n",
+				"--------------------", "------------------------------", "---------------", "----------")
+
+			// Display documents
+			for _, doc := range documents {
+				title := doc.Title
+				if len(title) > 30 {
+					title = title[:27] + "..."
+				}
+				fmt.Fprintf(out, "  %-20s %-30s %-15s %-10s\n",
+					doc.ID,
+					title,
+					doc.Type,
+					doc.Status)
+			}
 		}
 	}
 

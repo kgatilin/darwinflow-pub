@@ -27,6 +27,12 @@ type FailACDTO struct {
 	Feedback string
 }
 
+// SkipACDTO represents input for marking acceptance criteria as skipped
+type SkipACDTO struct {
+	ID     string
+	Reason string
+}
+
 // ACFilters represents filters for listing acceptance criteria
 type ACFilters struct {
 	TaskID       *string

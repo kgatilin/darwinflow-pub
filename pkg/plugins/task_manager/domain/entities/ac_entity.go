@@ -65,6 +65,11 @@ func (ac *AcceptanceCriteriaEntity) IsPendingReview() bool {
 	return ac.Status == ACStatusPendingHumanReview
 }
 
+// IsSkipped returns true if the AC has been skipped
+func (ac *AcceptanceCriteriaEntity) IsSkipped() bool {
+	return ac.Status == ACStatusSkipped
+}
+
 // StatusIndicator returns a visual indicator for the AC status
 func (ac *AcceptanceCriteriaEntity) StatusIndicator() string {
 	switch ac.Status {
@@ -74,6 +79,8 @@ func (ac *AcceptanceCriteriaEntity) StatusIndicator() string {
 		return "⏸"
 	case ACStatusFailed:
 		return "✗"
+	case ACStatusSkipped:
+		return "⊘"
 	default: // not_started
 		return "○"
 	}

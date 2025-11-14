@@ -234,6 +234,7 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 		composite.Task,
 		composite.Track,
 		composite.Aggregate,
+		composite.AC,
 		validationSvc,
 	)
 
@@ -327,6 +328,7 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 		},
 		&cli.IterationCurrentCommandAdapter{
 			IterationService: iterationService,
+			DocumentService:  documentService,
 		},
 		&cli.IterationDeleteCommandAdapter{
 			IterationService: iterationService,
@@ -355,6 +357,9 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 			ACService: acService,
 		},
 		&cli.ACFailCommandAdapter{
+			ACService: acService,
+		},
+		&cli.ACSkipCommandAdapter{
 			ACService: acService,
 		},
 		&cli.ACListCommandAdapter{

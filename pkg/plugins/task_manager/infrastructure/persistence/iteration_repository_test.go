@@ -338,3 +338,80 @@ func TestDeleteIteration(t *testing.T) {
 	}
 }
 
+func TestGetNextPlannedIteration(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns first planned iteration ordered by rank", func(t *testing.T) {
+		db := createTestDB(t)
+		defer db.Close()
+		repo := persistence.NewSQLiteIterationRepository(db, createTestLogger())
+
+		// Create multiple planned iterations with different ranks
+		iter1, _ := entities.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "planned", 300, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+		iter2, _ := entities.NewIterationEntity(2, "Sprint 2", "Goal 2", "", []string{}, "planned", 100, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+		iter3, _ := entities.NewIterationEntity(3, "Sprint 3", "Goal 3", "", []string{}, "planned", 200, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+
+		repo.SaveIteration(ctx, iter1)
+		repo.SaveIteration(ctx, iter2)
+		repo.SaveIteration(ctx, iter3)
+
+		// Get next planned iteration
+		next, err := repo.GetNextPlannedIteration(ctx)
+		if err != nil {
+			t.Fatalf("failed to get next planned iteration: %v", err)
+		}
+
+		// Should return iteration 2 (lowest rank = 100)
+		if next.Number != 2 {
+			t.Errorf("expected iteration 2, got %d", next.Number)
+		}
+		if next.Name != "Sprint 2" {
+			t.Errorf("expected 'Sprint 2', got %s", next.Name)
+		}
+	})
+
+	t.Run("returns ErrNotFound when no planned iterations", func(t *testing.T) {
+		// Create a new DB for this test
+		db2 := createTestDB(t)
+		defer db2.Close()
+		repo2 := persistence.NewSQLiteIterationRepository(db2, createTestLogger())
+
+		// Create only completed iterations
+		iter1, _ := entities.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "complete", 500, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+		repo2.SaveIteration(ctx, iter1)
+
+		// Try to get next planned
+		_, err := repo2.GetNextPlannedIteration(ctx)
+		if !errors.Is(err, pluginsdk.ErrNotFound) {
+			t.Errorf("expected ErrNotFound, got: %v", err)
+		}
+	})
+
+	t.Run("ignores current and complete iterations", func(t *testing.T) {
+		// Create a new DB for this test
+		db3 := createTestDB(t)
+		defer db3.Close()
+		repo3 := persistence.NewSQLiteIterationRepository(db3, createTestLogger())
+
+		// Create iterations with different statuses
+		iter1, _ := entities.NewIterationEntity(1, "Sprint 1", "Goal 1", "", []string{}, "current", 100, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+		iter2, _ := entities.NewIterationEntity(2, "Sprint 2", "Goal 2", "", []string{}, "complete", 200, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+		iter3, _ := entities.NewIterationEntity(3, "Sprint 3", "Goal 3", "", []string{}, "planned", 300, time.Time{}, time.Time{}, time.Now().UTC(), time.Now().UTC())
+
+		repo3.SaveIteration(ctx, iter1)
+		repo3.SaveIteration(ctx, iter2)
+		repo3.SaveIteration(ctx, iter3)
+
+		// Get next planned
+		next, err := repo3.GetNextPlannedIteration(ctx)
+		if err != nil {
+			t.Fatalf("failed to get next planned iteration: %v", err)
+		}
+
+		// Should return only the planned iteration
+		if next.Number != 3 {
+			t.Errorf("expected iteration 3, got %d", next.Number)
+		}
+	})
+}
+

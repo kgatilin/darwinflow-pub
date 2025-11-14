@@ -100,7 +100,7 @@ dw task-manager ac failed --iteration 11       # Filter by iteration
 # 1. Create a new track
 dw task-manager track create --title "..." --description "..." --rank 100
 
-# 2. Create ADR document for the track (RECOMMENDED before implementation)
+# 2. (Optional) Create ADR document for the track
 dw task-manager doc create \
   --title "ADR: ..." \
   --type adr \
@@ -166,12 +166,11 @@ dw task-manager doc delete TM-doc-X [--force]
 **Priority Guidance**: Work on current iteration first → critical/high priority tracks → planned iterations.
 
 **Best Practices**:
-- **Create ADR document for tracks before implementation** (use `doc create --type adr`)
 - Update task status as you work (don't batch updates)
 - Verify all acceptance criteria before marking task "done"
 - Use `dw task-manager iteration current` to stay focused
 - Check track dependencies before starting new tracks
-- Use documents for planning, retrospectives, and decision records
+- Use documents (ADRs, plans, retrospectives) for architecture decisions and planning
 
 ### Writing Good Acceptance Criteria
 
@@ -396,8 +395,6 @@ For substantial refactorings or multi-package features:
 - [ ] Run `go-arch-lint docs` (if architecture/API changed)
 - [ ] Commit with concise message
 
-**Note**: ADRs should be created during task preparation (before implementation), not after.
-
 ### Reporting Completed Work
 
 **CRITICAL**: When reporting work completion to the user, follow these guidelines:
@@ -612,8 +609,6 @@ go-arch-lint docs  # Regenerates docs/arch-index.md
 - [ ] Architecture docs regenerated (if needed)
 - [ ] All tests pass
 - [ ] Linter passes (zero violations)
-
-**Note**: ADRs should be created during track creation (before implementation), not during documentation phase.
 
 ---
 

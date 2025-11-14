@@ -56,6 +56,17 @@ func TestNewTaskEntity(t *testing.T) {
 			wantErr:     false,
 		},
 		{
+			name:        "valid review",
+			id:          "DW-task-4",
+			trackID:     "DW-track-1",
+			title:       "Test Task",
+			description: "Test Description",
+			status:      "review",
+			rank:        500,
+			branch:      "",
+			wantErr:     false,
+		},
+		{
 			name:         "invalid status",
 			id:           "DW-task-1",
 			trackID:      "DW-track-1",
@@ -151,7 +162,10 @@ func TestTaskEntity_TransitionTo(t *testing.T) {
 		{"todo to in-progress", "todo", "in-progress", false, ""},
 		{"todo to done", "todo", "done", false, ""},
 		{"in-progress to done", "in-progress", "done", false, ""},
+		{"in-progress to review", "in-progress", "review", false, ""},
 		{"in-progress to todo", "in-progress", "todo", false, ""},
+		{"review to done", "review", "done", false, ""},
+		{"review to in-progress", "review", "in-progress", false, ""},
 		{"done to todo (reopen)", "done", "todo", false, ""},
 		{"done to in-progress", "done", "in-progress", false, ""},
 
@@ -199,6 +213,7 @@ func TestTaskEntity_GetProgress(t *testing.T) {
 		expected float64
 	}{
 		{"done", "done", 1.0},
+		{"review", "review", 0.8},
 		{"in-progress", "in-progress", 0.5},
 		{"todo", "todo", 0.0},
 	}
@@ -345,6 +360,7 @@ func TestTaskEntity_GetStatus(t *testing.T) {
 	}{
 		{"todo", "todo"},
 		{"in-progress", "in-progress"},
+		{"review", "review"},
 		{"done", "done"},
 	}
 

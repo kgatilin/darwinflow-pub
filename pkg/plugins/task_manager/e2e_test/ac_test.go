@@ -358,3 +358,113 @@ func (s *ACTestSuite) TestACVerifyAndFail() {
 	s.requireSuccess(showOutput, err, "failed to show failed AC")
 	s.Contains(showOutput, "failed", "AC should show failed status after transition")
 }
+
+// TestACVerificationEnforcement tests that tasks cannot be marked done without verified/skipped ACs (Iteration 36, Phase 3)
+func (s *ACTestSuite) TestACVerificationEnforcement() {
+	// Step 1: Create track
+	trackOutput, err := s.run("track", "create", "--title", "Test Track", "--rank", "100")
+	s.requireSuccess(trackOutput, err, "failed to create track")
+	trackID := s.parseID(trackOutput, "track")
+
+	// Step 2: Create task in "todo" status
+	taskOutput, err := s.run("task", "create", "--track", trackID, "--title", "Test Task", "--rank", "100")
+	s.requireSuccess(taskOutput, err, "failed to create task")
+	taskID := s.parseID(taskOutput, "task")
+
+	// Step 3: Add acceptance criteria (creates in "not_started" status)
+	ac1Output, err := s.run("ac", "add", taskID, "--description", "AC 1 - Feature works", "--testing-instructions", "Test feature")
+	s.requireSuccess(ac1Output, err, "failed to add AC 1")
+	ac1ID := s.parseID(ac1Output, "ac")
+
+	ac2Output, err := s.run("ac", "add", taskID, "--description", "AC 2 - Tests pass", "--testing-instructions", "Run tests")
+	s.requireSuccess(ac2Output, err, "failed to add AC 2")
+	ac2ID := s.parseID(ac2Output, "ac")
+
+	// Step 4: Try to mark task as "done" with pending ACs - should FAIL
+	taskUpdateOutput, err := s.run("task", "update", taskID, "--status", "done")
+	s.requireError(err, "task update to 'done' should fail with unverified ACs")
+	s.Contains(taskUpdateOutput, "unverified acceptance criteria", "error message should mention unverified ACs")
+	s.Contains(taskUpdateOutput, ac1ID, "error should list AC1 ID")
+	s.Contains(taskUpdateOutput, ac2ID, "error should list AC2 ID")
+
+	// Step 5: Verify one AC
+	verifyOutput, err := s.run("ac", "verify", ac1ID)
+	s.requireSuccess(verifyOutput, err, "failed to verify AC 1")
+
+	// Step 6: Try to mark task as "done" with one verified AC - should still FAIL (AC2 pending)
+	taskUpdateOutput2, err := s.run("task", "update", taskID, "--status", "done")
+	s.requireError(err, "task update to 'done' should still fail with one pending AC")
+	s.Contains(taskUpdateOutput2, "unverified acceptance criteria", "error message should mention unverified ACs")
+	s.Contains(taskUpdateOutput2, ac2ID, "error should list AC2 ID (still pending)")
+
+	// Step 7: Skip the second AC
+	skipOutput, err := s.run("ac", "skip", ac2ID, "--reason", "Not applicable for this task")
+	s.requireSuccess(skipOutput, err, "failed to skip AC 2")
+
+	// Step 8: Now mark task as "done" - should SUCCEED (all ACs verified or skipped)
+	taskUpdateOutput3, err := s.run("task", "update", taskID, "--status", "done")
+	s.requireSuccess(taskUpdateOutput3, err, "task update to 'done' should succeed with all ACs verified/skipped")
+
+	// Step 9: Verify task is now in "done" status
+	taskShowOutput, err := s.run("task", "show", taskID)
+	s.requireSuccess(taskShowOutput, err, "failed to show task")
+	s.Contains(taskShowOutput, "done", "task should be in 'done' status")
+}
+
+// TestACVerificationEnforcement_FailedACs tests that failed ACs also block task completion
+func (s *ACTestSuite) TestACVerificationEnforcement_FailedACs() {
+	// Step 1: Create track
+	trackOutput, err := s.run("track", "create", "--title", "Test Track", "--rank", "100")
+	s.requireSuccess(trackOutput, err, "failed to create track")
+	trackID := s.parseID(trackOutput, "track")
+
+	// Step 2: Create task
+	taskOutput, err := s.run("task", "create", "--track", trackID, "--title", "Test Task", "--rank", "100")
+	s.requireSuccess(taskOutput, err, "failed to create task")
+	taskID := s.parseID(taskOutput, "task")
+
+	// Step 3: Add AC
+	acOutput, err := s.run("ac", "add", taskID, "--description", "AC - Feature works", "--testing-instructions", "Test feature")
+	s.requireSuccess(acOutput, err, "failed to add AC")
+	acID := s.parseID(acOutput, "ac")
+
+	// Step 4: Mark AC as failed
+	failOutput, err := s.run("ac", "fail", acID, "--feedback", "Feature doesn't work as expected")
+	s.requireSuccess(failOutput, err, "failed to mark AC as failed")
+
+	// Step 5: Try to mark task as "done" with failed AC - should FAIL
+	taskUpdateOutput, err := s.run("task", "update", taskID, "--status", "done")
+	s.requireError(err, "task update to 'done' should fail with failed AC")
+	s.Contains(taskUpdateOutput, "unverified acceptance criteria", "error message should mention unverified ACs")
+	s.Contains(taskUpdateOutput, acID, "error should list failed AC ID")
+
+	// Step 6: Verify AC
+	verifyOutput, err := s.run("ac", "verify", acID)
+	s.requireSuccess(verifyOutput, err, "failed to verify AC")
+
+	// Step 7: Now mark task as "done" - should SUCCEED
+	taskUpdateOutput2, err := s.run("task", "update", taskID, "--status", "done")
+	s.requireSuccess(taskUpdateOutput2, err, "task update to 'done' should succeed with verified AC")
+}
+
+// TestACVerificationEnforcement_NoACs tests that tasks without ACs can be marked done
+func (s *ACTestSuite) TestACVerificationEnforcement_NoACs() {
+	// Step 1: Create track
+	trackOutput, err := s.run("track", "create", "--title", "Test Track", "--rank", "100")
+	s.requireSuccess(trackOutput, err, "failed to create track")
+	trackID := s.parseID(trackOutput, "track")
+
+	// Step 2: Create task (no ACs added)
+	taskOutput, err := s.run("task", "create", "--track", trackID, "--title", "Test Task", "--rank", "100")
+	s.requireSuccess(taskOutput, err, "failed to create task")
+	taskID := s.parseID(taskOutput, "task")
+
+	// Step 3: Mark task as "done" - should SUCCEED (no ACs to verify)
+	taskUpdateOutput, err := s.run("task", "update", taskID, "--status", "done")
+	s.requireSuccess(taskUpdateOutput, err, "task update to 'done' should succeed without ACs")
+
+	// Step 4: Verify task is in "done" status
+	taskShowOutput, err := s.run("task", "show", taskID)
+	s.requireSuccess(taskShowOutput, err, "failed to show task")
+	s.Contains(taskShowOutput, "done", "task should be in 'done' status")
+}

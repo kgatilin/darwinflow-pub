@@ -23,8 +23,8 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		ADR: ADRConfig{
-			Required:                true,
-			EnforceOnTaskCompletion: true,
+			Required:                false,
+			EnforceOnTaskCompletion: false,
 		},
 	}
 }

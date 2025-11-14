@@ -18,6 +18,7 @@ type TaskApplicationService struct {
 	taskRepo      repositories.TaskRepository
 	trackRepo     repositories.TrackRepository
 	aggregateRepo repositories.AggregateRepository
+	acRepo        repositories.AcceptanceCriteriaRepository
 	validationSvc *services.ValidationService
 }
 
@@ -26,12 +27,14 @@ func NewTaskApplicationService(
 	taskRepo repositories.TaskRepository,
 	trackRepo repositories.TrackRepository,
 	aggregateRepo repositories.AggregateRepository,
+	acRepo repositories.AcceptanceCriteriaRepository,
 	validationSvc *services.ValidationService,
 ) *TaskApplicationService {
 	return &TaskApplicationService{
 		taskRepo:      taskRepo,
 		trackRepo:     trackRepo,
 		aggregateRepo: aggregateRepo,
+		acRepo:        acRepo,
 		validationSvc: validationSvc,
 	}
 }
@@ -119,6 +122,32 @@ func (s *TaskApplicationService) UpdateTask(ctx context.Context, input dto.Updat
 	}
 
 	if input.Status != nil {
+		// Check if transitioning to "done" status
+		if *input.Status == string(entities.TaskStatusDone) {
+			// Validate all ACs are verified or skipped before allowing completion
+			acs, err := s.acRepo.ListAC(ctx, task.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to check acceptance criteria: %w", err)
+			}
+
+			// Check for unverified ACs (pending or failed)
+			var unverifiedIDs []string
+			for _, ac := range acs {
+				// ACs with "verified", "automatically_verified", or "skipped" status are satisfied
+				if !ac.IsVerified() && !ac.IsSkipped() {
+					unverifiedIDs = append(unverifiedIDs, ac.ID)
+				}
+			}
+
+			// Block completion if unverified ACs exist
+			if len(unverifiedIDs) > 0 {
+				return nil, fmt.Errorf("%w: cannot mark task as done with unverified acceptance criteria. "+
+					"Please verify or skip the following ACs: %v. "+
+					"Use 'dw task-manager ac verify <ac-id>' or 'dw task-manager ac skip <ac-id> --reason \"...\"'",
+					pluginsdk.ErrInvalidArgument, unverifiedIDs)
+			}
+		}
+
 		if err := task.TransitionTo(*input.Status); err != nil {
 			return nil, err
 		}

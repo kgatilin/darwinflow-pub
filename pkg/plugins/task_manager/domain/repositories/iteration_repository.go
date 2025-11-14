@@ -62,4 +62,8 @@ type IterationRepository interface {
 
 	// GetIterationByNumber is an alias for GetIteration for consistency with other repositories.
 	GetIterationByNumber(ctx context.Context, number int) (*entities.IterationEntity, error)
+
+	// GetNextPlannedIteration returns the first planned iteration ordered by rank.
+	// Returns ErrNotFound if no planned iterations exist.
+	GetNextPlannedIteration(ctx context.Context) (*entities.IterationEntity, error)
 }

@@ -55,8 +55,8 @@ func (r *SQLiteIterationRepository) SaveIteration(ctx context.Context, iteration
 	// Insert iteration
 	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO iterations (number, name, goal, status, deliverable, started_at, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		iteration.Number, iteration.Name, iteration.Goal, iteration.Status, iteration.Deliverable, iteration.StartedAt, iteration.CompletedAt, iteration.CreatedAt, iteration.UpdatedAt,
+		"INSERT INTO iterations (number, name, goal, status, rank, deliverable, started_at, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		iteration.Number, iteration.Name, iteration.Goal, iteration.Status, iteration.Rank, iteration.Deliverable, iteration.StartedAt, iteration.CompletedAt, iteration.CreatedAt, iteration.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert iteration: %w", err)
@@ -457,6 +457,41 @@ func (r *SQLiteIterationRepository) CompleteIteration(ctx context.Context, itera
 // GetIterationByNumber is an alias for GetIteration for consistency with other repositories.
 func (r *SQLiteIterationRepository) GetIterationByNumber(ctx context.Context, number int) (*entities.IterationEntity, error) {
 	return r.GetIteration(ctx, number)
+}
+
+// GetNextPlannedIteration returns the first planned iteration ordered by rank.
+func (r *SQLiteIterationRepository) GetNextPlannedIteration(ctx context.Context) (*entities.IterationEntity, error) {
+	var iteration entities.IterationEntity
+	var startedAt, completedAt sql.NullTime
+
+	err := r.DB.QueryRowContext(
+		ctx,
+		"SELECT number, name, goal, status, rank, deliverable, started_at, completed_at, created_at, updated_at FROM iterations WHERE status = ? ORDER BY rank, number LIMIT 1",
+		"planned",
+	).Scan(&iteration.Number, &iteration.Name, &iteration.Goal, &iteration.Status, &iteration.Rank, &iteration.Deliverable, &startedAt, &completedAt, &iteration.CreatedAt, &iteration.UpdatedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("%w: no planned iteration found", pluginsdk.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to query next planned iteration: %w", err)
+	}
+
+	if startedAt.Valid {
+		iteration.StartedAt = &startedAt.Time
+	}
+	if completedAt.Valid {
+		iteration.CompletedAt = &completedAt.Time
+	}
+
+	// Load task IDs
+	taskIDs, err := r.getIterationTaskIDs(ctx, iteration.Number)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load iteration tasks: %w", err)
+	}
+	iteration.TaskIDs = taskIDs
+
+	return &iteration, nil
 }
 
 // ============================================================================

@@ -31,11 +31,12 @@ You orchestrate a multi-agent workflow to implement TODO tasks in an iteration.
 2. **Create/switch git branch** (`iteration-<number>`)
 3. **Start iteration** (if status "planned")
 4. **Filter TODO tasks** (ignore in-progress/review/done/blocked)
-5. **Planning agent** → Explores codebase, retrieves full context, creates implementation plan
-6. **Implementation agents** → Execute phases (sequential or parallel)
-7. **Verification agent** → Tests, linter, code quality, task status
-8. **Git commit** → Save all work
-9. **Report to user** → Deviations, questions, issues only (see CLAUDE.md reporting guidelines)
+5. **Read attached documents** (MANDATORY if documents exist)
+6. **Planning agent** → Reads documents, explores codebase, retrieves full context, creates implementation plan
+7. **Implementation agents** → Execute phases (sequential or parallel)
+8. **Verification agent** → Tests, linter, code quality, task status
+9. **Git commit** → Save all work
+10. **Report to user** → Deviations, questions, issues only (see CLAUDE.md reporting guidelines)
 
 ---
 
@@ -89,6 +90,28 @@ dw task-manager iteration show $TARGET_ITERATION --full
 
 ---
 
+## Phase 4.5: Read Attached Documents (MANDATORY)
+
+**CRITICAL**: If the iteration has attached documents, you MUST read them before planning.
+
+```bash
+# List documents to get IDs
+dw task-manager doc list --iteration $TARGET_ITERATION
+
+# Read each document
+dw task-manager doc show <doc-id>
+```
+
+**Why mandatory**:
+- Documents contain planning details, ADRs, design decisions
+- Planning without reading documents leads to misalignment
+- Documents provide critical context for implementation
+
+**If no documents**: Proceed to planning
+**If documents exist**: Read ALL documents before Phase 5
+
+---
+
 ## Phase 5: Launch Planning Agent
 
 **Agent**: `general-purpose` (requires design and planning)
@@ -112,7 +135,7 @@ May run multiple explorations for different areas.
 **CRITICAL**: You must independently retrieve ALL iteration data.
 
 ```bash
-# Get iteration details with all tasks
+# Get iteration details with all tasks and attached documents
 dw task-manager iteration show [iteration-number] --full
 
 # Get ALL acceptance criteria for ALL tasks in iteration
@@ -123,6 +146,24 @@ Parse output to understand:
 - Iteration name, goal, deliverable
 - ALL tasks (IDs, titles, descriptions, statuses)
 - ALL acceptance criteria (descriptions, testing instructions)
+- Attached documents (if any)
+
+**If iteration has attached documents (MANDATORY)**:
+```bash
+# Read EACH attached document
+dw task-manager doc show <doc-id>
+```
+
+**Why documents are critical**:
+- Documents contain planning details, ADRs, architectural decisions
+- Planning without reading documents leads to incorrect implementation
+- Documents provide essential context that overrides assumptions
+
+Parse document contents to understand:
+- Design decisions and rationale
+- Architecture patterns to follow
+- Implementation constraints and guidelines
+- Phase breakdown (if planning document exists)
 
 ## Step 3: Filter to TODO Tasks Only
 
@@ -411,15 +452,16 @@ git log -1 --oneline
 
 1. **Branch first** - Ensure on iteration branch before any work
 2. **TODO only** - Focus exclusively on "todo" tasks
-3. **Orchestrate** - Coordinate agents, don't code yourself
-4. **Plan first** - Planning agent explores + retrieves full context independently
-5. **Respect dependencies** - Sequential unless parallel identified
-6. **Verify thoroughly** - Tests, linter, quality before commit
-7. **Track progress** - TodoWrite and task status updates
-8. **Commit always** - Save all work
-9. **User owns acceptance** - Never verify AC or close iteration
-10. **Report clearly** - Deviations/questions/issues only
+3. **Read documents first** - MANDATORY if iteration has attached documents (orchestrator AND planning agent)
+4. **Orchestrate** - Coordinate agents, don't code yourself
+5. **Plan first** - Planning agent reads docs + explores + retrieves full context independently
+6. **Respect dependencies** - Sequential unless parallel identified
+7. **Verify thoroughly** - Tests, linter, quality before commit
+8. **Track progress** - TodoWrite and task status updates
+9. **Commit always** - Save all work
+10. **User owns acceptance** - Never verify AC or close iteration
+11. **Report clearly** - Deviations/questions/issues only
 
 ---
 
-Remember: First ensure iteration branch. Work ONLY on TODO tasks. Planning agent independently retrieves all iteration data (tasks + AC). Implementation agents execute. Verification agent checks. Commit all work. Report deviations/questions/issues to user. User verifies AC and closes iteration.
+Remember: First ensure iteration branch. Work ONLY on TODO tasks. READ ALL ATTACHED DOCUMENTS (orchestrator + planning agent). Planning agent independently retrieves all iteration data (tasks + AC + documents). Implementation agents execute. Verification agent checks. Commit all work. Report deviations/questions/issues to user. User verifies AC and closes iteration.

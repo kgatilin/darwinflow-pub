@@ -11,11 +11,11 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := task_manager.DefaultConfig()
 
-	if !cfg.ADR.Required {
-		t.Error("ADR.Required should be true by default")
+	if cfg.ADR.Required {
+		t.Error("ADR.Required should be false by default")
 	}
-	if !cfg.ADR.EnforceOnTaskCompletion {
-		t.Error("ADR.EnforceOnTaskCompletion should be true by default")
+	if cfg.ADR.EnforceOnTaskCompletion {
+		t.Error("ADR.EnforceOnTaskCompletion should be false by default")
 	}
 }
 
@@ -28,11 +28,11 @@ func TestLoadConfigNoFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !cfg.ADR.Required {
-		t.Error("ADR.Required should default to true")
+	if cfg.ADR.Required {
+		t.Error("ADR.Required should default to false")
 	}
-	if !cfg.ADR.EnforceOnTaskCompletion {
-		t.Error("ADR.EnforceOnTaskCompletion should default to true")
+	if cfg.ADR.EnforceOnTaskCompletion {
+		t.Error("ADR.EnforceOnTaskCompletion should default to false")
 	}
 }
 
@@ -129,7 +129,7 @@ task_manager:
 	if cfg.ADR.Required {
 		t.Error("ADR.Required should be false from config")
 	}
-	if !cfg.ADR.EnforceOnTaskCompletion {
-		t.Error("ADR.EnforceOnTaskCompletion should stay true (default)")
+	if cfg.ADR.EnforceOnTaskCompletion {
+		t.Error("ADR.EnforceOnTaskCompletion should stay false (default)")
 	}
 }

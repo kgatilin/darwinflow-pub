@@ -21,3 +21,10 @@ type UpdateIterationDTO struct {
 type IterationFilters struct {
 	Status []string
 }
+
+// CurrentIterationResult represents the result of GetCurrentIteration with fallback indication
+type CurrentIterationResult struct {
+	Iteration    interface{} // Can be *entities.IterationEntity or nil
+	IsFallback   bool
+	FallbackMsg  string
+}

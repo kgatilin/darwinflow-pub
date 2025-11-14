@@ -26,7 +26,7 @@ func (s *WorkflowTestSuite) TestCompleteTaskLifecycle() {
 	frameworkTrackID := s.parseID(output, "-track-")
 	s.NotEmpty(frameworkTrackID, "track ID should not be empty")
 
-	// Step 2: Create ADR for framework track (REQUIRED for track completion)
+	// Step 2: Create ADR for framework track (optional)
 	output, err = s.run("adr", "create", frameworkTrackID,
 		"--title", "Use event sourcing for all operations",
 		"--context", "Need reliable audit trail for all changes",
@@ -104,6 +104,8 @@ func (s *WorkflowTestSuite) TestCompleteTaskLifecycle() {
 		"--description", "SDK defines clear contracts for plugins",
 		"--testing-instructions", "1. Review SDK interfaces\n2. Verify zero duplication\n3. Check dependency rules")
 	s.requireSuccess(output, err, "failed to add AC to plugin task")
+	acID3 := s.parseID(output, "-ac-")
+	s.NotEmpty(acID3, "plugin task AC ID should not be empty")
 
 	// Step 10: Create iteration and add tasks
 	output, err = s.run("iteration", "create",
@@ -140,35 +142,40 @@ func (s *WorkflowTestSuite) TestCompleteTaskLifecycle() {
 	s.requireSuccess(output, err, "failed to get current iteration")
 	s.Contains(output, "Sprint 1: Foundation", "current iteration should be Sprint 1")
 
-	// Step 16: Update task statuses (todo → in-progress → done)
+	// Step 16: Update task statuses (todo → in-progress)
 	output, err = s.run("task", "update", frameworkTaskIDs[0], "--status", "in-progress")
 	s.requireSuccess(output, err, "failed to mark task in-progress")
 
+	// Step 17: Verify ACs before marking task done (Phase 3 - AC verification enforcement)
+	output, err = s.run("ac", "verify", acID1)
+	s.requireSuccess(output, err, "failed to verify AC 1")
+
+	output, err = s.run("ac", "verify", acID2)
+	s.requireSuccess(output, err, "failed to verify AC 2")
+
+	// Step 18: Now mark task as done (all ACs verified)
 	output, err = s.run("task", "update", frameworkTaskIDs[0], "--status", "done")
 	s.requireSuccess(output, err, "failed to mark task done")
 
-	// Step 17: Verify first task acceptance criteria
-	output, err = s.run("ac", "verify", acID1)
-	s.requireSuccess(output, err, "failed to verify first AC")
-
-	output, err = s.run("ac", "verify", acID2)
-	s.requireSuccess(output, err, "failed to verify second AC")
-
-	// Step 18: Mark second task in-progress and done
+	// Step 19: Mark second task in-progress and done (no ACs, so no verification needed)
 	output, err = s.run("task", "update", frameworkTaskIDs[1], "--status", "in-progress")
 	s.requireSuccess(output, err, "failed to mark second task in-progress")
 
 	output, err = s.run("task", "update", frameworkTaskIDs[1], "--status", "done")
 	s.requireSuccess(output, err, "failed to mark second task done")
 
-	// Step 19: Mark plugin task done
+	// Step 20: Mark plugin task in-progress, verify AC, then mark done
 	output, err = s.run("task", "update", pluginTaskIDs[0], "--status", "in-progress")
 	s.requireSuccess(output, err, "failed to mark plugin task in-progress")
+
+	// Verify plugin task AC before marking done
+	output, err = s.run("ac", "verify", acID3)
+	s.requireSuccess(output, err, "failed to verify plugin task AC")
 
 	output, err = s.run("task", "update", pluginTaskIDs[0], "--status", "done")
 	s.requireSuccess(output, err, "failed to mark plugin task done")
 
-	// Step 20: Verify all task statuses are done
+	// Step 21: Verify all task statuses are done
 	output, err = s.run("task", "show", frameworkTaskIDs[0])
 	s.requireSuccess(output, err, "failed to show first task")
 	s.Contains(output, "done", "first task should be done")
@@ -177,11 +184,11 @@ func (s *WorkflowTestSuite) TestCompleteTaskLifecycle() {
 	s.requireSuccess(output, err, "failed to show second task")
 	s.Contains(output, "done", "second task should be done")
 
-	// Step 21: Complete iteration
+	// Step 22: Complete iteration
 	output, err = s.run("iteration", "complete", iterNum)
 	s.requireSuccess(output, err, "failed to complete iteration")
 
-	// Step 22: Verify iteration status is complete
+	// Step 23: Verify iteration status is complete
 	output, err = s.run("iteration", "show", iterNum)
 	s.requireSuccess(output, err, "failed to show completed iteration")
 	s.Contains(output, "Sprint 1: Foundation", "iteration should still exist after completion")
