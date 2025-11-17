@@ -22,6 +22,8 @@ type MockRepository struct {
 	acsByTask           []*entities.AcceptanceCriteriaEntity
 	track               *entities.TrackEntity
 	iterationsForTask   []*entities.IterationEntity
+	tasksForTrack       []*entities.TaskEntity
+	dependencyTracks    map[string]*entities.TrackEntity
 	listTracksErr       error
 	listIterationsErr   error
 	getActiveRoadmapErr error
@@ -33,6 +35,7 @@ type MockRepository struct {
 	listACErr           error
 	getTrackErr         error
 	getIterationsForTaskErr error
+	listTasksErr        error
 }
 
 // ListIterations returns all iterations.
@@ -111,6 +114,12 @@ func (m *MockRepository) ListAC(ctx context.Context, taskID string) ([]*entities
 func (m *MockRepository) GetTrack(ctx context.Context, id string) (*entities.TrackEntity, error) {
 	if m.getTrackErr != nil {
 		return nil, m.getTrackErr
+	}
+	// Support dependency track resolution
+	if m.dependencyTracks != nil {
+		if depTrack, exists := m.dependencyTracks[id]; exists {
+			return depTrack, nil
+		}
 	}
 	return m.track, nil
 }
@@ -398,7 +407,10 @@ func (m *MockRepository) SaveTask(ctx context.Context, task *entities.TaskEntity
 }
 
 func (m *MockRepository) ListTasks(ctx context.Context, filters entities.TaskFilters) ([]*entities.TaskEntity, error) {
-	return nil, nil
+	if m.listTasksErr != nil {
+		return nil, m.listTasksErr
+	}
+	return m.tasksForTrack, nil
 }
 
 func (m *MockRepository) UpdateTask(ctx context.Context, task *entities.TaskEntity) error {
@@ -527,4 +539,169 @@ func (m *MockRepository) GetProjectCode(ctx context.Context) string {
 
 func (m *MockRepository) GetNextSequenceNumber(ctx context.Context, entityType string) (int, error) {
 	return 0, nil
+}
+
+// TestLoadTrackDetailDataSuccess verifies that LoadTrackDetailData successfully loads and transforms data.
+func TestLoadTrackDetailDataSuccess(t *testing.T) {
+	ctx := context.Background()
+
+	track := &entities.TrackEntity{
+		ID:           "TM-track-1",
+		Title:        "Authentication System",
+		Description:  "Implement user authentication",
+		Status:       "in-progress",
+		Rank:         100,
+		Dependencies: []string{"TM-track-2"},
+	}
+
+	tasks := []*entities.TaskEntity{
+		{
+			ID:      "TM-task-1",
+			Title:   "Implement login",
+			TrackID: "TM-track-1",
+			Status:  "todo",
+		},
+		{
+			ID:      "TM-task-2",
+			Title:   "Implement signup",
+			TrackID: "TM-track-1",
+			Status:  "done",
+		},
+	}
+
+	depTrack := &entities.TrackEntity{
+		ID:    "TM-track-2",
+		Title: "Database Setup",
+	}
+
+	repo := &MockRepository{
+		track:         track,
+		tasksForTrack: tasks,
+		dependencyTracks: map[string]*entities.TrackEntity{
+			"TM-track-2": depTrack,
+		},
+	}
+
+	vm, err := queries.LoadTrackDetailData(ctx, repo, "TM-track-1")
+	if err != nil {
+		t.Fatalf("LoadTrackDetailData failed: %v", err)
+	}
+
+	if vm == nil {
+		t.Fatal("Expected non-nil ViewModel")
+	}
+
+	if vm.ID != "TM-track-1" {
+		t.Fatalf("Expected track ID 'TM-track-1', got %s", vm.ID)
+	}
+
+	if vm.Title != "Authentication System" {
+		t.Fatalf("Expected title 'Authentication System', got %s", vm.Title)
+	}
+
+	if len(vm.Dependencies) != 1 {
+		t.Fatalf("Expected 1 dependency, got %d", len(vm.Dependencies))
+	}
+
+	if len(vm.DependencyLabels) != 1 {
+		t.Fatalf("Expected 1 dependency label, got %d", len(vm.DependencyLabels))
+	}
+
+	if vm.DependencyLabels[0] != "Database Setup" {
+		t.Fatalf("Expected dependency label 'Database Setup', got %s", vm.DependencyLabels[0])
+	}
+
+	// Verify task grouping
+	if len(vm.TODOTasks) != 1 {
+		t.Fatalf("Expected 1 TODO task, got %d", len(vm.TODOTasks))
+	}
+
+	if len(vm.DoneTasks) != 1 {
+		t.Fatalf("Expected 1 done task, got %d", len(vm.DoneTasks))
+	}
+}
+
+// TestLoadTrackDetailDataGetTrackError verifies error handling when GetTrack fails.
+func TestLoadTrackDetailDataGetTrackError(t *testing.T) {
+	ctx := context.Background()
+
+	repo := &MockRepository{
+		getTrackErr: errors.New("track not found"),
+	}
+
+	vm, err := queries.LoadTrackDetailData(ctx, repo, "TM-track-1")
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if vm != nil {
+		t.Fatal("Expected nil ViewModel on error")
+	}
+
+	if err.Error() != "track not found" {
+		t.Fatalf("Expected 'track not found', got %v", err)
+	}
+}
+
+// TestLoadTrackDetailDataListTasksError verifies error handling when ListTasks fails.
+func TestLoadTrackDetailDataListTasksError(t *testing.T) {
+	ctx := context.Background()
+
+	track := &entities.TrackEntity{
+		ID:    "TM-track-1",
+		Title: "Authentication System",
+	}
+
+	repo := &MockRepository{
+		track:        track,
+		listTasksErr: errors.New("database error"),
+	}
+
+	vm, err := queries.LoadTrackDetailData(ctx, repo, "TM-track-1")
+	if err == nil {
+		t.Fatal("Expected error but got nil")
+	}
+
+	if vm != nil {
+		t.Fatal("Expected nil ViewModel on error")
+	}
+
+	if err.Error() != "database error" {
+		t.Fatalf("Expected 'database error', got %v", err)
+	}
+}
+
+// TestLoadTrackDetailDataNoDependencies verifies loading track with no dependencies.
+func TestLoadTrackDetailDataNoDependencies(t *testing.T) {
+	ctx := context.Background()
+
+	track := &entities.TrackEntity{
+		ID:           "TM-track-1",
+		Title:        "Authentication System",
+		Dependencies: []string{},
+	}
+
+	tasks := []*entities.TaskEntity{}
+
+	repo := &MockRepository{
+		track:         track,
+		tasksForTrack: tasks,
+	}
+
+	vm, err := queries.LoadTrackDetailData(ctx, repo, "TM-track-1")
+	if err != nil {
+		t.Fatalf("LoadTrackDetailData failed: %v", err)
+	}
+
+	if vm == nil {
+		t.Fatal("Expected non-nil ViewModel")
+	}
+
+	if len(vm.Dependencies) != 0 {
+		t.Fatalf("Expected 0 dependencies, got %d", len(vm.Dependencies))
+	}
+
+	if len(vm.DependencyLabels) != 0 {
+		t.Fatalf("Expected 0 dependency labels, got %d", len(vm.DependencyLabels))
+	}
 }

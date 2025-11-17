@@ -29,7 +29,8 @@ Fix all failed acceptance criteria in an iteration:
 3. For each failed AC: Launch exploration agent (understands failure and plans fix)
 4. Launch fix agents in parallel (can fix independent ACs concurrently)
 5. Launch verification agent (checks tests, linter, implementation quality)
-6. Report completion and remind user to re-verify acceptance criteria
+6. Git commit (save all work)
+7. Report completion (deviations/questions/issues only)
 
 **You coordinate; sub-agents execute.**
 
@@ -576,84 +577,64 @@ Use Task tool with:
 
 ---
 
-### Phase 7: Final Report to User
+### Phase 7: Create Git Commit
+
+**MANDATORY**: Commit all work after fixes + verification.
+
+```bash
+git status
+git diff --stat
+git add .
+git commit -m "$(cat <<'EOF'
+fix: iteration #N failed AC fixes - [brief summary]
+
+Fixed [N] acceptance criteria: [list AC IDs or brief descriptions]
+EOF
+)"
+git log -1 --oneline
+```
+
+**Guidelines**:
+- Conventional commit prefix (`fix:` for AC fixes)
+- Include iteration number
+- Use HEREDOC format for commit message
+- Brief summary of what was fixed
+
+**Don't push**: User pushes after AC re-verification
+
+---
+
+### Phase 8: Final Report to User
+
+**CRITICAL**: Follow CLAUDE.md reporting guidelines.
+
+**Report deviations, questions, issues ONLY** - not what was fixed (user knows failed ACs).
 
 **IMPORTANT**: Do NOT mark ACs as verified. Do NOT close iteration. User must re-verify.
 
 **Report format**:
 
 ```markdown
-# ✅ Iteration Failed AC Fixes Complete: [Iteration Name]
+# AC Fixes Complete: [Iteration Name]
 
-## Summary
-Fixed [N] failed acceptance criteria in [M] parallel batches.
+## Status
+[Complete / Complete with deviations / Blocked]
 
-## Failed ACs Fixed
-[List each AC with brief description]
-- [AC-ID-1]: [description] - Fixed: [brief fix summary]
-- [AC-ID-2]: [description] - Fixed: [brief fix summary]
-...
+## Deviations from Plan
+[Only if deviations occurred - what and why]
 
-## Fix Execution
-- Exploration agents: [count]
-- Fix agents: [count] ([types used])
-- Parallel batches: [count]
-- Sequential dependencies: [count]
+## Questions for User
+[Only if decisions needed - clear, actionable]
 
-## Final Verification Status
-- ✅ All tests pass
-- ✅ Zero linter violations
-- ✅ Fixes match failure feedback
-- ✅ Code quality verified
+## Issues Requiring Attention
+[Only if blockers or problems]
 
-## Files Modified
-[List key files created/modified from fix reports]
-
-## Next Steps - USER ACTION REQUIRED
-
-⚠️ **CRITICAL**: You must complete these steps manually:
-
-1. **Review All Fixed Acceptance Criteria**:
-   ```bash
-   # View all ACs that were fixed
-   dw task-manager ac list-iteration [iteration-number]
-   ```
-
-2. **Re-Verify Each Fixed Acceptance Criterion**:
-   ```bash
-   # For each fixed AC, follow testing instructions and verify manually
-   # Then mark as verified:
-   dw task-manager ac verify <ac-id>
-
-   # Or mark as failed again with new feedback:
-   dw task-manager ac fail <ac-id> --feedback "..."
-   ```
-
-3. **Test the Fixes Manually**:
-   - Test each fixed functionality
-   - Follow AC testing instructions
-   - Verify fixes address your original feedback
-   - Check that implementation meets requirements
-
-4. **If All ACs Pass** (only after re-verifying ALL):
-   ```bash
-   # Check if iteration is ready to complete
-   dw task-manager iteration show [iteration-number]
-
-   # If all ACs verified, complete the iteration
-   dw task-manager iteration complete [iteration-number]
-   ```
-
-5. **If Some ACs Still Fail**:
-   ```bash
-   # Re-run this command to fix remaining failures
-   dw task-manager iteration fix [iteration-number]
-   ```
-
----
-
-**Remember**: The fixes are complete and verified by automation, but YOU must manually test and verify that each acceptance criterion now passes. The agents cannot do this for you.
+## Commit
+[Commit hash and summary from git log -1 --oneline]
 ```
+
+**DO**: Highlight deviations, questions, issues, blockers
+**DON'T**: Summarize fixes, repeat AC descriptions, list files, explain what should happen, add standard "re-verify AC" instructions (goes without saying)
 
 ---
 
@@ -734,7 +715,8 @@ You succeed when:
 - ✅ Verification agent confirms fix quality
 - ✅ All tests pass
 - ✅ Zero linter violations
-- ✅ User notified with clear next steps (re-verify ACs)
+- ✅ Git commit created
+- ✅ User notified with clear report
 
 **Not your responsibility**:
 - ❌ Re-verifying acceptance criteria (user must do this)
@@ -751,9 +733,10 @@ You succeed when:
 4. **Respect dependencies** - Sequential only when necessary
 5. **Verify thoroughly** - Verification agent checks everything
 6. **Track progress** - Update todos continuously
-7. **User owns acceptance** - Never verify AC yourself
-8. **Report clearly** - User must know exactly what to re-test
+7. **Commit always** - Save all work
+8. **User owns acceptance** - Never verify AC yourself
+9. **Report clearly** - Deviations/questions/issues only
 
 ---
 
-Remember: You coordinate a multi-agent fix workflow. Exploration agents analyze failures, fix agents implement fixes (in parallel when possible), verification agent checks quality. You track progress and report results. The user re-verifies acceptance criteria.
+Remember: You coordinate a multi-agent fix workflow. Exploration agents analyze failures, fix agents implement fixes (in parallel when possible), verification agent checks quality. Commit all work. Report deviations/questions/issues to user. User re-verifies acceptance criteria.

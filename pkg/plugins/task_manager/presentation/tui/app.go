@@ -21,6 +21,7 @@ const (
 	ViewRoadmapListNew
 	ViewIterationDetailNew
 	ViewTaskDetailNew
+	ViewTrackDetailNew
 )
 
 // AppModelNew is the root Bubble Tea model for the new MVP TUI
@@ -38,7 +39,9 @@ type AppModelNew struct {
 	previousView           ViewStateNew
 	currentIterationNumber int
 	currentTaskID          string
+	currentTrackID         string
 	currentActiveTab       presenters.IterationDetailTab // Track active tab for AC actions
+	dashboardSelectedIndex int                            // Dashboard selected index (for restoring focus on return)
 
 	width  int
 	height int
@@ -127,6 +130,15 @@ func (m *AppModelNew) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.loadIterationDetail(m.currentIterationNumber),
 				)
 			}
+			if m.previousView == ViewTrackDetailNew && m.currentTrackID != "" {
+				m.currentView = ViewLoadingNew
+				loadingVM := viewmodels.NewLoadingViewModel(fmt.Sprintf("Loading track %s...", m.currentTrackID))
+				m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
+				return m, tea.Batch(
+					m.activePresenter.Init(),
+					m.loadTrackDetail(m.currentTrackID),
+				)
+			}
 			if m.previousView == ViewTaskDetailNew && m.currentTaskID != "" {
 				m.currentView = ViewLoadingNew
 				loadingVM := viewmodels.NewLoadingViewModel(fmt.Sprintf("Loading task %s...", m.currentTaskID))
@@ -145,7 +157,27 @@ func (m *AppModelNew) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loadRoadmapList(),
 			)
 		}
+		if m.currentView == ViewTrackDetailNew {
+			// Go back to dashboard from track detail
+			m.currentView = ViewLoadingNew
+			loadingVM := viewmodels.NewLoadingViewModel("Loading dashboard...")
+			m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
+			return m, tea.Batch(
+				m.activePresenter.Init(),
+				m.loadRoadmapListWithIndex(m.dashboardSelectedIndex),
+			)
+		}
 		if m.currentView == ViewTaskDetailNew {
+			// Go back to track detail if we came from there
+			if m.previousView == ViewTrackDetailNew && m.currentTrackID != "" {
+				m.currentView = ViewLoadingNew
+				loadingVM := viewmodels.NewLoadingViewModel(fmt.Sprintf("Loading track %s...", m.currentTrackID))
+				m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
+				return m, tea.Batch(
+					m.activePresenter.Init(),
+					m.loadTrackDetail(m.currentTrackID),
+				)
+			}
 			// Go back to iteration detail if we came from there
 			if m.previousView == ViewIterationDetailNew && m.currentIterationNumber > 0 {
 				m.currentView = ViewLoadingNew
@@ -156,23 +188,23 @@ func (m *AppModelNew) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.loadIterationDetail(m.currentIterationNumber),
 				)
 			}
-			// Otherwise go back to dashboard
+			// Otherwise go back to dashboard (restore selection from backlog navigation)
 			m.currentView = ViewLoadingNew
 			loadingVM := viewmodels.NewLoadingViewModel("Loading dashboard...")
 			m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
 			return m, tea.Batch(
 				m.activePresenter.Init(),
-				m.loadRoadmapList(),
+				m.loadRoadmapListWithIndex(m.dashboardSelectedIndex),
 			)
 		}
 		if m.currentView == ViewIterationDetailNew {
-			// Go back to dashboard
+			// Go back to dashboard (restore selection from iteration navigation)
 			m.currentView = ViewLoadingNew
 			loadingVM := viewmodels.NewLoadingViewModel("Loading dashboard...")
 			m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
 			return m, tea.Batch(
 				m.activePresenter.Init(),
-				m.loadRoadmapList(),
+				m.loadRoadmapListWithIndex(m.dashboardSelectedIndex),
 			)
 		}
 
@@ -180,6 +212,7 @@ func (m *AppModelNew) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Load iteration detail
 		m.previousView = m.currentView
 		m.currentIterationNumber = msg.IterationNumber
+		m.dashboardSelectedIndex = msg.SelectedIndex
 		m.currentView = ViewLoadingNew
 		loadingVM := viewmodels.NewLoadingViewModel(fmt.Sprintf("Loading iteration #%d...", msg.IterationNumber))
 		m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
@@ -187,6 +220,29 @@ func (m *AppModelNew) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activePresenter.Init(),
 			m.loadIterationDetail(msg.IterationNumber),
 		)
+
+	case presenters.TrackSelectedMsg:
+		// Load track detail
+		m.previousView = m.currentView
+		m.currentTrackID = msg.TrackID
+		m.dashboardSelectedIndex = msg.SelectedIndex
+		m.currentView = ViewLoadingNew
+		loadingVM := viewmodels.NewLoadingViewModel(fmt.Sprintf("Loading track %s...", msg.TrackID))
+		m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
+		return m, tea.Batch(
+			m.activePresenter.Init(),
+			m.loadTrackDetail(msg.TrackID),
+		)
+
+	case trackDetailLoadedMsg:
+		// Transition to TrackDetailPresenter
+		m.currentView = ViewTrackDetailNew
+		if msg.selectedIndex != nil {
+			m.activePresenter = presenters.NewTrackDetailPresenterWithSelection(msg.viewModel, m.repo, m.ctx, *msg.selectedIndex)
+		} else {
+			m.activePresenter = presenters.NewTrackDetailPresenter(msg.viewModel, m.repo, m.ctx)
+		}
+		return m, m.activePresenter.Init()
 
 	case iterationDetailLoadedMsg:
 		// Transition to IterationDetailPresenter with saved activeTab and optional selectedIndex
@@ -202,6 +258,7 @@ func (m *AppModelNew) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Load task detail
 		m.previousView = m.currentView
 		m.currentTaskID = msg.TaskID
+		m.dashboardSelectedIndex = msg.SelectedIndex
 		m.currentView = ViewLoadingNew
 		loadingVM := viewmodels.NewLoadingViewModel(fmt.Sprintf("Loading task %s...", msg.TaskID))
 		m.activePresenter = presenters.NewLoadingPresenter(loadingVM)
@@ -235,6 +292,10 @@ func (m *AppModelNew) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload dashboard after iteration reordering, preserving selected iteration
 		selectedIterationNumber := msg.SelectedIterationNumber
 		return m, m.loadRoadmapListWithSelection(selectedIterationNumber)
+
+	case presenters.RefreshDashboardMsg:
+		// Reload dashboard data, preserving selected index
+		return m, m.loadRoadmapListWithIndex(msg.SelectedIndex)
 	}
 
 	if m.activePresenter != nil {
@@ -272,6 +333,24 @@ func (m *AppModelNew) loadRoadmapListWithSelection(iterationNumber int) tea.Cmd 
 		// Find the index of the iteration in the reloaded view model
 		selectedIndex := m.findIterationIndex(vm, iterationNumber)
 		return roadmapListLoadedMsg{viewModel: vm, selectedIndex: &selectedIndex}
+	}
+}
+
+func (m *AppModelNew) loadRoadmapListWithIndex(index int) tea.Cmd {
+	return func() tea.Msg {
+		vm, err := queries.LoadRoadmapListData(m.ctx, m.repo)
+		if err != nil {
+			return presenters.ErrorMsg{Err: err}
+		}
+		// Clamp index to valid range
+		totalItems := len(vm.ActiveIterations) + len(vm.ActiveTracks) + len(vm.BacklogTasks)
+		if index >= totalItems {
+			index = totalItems - 1
+		}
+		if index < 0 {
+			index = 0
+		}
+		return roadmapListLoadedMsg{viewModel: vm, selectedIndex: &index}
 	}
 }
 
@@ -325,10 +404,29 @@ func (m *AppModelNew) loadTaskDetailWithSelection(taskID string, selectedIndex i
 	}
 }
 
+func (m *AppModelNew) loadTrackDetail(trackID string) tea.Cmd {
+	return m.loadTrackDetailWithSelection(trackID, 0)
+}
+
+func (m *AppModelNew) loadTrackDetailWithSelection(trackID string, selectedIndex int) tea.Cmd {
+	return func() tea.Msg {
+		vm, err := queries.LoadTrackDetailData(m.ctx, m.repo, trackID)
+		if err != nil {
+			return presenters.ErrorMsg{Err: err}
+		}
+		// Only include selectedIndex if it's non-zero
+		if selectedIndex >= 0 {
+			return trackDetailLoadedMsg{viewModel: vm, selectedIndex: &selectedIndex}
+		}
+		return trackDetailLoadedMsg{viewModel: vm, selectedIndex: nil}
+	}
+}
+
 // Custom messages (app-local only)
 // Shared message types defined in presenters/messages.go:
 // - presenters.ErrorMsg
 // - presenters.IterationSelectedMsg
+// - presenters.TrackSelectedMsg
 // - presenters.TaskSelectedMsg
 // - presenters.ACActionCompletedMsg
 // - presenters.ReorderCompletedMsg
@@ -346,6 +444,11 @@ type iterationDetailLoadedMsg struct {
 
 type taskDetailLoadedMsg struct {
 	viewModel     *viewmodels.TaskDetailViewModel
+	selectedIndex *int // Optional: preserve selected index across reload
+}
+
+type trackDetailLoadedMsg struct {
+	viewModel     *viewmodels.TrackDetailViewModel
 	selectedIndex *int // Optional: preserve selected index across reload
 }
 

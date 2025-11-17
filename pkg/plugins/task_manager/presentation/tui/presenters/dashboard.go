@@ -22,6 +22,7 @@ type RoadmapListKeyMap struct {
 	Quit     key.Binding
 	Help     key.Binding
 	Refresh  key.Binding
+	Tab      key.Binding // Tab to cycle between sections
 	MoveUp   key.Binding // Shift+up or K for reordering
 	MoveDown key.Binding // Shift+down or J for reordering
 	PageUp   key.Binding // Page up or b
@@ -39,6 +40,10 @@ func NewRoadmapListKeyMap() RoadmapListKeyMap {
 		Refresh: key.NewBinding(
 			key.WithKeys("r"),
 			key.WithHelp("r", "refresh"),
+		),
+		Tab: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "switch section"),
 		),
 		MoveUp: key.NewBinding(
 			key.WithKeys("shift+up", "K"),
@@ -61,18 +66,28 @@ func NewRoadmapListKeyMap() RoadmapListKeyMap {
 
 // ShortHelp returns keybindings to show in short help view
 func (k RoadmapListKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Enter, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Enter, k.Tab, k.Refresh, k.Quit}
 }
 
 // FullHelp returns all keybindings for full help view
 func (k RoadmapListKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Enter},
-		{k.PageUp, k.PageDown, k.Refresh},
+		{k.Tab, k.Refresh},
+		{k.PageUp, k.PageDown},
 		{k.MoveUp, k.MoveDown},
 		{k.Help, k.Quit},
 	}
 }
+
+// DashboardSection represents the three main sections in the dashboard
+type DashboardSection int
+
+const (
+	SectionIterations DashboardSection = iota
+	SectionTracks
+	SectionBacklog
+)
 
 // RoadmapListPresenter presents the dashboard view with iterations, tracks, and backlog
 type RoadmapListPresenter struct {
@@ -81,6 +96,7 @@ type RoadmapListPresenter struct {
 	keys          RoadmapListKeyMap
 	showFullHelp  bool
 	selectedIndex int
+	activeSection DashboardSection // Track which section has focus
 	width         int
 	height        int
 	repo          domain.RoadmapRepository
@@ -101,6 +117,7 @@ func NewRoadmapListPresenterWithSelection(vm *viewmodels.RoadmapListViewModel, r
 		keys:          NewRoadmapListKeyMap(),
 		showFullHelp:  false,
 		selectedIndex: selectedIndex,
+		activeSection: SectionIterations, // Default to iterations section
 		repo:          repo,
 		ctx:           ctx,
 		width:         80, // Default width until WindowSizeMsg arrives
@@ -141,6 +158,14 @@ func (p *RoadmapListPresenter) Update(msg tea.Msg) (Presenter, tea.Cmd) {
 			return p, tea.Quit
 		case key.Matches(msg, p.keys.Help):
 			p.showFullHelp = !p.showFullHelp
+		case key.Matches(msg, p.keys.Tab):
+			// Cycle through sections: Iterations → Tracks → Backlog → Iterations
+			p.cycleActiveSection()
+		case key.Matches(msg, p.keys.Refresh):
+			// Reload dashboard data, preserving current selection
+			return p, func() tea.Msg {
+				return RefreshDashboardMsg{SelectedIndex: p.selectedIndex}
+			}
 		case key.Matches(msg, p.keys.Up):
 			totalItems := getTotalItems(p.viewModel)
 			if p.selectedIndex > 0 {
@@ -167,10 +192,38 @@ func (p *RoadmapListPresenter) Update(msg tea.Msg) (Presenter, tea.Cmd) {
 				// Navigate to iteration detail
 				iter := p.viewModel.ActiveIterations[p.selectedIndex]
 				return p, func() tea.Msg {
-					return IterationSelectedMsg{IterationNumber: iter.Number}
+					return IterationSelectedMsg{
+						IterationNumber: iter.Number,
+						SelectedIndex:   p.selectedIndex,
+					}
 				}
 			}
-			// TODO: Handle track/task selection
+			// Check if selection is in tracks section
+			trackOffset := len(p.viewModel.ActiveIterations)
+			if p.selectedIndex >= trackOffset && p.selectedIndex < trackOffset+len(p.viewModel.ActiveTracks) {
+				// Navigate to track detail
+				trackIndex := p.selectedIndex - trackOffset
+				track := p.viewModel.ActiveTracks[trackIndex]
+				return p, func() tea.Msg {
+					return TrackSelectedMsg{
+						TrackID:       track.ID,
+						SelectedIndex: p.selectedIndex,
+					}
+				}
+			}
+			// Check if selection is in backlog section
+			backlogOffset := len(p.viewModel.ActiveIterations) + len(p.viewModel.ActiveTracks)
+			if p.selectedIndex >= backlogOffset && p.selectedIndex < backlogOffset+len(p.viewModel.BacklogTasks) {
+				// Navigate to task detail
+				taskIndex := p.selectedIndex - backlogOffset
+				task := p.viewModel.BacklogTasks[taskIndex]
+				return p, func() tea.Msg {
+					return TaskSelectedMsg{
+						TaskID:        task.ID,
+						SelectedIndex: p.selectedIndex,
+					}
+				}
+			}
 		case key.Matches(msg, p.keys.MoveUp):
 			// Reorder iterations (move selected iteration up)
 			if p.selectedIndex > 0 && p.selectedIndex < len(p.viewModel.ActiveIterations) {
@@ -245,7 +298,12 @@ func (p *RoadmapListPresenter) View() string {
 	if len(p.viewModel.ActiveIterations) > 0 {
 		if start < len(p.viewModel.ActiveIterations) {
 			// Only show section header if items in this section are visible
-			b.WriteString(components.Styles.SectionStyle.Render("Active Iterations"))
+			// Highlight header if this section is active
+			if p.activeSection == SectionIterations {
+				b.WriteString(components.Styles.SelectedStyle.Render("Active Iterations"))
+			} else {
+				b.WriteString(components.Styles.SectionStyle.Render("Active Iterations"))
+			}
 			b.WriteString("\n")
 		}
 
@@ -281,7 +339,12 @@ func (p *RoadmapListPresenter) View() string {
 	if len(p.viewModel.ActiveTracks) > 0 {
 		if currentItemIndex < end && start < currentItemIndex+len(p.viewModel.ActiveTracks) {
 			// Only show section header if items in this section are visible
-			b.WriteString(components.Styles.SectionStyle.Render("Active Tracks"))
+			// Highlight header if this section is active
+			if p.activeSection == SectionTracks {
+				b.WriteString(components.Styles.SelectedStyle.Render("Active Tracks"))
+			} else {
+				b.WriteString(components.Styles.SectionStyle.Render("Active Tracks"))
+			}
 			b.WriteString("\n")
 		}
 
@@ -317,7 +380,12 @@ func (p *RoadmapListPresenter) View() string {
 	if len(p.viewModel.BacklogTasks) > 0 {
 		if currentItemIndex < end && start < currentItemIndex+len(p.viewModel.BacklogTasks) {
 			// Only show section header if items in this section are visible
-			b.WriteString(components.Styles.SectionStyle.Render("Backlog Tasks"))
+			// Highlight header if this section is active
+			if p.activeSection == SectionBacklog {
+				b.WriteString(components.Styles.SelectedStyle.Render("Backlog Tasks"))
+			} else {
+				b.WriteString(components.Styles.SectionStyle.Render("Backlog Tasks"))
+			}
 			b.WriteString("\n")
 		}
 
@@ -478,5 +546,46 @@ func (p *RoadmapListPresenter) reorderIterations(fromIndex, toIndex int) tea.Cmd
 		p.selectedIndex = toIndex
 
 		return ReorderCompletedMsg{SelectedIterationNumber: iterToMove.Number}
+	}
+}
+
+// cycleActiveSection cycles through sections: Iterations → Tracks → Backlog → Iterations
+// Updates activeSection and adjusts selectedIndex to first item in new section
+func (p *RoadmapListPresenter) cycleActiveSection() {
+	// Determine next section with available items
+	startSection := p.activeSection
+	for {
+		// Move to next section
+		p.activeSection = (p.activeSection + 1) % 3
+
+		// Check if this section has items
+		switch p.activeSection {
+		case SectionIterations:
+			if len(p.viewModel.ActiveIterations) > 0 {
+				// Jump to first iteration
+				p.selectedIndex = 0
+				p.scrollHelper.EnsureVisible(getTotalItems(p.viewModel), p.selectedIndex)
+				return
+			}
+		case SectionTracks:
+			if len(p.viewModel.ActiveTracks) > 0 {
+				// Jump to first track
+				p.selectedIndex = len(p.viewModel.ActiveIterations)
+				p.scrollHelper.EnsureVisible(getTotalItems(p.viewModel), p.selectedIndex)
+				return
+			}
+		case SectionBacklog:
+			if len(p.viewModel.BacklogTasks) > 0 {
+				// Jump to first backlog task
+				p.selectedIndex = len(p.viewModel.ActiveIterations) + len(p.viewModel.ActiveTracks)
+				p.scrollHelper.EnsureVisible(getTotalItems(p.viewModel), p.selectedIndex)
+				return
+			}
+		}
+
+		// If we've cycled back to start without finding items, break to avoid infinite loop
+		if p.activeSection == startSection {
+			break
+		}
 	}
 }

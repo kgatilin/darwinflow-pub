@@ -457,8 +457,7 @@ func (p *TaskManagerPlugin) GetCommands() []pluginsdk.Command {
 		// ========================================================================
 		// INFRASTRUCTURE COMMANDS (not migrated, appropriately structured)
 		// ========================================================================
-		// TUI commands
-		&cli.TUICommand{Plugin: p},
+		// TUI commands (new MVP implementation)
 		&presentationTui.TUINewCommand{Plugin: p},
 		// Prompt command (presentation layer)
 		&cli.PromptCommand{GetPrompt: cli.GetSystemPrompt},
@@ -487,8 +486,7 @@ func (p *TaskManagerPlugin) getCommandsWithoutServices() []pluginsdk.Command {
 		// ========================================================================
 		// INFRASTRUCTURE COMMANDS (not migrated, appropriately structured)
 		// ========================================================================
-		// TUI commands
-		&cli.TUICommand{Plugin: p},
+		// TUI commands (new MVP implementation)
 		&presentationTui.TUINewCommand{Plugin: p},
 		// Prompt command (presentation layer)
 		&cli.PromptCommand{GetPrompt: cli.GetSystemPrompt},
